@@ -1,0 +1,1551 @@
+{
+  "role": [
+    {
+      "id": 1,
+      "name": "Project Manager",
+      "delay_rate": 144.0
+    },
+    {
+      "id": 2,
+      "name": "Site Supervisor, Level III",
+      "delay_rate": 138.0
+    },
+    {
+      "id": 3,
+      "name": "Site Supervisor, Level II",
+      "delay_rate": 132.0
+    },
+    {
+      "id": 4,
+      "name": "Site Supervisor, Level I",
+      "delay_rate": 126.0
+    },
+    {
+      "id": 5,
+      "name": "Forklift Operator",
+      "delay_rate": 120.0
+    },
+    {
+      "id": 6,
+      "name": "Machine Operator (Excavator, Dozer etc)",
+      "delay_rate": 120.0
+    },
+    {
+      "id": 7,
+      "name": "Experienced PE Welder",
+      "delay_rate": 114.0
+    },
+    {
+      "id": 8,
+      "name": "Pipe Welder/QA Tech",
+      "delay_rate": 114.0
+    },
+    {
+      "id": 9,
+      "name": "Experienced Labourer",
+      "delay_rate": 108.0
+    },
+    {
+      "id": 10,
+      "name": "Labourer",
+      "delay_rate": 102.0
+    }
+  ],
+  "project": [
+    {
+      "id": 1,
+      "name": "Hazelwood",
+      "description": "Hazelwood Installation",
+      "active": 1,
+      "created_at": "2026-03-12 00:56:16.396827",
+      "start_date": "2026-03-16",
+      "planned_crew": 12,
+      "hours_per_day": 10.0,
+      "quoted_days": 62
+    },
+    {
+      "id": 2,
+      "name": "Hogan's Pocket",
+      "description": null,
+      "active": 1,
+      "created_at": "2026-03-12 02:31:14.097863",
+      "start_date": null,
+      "planned_crew": null,
+      "hours_per_day": null,
+      "quoted_days": null
+    }
+  ],
+  "employee": [
+    {
+      "id": 1,
+      "name": "Ben Deane",
+      "role": "Site Supervisor, Level III",
+      "active": 1,
+      "created_at": "2026-03-12 00:57:01.019235",
+      "delay_rate": 138.0,
+      "role_id": 2
+    },
+    {
+      "id": 2,
+      "name": "Cameron Freeman",
+      "role": "Forklift Operator",
+      "active": 1,
+      "created_at": "2026-03-12 00:57:47.606671",
+      "delay_rate": 120.0,
+      "role_id": 5
+    },
+    {
+      "id": 3,
+      "name": "Renato Poli Sr",
+      "role": "Site Supervisor, Level II",
+      "active": 1,
+      "created_at": "2026-03-12 00:58:46.215994",
+      "delay_rate": 132.0,
+      "role_id": 3
+    },
+    {
+      "id": 4,
+      "name": "Jacob Semenoff",
+      "role": "Labourer",
+      "active": 1,
+      "created_at": "2026-03-12 00:58:59.731491",
+      "delay_rate": 102.0,
+      "role_id": 10
+    },
+    {
+      "id": 5,
+      "name": "Joemari Nayve",
+      "role": "Labourer",
+      "active": 1,
+      "created_at": "2026-03-12 00:59:33.517222",
+      "delay_rate": 102.0,
+      "role_id": 10
+    }
+  ],
+  "machine": [
+    {
+      "id": 1,
+      "name": "LMI Site Vehicle LV003",
+      "machine_type": "LMI Ute",
+      "active": 1,
+      "created_at": "2026-03-12 02:14:30.296712",
+      "delay_rate": 42.0
+    },
+    {
+      "id": 2,
+      "name": "LMI Site Vehicle LV005",
+      "machine_type": "LMI Ute",
+      "active": 1,
+      "created_at": "2026-03-12 02:14:48.573846",
+      "delay_rate": 42.0
+    },
+    {
+      "id": 3,
+      "name": "LMI Site Vehicle Hire Ute",
+      "machine_type": "Hire Ute",
+      "active": 1,
+      "created_at": "2026-03-12 02:15:07.496289",
+      "delay_rate": 42.0
+    },
+    {
+      "id": 4,
+      "name": "HDPE Welding and QA Test Set Up",
+      "machine_type": "Testing Equipment",
+      "active": 1,
+      "created_at": "2026-03-12 02:15:28.639383",
+      "delay_rate": 64.8
+    },
+    {
+      "id": 5,
+      "name": "LMI Site Generator PG01",
+      "machine_type": "Generator",
+      "active": 1,
+      "created_at": "2026-03-12 02:15:49.096376",
+      "delay_rate": 64.8
+    },
+    {
+      "id": 6,
+      "name": "LMI Site Generator PG02",
+      "machine_type": "Generator",
+      "active": 1,
+      "created_at": "2026-03-12 02:16:04.746138",
+      "delay_rate": 64.8
+    }
+  ],
+  "daily_entry": [
+    {
+      "id": 3,
+      "project_id": 1,
+      "entry_date": "2026-03-16",
+      "lot_number": "1",
+      "material": "HDPE",
+      "num_people": 4,
+      "install_hours": 10.0,
+      "delay_hours": 0.0,
+      "delay_reason": null,
+      "notes": null,
+      "created_at": "2026-03-12 03:18:29.617033",
+      "updated_at": "2026-03-12 03:18:29.617037",
+      "location": null,
+      "install_sqm": 7000.0,
+      "delay_billable": 1,
+      "delay_description": null,
+      "machines_stood_down": 0,
+      "other_work_description": null,
+      "user_id": null
+    },
+    {
+      "id": 4,
+      "project_id": 1,
+      "entry_date": "2026-03-17",
+      "lot_number": null,
+      "material": null,
+      "num_people": 5,
+      "install_hours": 0.0,
+      "delay_hours": 10.0,
+      "delay_reason": "Wet Weather",
+      "notes": null,
+      "created_at": "2026-03-12 03:26:36.587356",
+      "updated_at": "2026-03-12 03:26:36.587365",
+      "location": null,
+      "install_sqm": 0.0,
+      "delay_billable": 1,
+      "delay_description": "The site received 8mm of Rain overnight. Not able to deploy.",
+      "machines_stood_down": 0,
+      "other_work_description": null,
+      "user_id": null
+    },
+    {
+      "id": 5,
+      "project_id": 1,
+      "entry_date": "2026-03-19",
+      "lot_number": "1",
+      "material": "HDPE",
+      "num_people": 4,
+      "install_hours": 10.0,
+      "delay_hours": 0.0,
+      "delay_reason": null,
+      "notes": null,
+      "created_at": "2026-03-12 03:57:49.132945",
+      "updated_at": "2026-03-12 03:57:49.132960",
+      "location": null,
+      "install_sqm": 7000.0,
+      "delay_billable": 1,
+      "delay_description": null,
+      "machines_stood_down": 0,
+      "other_work_description": null,
+      "user_id": null
+    },
+    {
+      "id": 6,
+      "project_id": 1,
+      "entry_date": "2026-03-20",
+      "lot_number": null,
+      "material": null,
+      "num_people": 5,
+      "install_hours": 0.0,
+      "delay_hours": 10.0,
+      "delay_reason": "Wet Weather",
+      "notes": null,
+      "created_at": "2026-03-12 03:58:42.506933",
+      "updated_at": "2026-03-12 05:00:40.585307",
+      "location": null,
+      "install_sqm": 0.0,
+      "delay_billable": 1,
+      "delay_description": "8mm rain on site",
+      "machines_stood_down": 0,
+      "other_work_description": null,
+      "user_id": null
+    },
+    {
+      "id": 7,
+      "project_id": 1,
+      "entry_date": "2026-03-18",
+      "lot_number": "1",
+      "material": "HDPE",
+      "num_people": 5,
+      "install_hours": 8.0,
+      "delay_hours": 2.0,
+      "delay_reason": "Client Hold due to Subgrade Approval",
+      "notes": null,
+      "created_at": "2026-03-12 22:43:48.317674",
+      "updated_at": "2026-03-12 22:43:48.317685",
+      "location": null,
+      "install_sqm": 2000.0,
+      "delay_billable": 1,
+      "delay_description": "2 hours required for the client to prepare the subgrade for installation of the HDPE.",
+      "machines_stood_down": 0,
+      "other_work_description": null,
+      "user_id": null
+    },
+    {
+      "id": 8,
+      "project_id": 1,
+      "entry_date": "2026-03-21",
+      "lot_number": "1",
+      "material": "HDPE",
+      "num_people": 5,
+      "install_hours": 10.0,
+      "delay_hours": 0.0,
+      "delay_reason": null,
+      "notes": null,
+      "created_at": "2026-03-12 23:28:05.589525",
+      "updated_at": "2026-03-12 23:29:09.401028",
+      "location": null,
+      "install_sqm": 5000.0,
+      "delay_billable": 1,
+      "delay_description": null,
+      "machines_stood_down": 0,
+      "other_work_description": null,
+      "user_id": null
+    },
+    {
+      "id": 9,
+      "project_id": 1,
+      "entry_date": "2026-03-24",
+      "lot_number": "2",
+      "material": "HDPE",
+      "num_people": 5,
+      "install_hours": 10.0,
+      "delay_hours": 0.0,
+      "delay_reason": null,
+      "notes": null,
+      "created_at": "2026-03-12 23:32:16.152101",
+      "updated_at": "2026-03-12 23:46:55.088219",
+      "location": null,
+      "install_sqm": 5000.0,
+      "delay_billable": 1,
+      "delay_description": null,
+      "machines_stood_down": 0,
+      "other_work_description": null,
+      "user_id": null
+    },
+    {
+      "id": 10,
+      "project_id": 1,
+      "entry_date": "2026-03-25",
+      "lot_number": null,
+      "material": null,
+      "num_people": 5,
+      "install_hours": 0.0,
+      "delay_hours": 10.0,
+      "delay_reason": "Other",
+      "notes": null,
+      "created_at": "2026-03-13 00:15:17.147952",
+      "updated_at": "2026-03-13 00:15:17.147965",
+      "location": null,
+      "install_sqm": 0.0,
+      "delay_billable": 0,
+      "delay_description": "Not enough sandbags.",
+      "machines_stood_down": 0,
+      "other_work_description": "Spent the day making more sandbags to properly secure the installation",
+      "user_id": null
+    },
+    {
+      "id": 11,
+      "project_id": 2,
+      "entry_date": "2026-03-13",
+      "lot_number": null,
+      "material": null,
+      "num_people": 0,
+      "install_hours": 0.0,
+      "delay_hours": 10.0,
+      "delay_reason": "Wet Weather",
+      "notes": null,
+      "created_at": "2026-03-13 00:27:57.913707",
+      "updated_at": "2026-03-13 00:27:57.913719",
+      "location": null,
+      "install_sqm": 0.0,
+      "delay_billable": 1,
+      "delay_description": "Wet Weather on Site. 9mm of rain overnight as shown in the photos",
+      "machines_stood_down": 1,
+      "other_work_description": null,
+      "user_id": null
+    },
+    {
+      "id": 12,
+      "project_id": 1,
+      "entry_date": "2026-03-13",
+      "lot_number": null,
+      "material": null,
+      "num_people": 5,
+      "install_hours": 0.0,
+      "delay_hours": 10.0,
+      "delay_reason": "Wet Weather",
+      "notes": null,
+      "created_at": "2026-03-13 00:53:49.527118",
+      "updated_at": "2026-03-13 00:53:49.527140",
+      "location": null,
+      "install_sqm": 0.0,
+      "delay_billable": 1,
+      "delay_description": "9mm of rain on site overnight.",
+      "machines_stood_down": 0,
+      "other_work_description": null,
+      "user_id": null
+    }
+  ],
+  "entry_employees": [
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      4,
+      1
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      4,
+      3
+    ],
+    [
+      4,
+      4
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      5,
+      1
+    ],
+    [
+      5,
+      2
+    ],
+    [
+      5,
+      4
+    ],
+    [
+      5,
+      5
+    ],
+    [
+      6,
+      1
+    ],
+    [
+      6,
+      2
+    ],
+    [
+      6,
+      3
+    ],
+    [
+      6,
+      4
+    ],
+    [
+      6,
+      5
+    ],
+    [
+      7,
+      1
+    ],
+    [
+      7,
+      2
+    ],
+    [
+      7,
+      3
+    ],
+    [
+      7,
+      4
+    ],
+    [
+      7,
+      5
+    ],
+    [
+      8,
+      1
+    ],
+    [
+      8,
+      2
+    ],
+    [
+      8,
+      3
+    ],
+    [
+      8,
+      4
+    ],
+    [
+      8,
+      5
+    ],
+    [
+      9,
+      1
+    ],
+    [
+      9,
+      2
+    ],
+    [
+      9,
+      3
+    ],
+    [
+      9,
+      4
+    ],
+    [
+      9,
+      5
+    ],
+    [
+      10,
+      1
+    ],
+    [
+      10,
+      2
+    ],
+    [
+      10,
+      3
+    ],
+    [
+      10,
+      4
+    ],
+    [
+      10,
+      5
+    ],
+    [
+      12,
+      1
+    ],
+    [
+      12,
+      2
+    ],
+    [
+      12,
+      3
+    ],
+    [
+      12,
+      4
+    ],
+    [
+      12,
+      5
+    ]
+  ],
+  "entry_machines": [
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      3,
+      6
+    ],
+    [
+      4,
+      1
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      4,
+      3
+    ],
+    [
+      4,
+      4
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      4,
+      6
+    ],
+    [
+      5,
+      1
+    ],
+    [
+      5,
+      4
+    ],
+    [
+      5,
+      5
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      6,
+      1
+    ],
+    [
+      6,
+      2
+    ],
+    [
+      6,
+      3
+    ],
+    [
+      6,
+      4
+    ],
+    [
+      6,
+      5
+    ],
+    [
+      6,
+      6
+    ],
+    [
+      7,
+      1
+    ],
+    [
+      7,
+      2
+    ],
+    [
+      7,
+      3
+    ],
+    [
+      7,
+      4
+    ],
+    [
+      7,
+      5
+    ],
+    [
+      7,
+      6
+    ],
+    [
+      8,
+      1
+    ],
+    [
+      8,
+      2
+    ],
+    [
+      8,
+      3
+    ],
+    [
+      8,
+      4
+    ],
+    [
+      8,
+      5
+    ],
+    [
+      8,
+      6
+    ],
+    [
+      9,
+      1
+    ],
+    [
+      9,
+      2
+    ],
+    [
+      9,
+      3
+    ],
+    [
+      9,
+      4
+    ],
+    [
+      9,
+      5
+    ],
+    [
+      9,
+      6
+    ],
+    [
+      10,
+      1
+    ],
+    [
+      10,
+      2
+    ],
+    [
+      10,
+      3
+    ],
+    [
+      10,
+      4
+    ],
+    [
+      10,
+      5
+    ],
+    [
+      10,
+      6
+    ],
+    [
+      12,
+      1
+    ],
+    [
+      12,
+      2
+    ],
+    [
+      12,
+      3
+    ],
+    [
+      12,
+      4
+    ],
+    [
+      12,
+      5
+    ],
+    [
+      12,
+      6
+    ]
+  ],
+  "hired_machine": [
+    {
+      "id": 1,
+      "project_id": 1,
+      "machine_name": "Telehandler 1",
+      "machine_type": "Telehandler",
+      "hire_company": "All Lift",
+      "hire_company_email": "Kelly@alllift.com.au",
+      "hire_company_phone": "0438413302",
+      "delivery_date": "2026-03-13",
+      "return_date": null,
+      "cost_per_day": 250.0,
+      "cost_per_week": 1580.0,
+      "invoice_filename": null,
+      "invoice_original_name": null,
+      "notes": null,
+      "active": 1,
+      "created_at": "2026-03-12 01:54:19.437041",
+      "count_saturdays": 0
+    },
+    {
+      "id": 2,
+      "project_id": 2,
+      "machine_name": "Manitou 1440",
+      "machine_type": "Telehandler",
+      "hire_company": "Holly's Hire Company",
+      "hire_company_email": "holly@lmigi.com.au",
+      "hire_company_phone": "0448334222",
+      "delivery_date": "2026-03-12",
+      "return_date": null,
+      "cost_per_day": null,
+      "cost_per_week": 1500.0,
+      "invoice_filename": null,
+      "invoice_original_name": null,
+      "notes": null,
+      "active": 1,
+      "created_at": "2026-03-13 00:26:02.885420",
+      "count_saturdays": 0
+    }
+  ],
+  "stand_down": [
+    {
+      "id": 3,
+      "hired_machine_id": 1,
+      "stand_down_date": "2026-03-17",
+      "reason": "The site received 8mm of Rain overnight. Not able to deploy.",
+      "created_at": "2026-03-12 03:26:36.604164",
+      "entry_id": 4
+    },
+    {
+      "id": 4,
+      "hired_machine_id": 1,
+      "stand_down_date": "2026-03-20",
+      "reason": "8mm rain on site",
+      "created_at": "2026-03-12 03:58:42.529274",
+      "entry_id": 6
+    },
+    {
+      "id": 5,
+      "hired_machine_id": 2,
+      "stand_down_date": "2026-03-13",
+      "reason": "Wet Weather on Site. 9mm of rain overnight as shown in the photos",
+      "created_at": "2026-03-13 00:27:57.951890",
+      "entry_id": 11
+    },
+    {
+      "id": 6,
+      "hired_machine_id": 1,
+      "stand_down_date": "2026-03-13",
+      "reason": "9mm of rain on site overnight.",
+      "created_at": "2026-03-13 00:53:49.564211",
+      "entry_id": 12
+    }
+  ],
+  "planned_data": [
+    {
+      "id": 1,
+      "project_id": 1,
+      "lot": "1",
+      "location": "Carbonation Pond",
+      "material": "HDPE",
+      "day_number": 1,
+      "planned_sqm": 7000.0
+    },
+    {
+      "id": 2,
+      "project_id": 1,
+      "lot": "1",
+      "location": "Carbonation Pond",
+      "material": "HDPE",
+      "day_number": 2,
+      "planned_sqm": 7000.0
+    },
+    {
+      "id": 3,
+      "project_id": 1,
+      "lot": "1",
+      "location": "Carbonation Pond",
+      "material": "HDPE",
+      "day_number": 3,
+      "planned_sqm": 7000.0
+    },
+    {
+      "id": 4,
+      "project_id": 1,
+      "lot": "1",
+      "location": "Carbonation Pond",
+      "material": "Geocomposite",
+      "day_number": 4,
+      "planned_sqm": 7000.0
+    },
+    {
+      "id": 5,
+      "project_id": 1,
+      "lot": "1",
+      "location": "Carbonation Pond",
+      "material": "Geocomposite",
+      "day_number": 5,
+      "planned_sqm": 7000.0
+    },
+    {
+      "id": 6,
+      "project_id": 1,
+      "lot": "1",
+      "location": "Carbonation Pond",
+      "material": "Geocomposite",
+      "day_number": 6,
+      "planned_sqm": 7000.0
+    },
+    {
+      "id": 7,
+      "project_id": 1,
+      "lot": "2",
+      "location": "Carbonation Pond",
+      "material": "HDPE",
+      "day_number": 7,
+      "planned_sqm": 7000.0
+    },
+    {
+      "id": 8,
+      "project_id": 1,
+      "lot": "2",
+      "location": "Carbonation Pond",
+      "material": "HDPE",
+      "day_number": 8,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 9,
+      "project_id": 1,
+      "lot": "2",
+      "location": "Carbonation Pond",
+      "material": "HDPE",
+      "day_number": 9,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 10,
+      "project_id": 1,
+      "lot": "2",
+      "location": "Carbonation Pond",
+      "material": "HDPE",
+      "day_number": 10,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 11,
+      "project_id": 1,
+      "lot": "2",
+      "location": "Carbonation Pond",
+      "material": "Geocomposite",
+      "day_number": 11,
+      "planned_sqm": 7000.0
+    },
+    {
+      "id": 12,
+      "project_id": 1,
+      "lot": "2",
+      "location": "Carbonation Pond",
+      "material": "Geocomposite",
+      "day_number": 12,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 13,
+      "project_id": 1,
+      "lot": "2",
+      "location": "Carbonation Pond",
+      "material": "Geocomposite",
+      "day_number": 13,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 14,
+      "project_id": 1,
+      "lot": "2",
+      "location": "Carbonation Pond",
+      "material": "Geocomposite",
+      "day_number": 14,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 15,
+      "project_id": 1,
+      "lot": "3",
+      "location": "Western Floor Batter",
+      "material": "HDPE",
+      "day_number": 15,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 16,
+      "project_id": 1,
+      "lot": "3",
+      "location": "Western Floor Batter",
+      "material": "HDPE",
+      "day_number": 16,
+      "planned_sqm": 2000.0
+    },
+    {
+      "id": 17,
+      "project_id": 1,
+      "lot": "3",
+      "location": "Western Floor Batter",
+      "material": "Geotextile",
+      "day_number": 17,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 18,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "HDPE",
+      "day_number": 18,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 19,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "HDPE",
+      "day_number": 19,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 20,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "HDPE",
+      "day_number": 20,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 21,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "HDPE",
+      "day_number": 21,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 22,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "HDPE",
+      "day_number": 22,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 23,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "HDPE",
+      "day_number": 23,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 24,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "Geotextile",
+      "day_number": 24,
+      "planned_sqm": 9000.0
+    },
+    {
+      "id": 25,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "Geotextile",
+      "day_number": 25,
+      "planned_sqm": 9000.0
+    },
+    {
+      "id": 26,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "Geotextile",
+      "day_number": 26,
+      "planned_sqm": 9000.0
+    },
+    {
+      "id": 27,
+      "project_id": 1,
+      "lot": "4",
+      "location": "Eastern Batter",
+      "material": "Geotextile",
+      "day_number": 27,
+      "planned_sqm": 9000.0
+    },
+    {
+      "id": 28,
+      "project_id": 1,
+      "lot": "5",
+      "location": "Toe of Eastern Batter",
+      "material": "HDPE",
+      "day_number": 28,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 29,
+      "project_id": 1,
+      "lot": "5",
+      "location": "Toe of Eastern Batter",
+      "material": "HDPE",
+      "day_number": 29,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 30,
+      "project_id": 1,
+      "lot": "5",
+      "location": "Toe of Eastern Batter",
+      "material": "Geocomposite",
+      "day_number": 30,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 31,
+      "project_id": 1,
+      "lot": "5",
+      "location": "Toe of Eastern Batter",
+      "material": "Geocomposite",
+      "day_number": 31,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 32,
+      "project_id": 1,
+      "lot": "6",
+      "location": "Toe of Eastern Batter",
+      "material": "HDPE",
+      "day_number": 32,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 33,
+      "project_id": 1,
+      "lot": "6",
+      "location": "Toe of Eastern Batter",
+      "material": "HDPE",
+      "day_number": 33,
+      "planned_sqm": 2700.0
+    },
+    {
+      "id": 34,
+      "project_id": 1,
+      "lot": "6",
+      "location": "Toe of Eastern Batter",
+      "material": "Geotextile",
+      "day_number": 34,
+      "planned_sqm": 10500.0
+    },
+    {
+      "id": 35,
+      "project_id": 1,
+      "lot": "7",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 35,
+      "planned_sqm": 5700.0
+    },
+    {
+      "id": 36,
+      "project_id": 1,
+      "lot": "7",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 36,
+      "planned_sqm": 5700.0
+    },
+    {
+      "id": 37,
+      "project_id": 1,
+      "lot": "7",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 37,
+      "planned_sqm": 7500.0
+    },
+    {
+      "id": 38,
+      "project_id": 1,
+      "lot": "7",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 38,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 39,
+      "project_id": 1,
+      "lot": "7",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 39,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 40,
+      "project_id": 1,
+      "lot": "7",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 40,
+      "planned_sqm": 7500.0
+    },
+    {
+      "id": 41,
+      "project_id": 1,
+      "lot": "8",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 41,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 42,
+      "project_id": 1,
+      "lot": "8",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 42,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 43,
+      "project_id": 1,
+      "lot": "8",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 43,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 44,
+      "project_id": 1,
+      "lot": "8",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 44,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 45,
+      "project_id": 1,
+      "lot": "8",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 45,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 46,
+      "project_id": 1,
+      "lot": "8",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 46,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 47,
+      "project_id": 1,
+      "lot": "9",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 47,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 48,
+      "project_id": 1,
+      "lot": "9",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 48,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 49,
+      "project_id": 1,
+      "lot": "9",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 49,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 50,
+      "project_id": 1,
+      "lot": "9",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 50,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 51,
+      "project_id": 1,
+      "lot": "9",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 51,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 52,
+      "project_id": 1,
+      "lot": "9",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 52,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 53,
+      "project_id": 1,
+      "lot": "10",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 53,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 54,
+      "project_id": 1,
+      "lot": "10",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 54,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 55,
+      "project_id": 1,
+      "lot": "10",
+      "location": "Floor Area",
+      "material": "HDPE",
+      "day_number": 55,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 56,
+      "project_id": 1,
+      "lot": "10",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 56,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 57,
+      "project_id": 1,
+      "lot": "10",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 57,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 58,
+      "project_id": 1,
+      "lot": "10",
+      "location": "Floor Area",
+      "material": "Geocomposite",
+      "day_number": 58,
+      "planned_sqm": 8000.0
+    },
+    {
+      "id": 59,
+      "project_id": 1,
+      "lot": "11",
+      "location": "Central Drain",
+      "material": "HDPE",
+      "day_number": 59,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 60,
+      "project_id": 1,
+      "lot": "11",
+      "location": "Central Drain",
+      "material": "HDPE",
+      "day_number": 60,
+      "planned_sqm": 5000.0
+    },
+    {
+      "id": 61,
+      "project_id": 1,
+      "lot": "11",
+      "location": "Central Drain",
+      "material": "Geotextile",
+      "day_number": 61,
+      "planned_sqm": 6000.0
+    },
+    {
+      "id": 62,
+      "project_id": 1,
+      "lot": "11",
+      "location": "Central Drain",
+      "material": "Geotextile",
+      "day_number": 62,
+      "planned_sqm": 5000.0
+    }
+  ],
+  "project_non_work_date": [
+    {
+      "id": 1,
+      "project_id": 1,
+      "date": "2026-03-23",
+      "reason": "RDO"
+    },
+    {
+      "id": 2,
+      "project_id": 1,
+      "date": "2026-04-03",
+      "reason": "Public Holiday"
+    },
+    {
+      "id": 3,
+      "project_id": 1,
+      "date": "2026-04-04",
+      "reason": "Public Holiday"
+    },
+    {
+      "id": 4,
+      "project_id": 1,
+      "date": "2026-04-05",
+      "reason": "Public Holiday"
+    },
+    {
+      "id": 5,
+      "project_id": 1,
+      "date": "2026-04-06",
+      "reason": "Public Holiday"
+    },
+    {
+      "id": 6,
+      "project_id": 1,
+      "date": "2026-04-07",
+      "reason": "Shutdown"
+    },
+    {
+      "id": 7,
+      "project_id": 1,
+      "date": "2026-04-25",
+      "reason": "Public Holiday"
+    },
+    {
+      "id": 8,
+      "project_id": 1,
+      "date": "2026-04-26",
+      "reason": "Public Holiday"
+    },
+    {
+      "id": 9,
+      "project_id": 1,
+      "date": "2026-04-27",
+      "reason": "Shutdown"
+    },
+    {
+      "id": 10,
+      "project_id": 1,
+      "date": "2026-05-04",
+      "reason": "RDO"
+    }
+  ],
+  "project_budgeted_role": [
+    {
+      "id": 1,
+      "project_id": 1,
+      "role_name": "Site Supervisor, Level III",
+      "budgeted_count": 2
+    },
+    {
+      "id": 2,
+      "project_id": 1,
+      "role_name": "Machine Operator (Excavator, Dozer etc)",
+      "budgeted_count": 3
+    },
+    {
+      "id": 3,
+      "project_id": 1,
+      "role_name": "Experienced PE Welder",
+      "budgeted_count": 4
+    },
+    {
+      "id": 4,
+      "project_id": 1,
+      "role_name": "Labourer",
+      "budgeted_count": 3
+    }
+  ],
+  "project_machine": [
+    {
+      "id": 1,
+      "project_id": 1,
+      "machine_id": 4,
+      "assigned_date": null,
+      "notes": null,
+      "created_at": "2026-03-12 23:59:25.047354"
+    },
+    {
+      "id": 2,
+      "project_id": 1,
+      "machine_id": 5,
+      "assigned_date": null,
+      "notes": null,
+      "created_at": "2026-03-13 00:00:34.497704"
+    },
+    {
+      "id": 3,
+      "project_id": 1,
+      "machine_id": 6,
+      "assigned_date": null,
+      "notes": null,
+      "created_at": "2026-03-13 00:00:46.981702"
+    },
+    {
+      "id": 4,
+      "project_id": 1,
+      "machine_id": 2,
+      "assigned_date": null,
+      "notes": null,
+      "created_at": "2026-03-13 00:00:56.115832"
+    },
+    {
+      "id": 5,
+      "project_id": 1,
+      "machine_id": 3,
+      "assigned_date": null,
+      "notes": null,
+      "created_at": "2026-03-13 00:17:58.657539"
+    },
+    {
+      "id": 6,
+      "project_id": 1,
+      "machine_id": 1,
+      "assigned_date": null,
+      "notes": null,
+      "created_at": "2026-03-13 00:18:02.062515"
+    }
+  ],
+  "project_worked_sunday": [],
+  "entry_photo": [
+    {
+      "id": 1,
+      "entry_id": 11,
+      "filename": "photo_a3215dba4f7849ebb17dd52f6b11883f.jpeg",
+      "original_name": "pic-test.jpeg",
+      "caption": null,
+      "created_at": "2026-03-13 00:27:57.945137"
+    }
+  ],
+  "project_document": []
+}
