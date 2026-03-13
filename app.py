@@ -2689,6 +2689,301 @@ def change_password():
 
 
 # ---------------------------------------------------------------------------
+# Admin — Data Import (migrate local data to production)
+# ---------------------------------------------------------------------------
+
+@app.route('/admin/import-data', methods=['GET', 'POST'])
+def admin_import_data():
+    if not current_user.is_admin:
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        f = request.files.get('export_file')
+        if not f or not f.filename.endswith('.json'):
+            flash('Please upload a valid export.json file.', 'danger')
+            return redirect(url_for('admin_import_data'))
+
+        try:
+            data = json.loads(f.read().decode('utf-8'))
+        except Exception as e:
+            flash(f'Could not read file: {e}', 'danger')
+            return redirect(url_for('admin_import_data'))
+
+        from sqlalchemy import text as _text
+
+        def _d(val):
+            """Parse date string or return None."""
+            if not val:
+                return None
+            try:
+                return datetime.strptime(val[:10], '%Y-%m-%d').date()
+            except Exception:
+                return None
+
+        def _dt(val):
+            if not val:
+                return None
+            try:
+                return datetime.strptime(val[:19], '%Y-%m-%d %H:%M:%S')
+            except Exception:
+                return None
+
+        counts = {}
+        try:
+            # ── Roles ──────────────────────────────────────────────────────
+            role_id_map = {}
+            for r in data.get('role', []):
+                existing = Role.query.filter_by(name=r['name']).first()
+                if not existing:
+                    obj = Role(name=r['name'], delay_rate=r.get('delay_rate'))
+                    db.session.add(obj)
+                    db.session.flush()
+                    role_id_map[r['id']] = obj.id
+                else:
+                    role_id_map[r['id']] = existing.id
+            counts['roles'] = len(role_id_map)
+
+            # ── Projects ───────────────────────────────────────────────────
+            proj_id_map = {}
+            for p in data.get('project', []):
+                obj = Project(
+                    name=p['name'],
+                    description=p.get('description'),
+                    active=bool(p.get('active', True)),
+                    start_date=_d(p.get('start_date')),
+                    planned_crew=p.get('planned_crew'),
+                    hours_per_day=p.get('hours_per_day'),
+                    quoted_days=p.get('quoted_days'),
+                )
+                db.session.add(obj)
+                db.session.flush()
+                proj_id_map[p['id']] = obj.id
+            counts['projects'] = len(proj_id_map)
+
+            # ── Employees ──────────────────────────────────────────────────
+            emp_id_map = {}
+            for e in data.get('employee', []):
+                old_role_id = e.get('role_id')
+                obj = Employee(
+                    name=e['name'],
+                    role=e.get('role'),
+                    role_id=role_id_map.get(old_role_id) if old_role_id else None,
+                    delay_rate=e.get('delay_rate'),
+                    active=bool(e.get('active', True)),
+                )
+                db.session.add(obj)
+                db.session.flush()
+                emp_id_map[e['id']] = obj.id
+            counts['employees'] = len(emp_id_map)
+
+            # ── Machines ───────────────────────────────────────────────────
+            mach_id_map = {}
+            for m in data.get('machine', []):
+                obj = Machine(
+                    name=m['name'],
+                    machine_type=m.get('machine_type'),
+                    delay_rate=m.get('delay_rate'),
+                    active=bool(m.get('active', True)),
+                )
+                db.session.add(obj)
+                db.session.flush()
+                mach_id_map[m['id']] = obj.id
+            counts['machines'] = len(mach_id_map)
+
+            # ── Daily Entries ──────────────────────────────────────────────
+            entry_id_map = {}
+            for e in data.get('daily_entry', []):
+                new_proj_id = proj_id_map.get(e['project_id'])
+                if not new_proj_id:
+                    continue
+                obj = DailyEntry(
+                    project_id=new_proj_id,
+                    entry_date=_d(e['entry_date']),
+                    lot_number=e.get('lot_number'),
+                    location=e.get('location'),
+                    material=e.get('material'),
+                    num_people=e.get('num_people'),
+                    install_hours=e.get('install_hours') or 0,
+                    install_sqm=e.get('install_sqm') or 0,
+                    delay_hours=e.get('delay_hours') or 0,
+                    delay_billable=bool(e.get('delay_billable', True)),
+                    delay_reason=e.get('delay_reason'),
+                    delay_description=e.get('delay_description'),
+                    machines_stood_down=bool(e.get('machines_stood_down', False)),
+                    notes=e.get('notes'),
+                    other_work_description=e.get('other_work_description'),
+                )
+                db.session.add(obj)
+                db.session.flush()
+                entry_id_map[e['id']] = obj.id
+            counts['entries'] = len(entry_id_map)
+
+            # ── Entry ↔ Employee associations ──────────────────────────────
+            assoc_e_count = 0
+            for row in data.get('entry_employees', []):
+                new_entry_id = entry_id_map.get(row[0])
+                new_emp_id = emp_id_map.get(row[1])
+                if new_entry_id and new_emp_id:
+                    db.session.execute(
+                        _text('INSERT INTO entry_employees (entry_id, employee_id) VALUES (:e, :m)'),
+                        {'e': new_entry_id, 'm': new_emp_id}
+                    )
+                    assoc_e_count += 1
+            counts['entry_employees'] = assoc_e_count
+
+            # ── Entry ↔ Machine associations ───────────────────────────────
+            assoc_m_count = 0
+            for row in data.get('entry_machines', []):
+                new_entry_id = entry_id_map.get(row[0])
+                new_mach_id = mach_id_map.get(row[1])
+                if new_entry_id and new_mach_id:
+                    db.session.execute(
+                        _text('INSERT INTO entry_machines (entry_id, machine_id) VALUES (:e, :m)'),
+                        {'e': new_entry_id, 'm': new_mach_id}
+                    )
+                    assoc_m_count += 1
+            counts['entry_machines'] = assoc_m_count
+
+            # ── Hired Machines ─────────────────────────────────────────────
+            hm_id_map = {}
+            for h in data.get('hired_machine', []):
+                new_proj_id = proj_id_map.get(h['project_id'])
+                if not new_proj_id:
+                    continue
+                obj = HiredMachine(
+                    project_id=new_proj_id,
+                    machine_name=h['machine_name'],
+                    machine_type=h.get('machine_type'),
+                    hire_company=h.get('hire_company'),
+                    hire_company_email=h.get('hire_company_email'),
+                    hire_company_phone=h.get('hire_company_phone'),
+                    delivery_date=_d(h.get('delivery_date')),
+                    return_date=_d(h.get('return_date')),
+                    cost_per_day=h.get('cost_per_day'),
+                    cost_per_week=h.get('cost_per_week'),
+                    count_saturdays=bool(h.get('count_saturdays', True)),
+                    notes=h.get('notes'),
+                    active=bool(h.get('active', True)),
+                )
+                db.session.add(obj)
+                db.session.flush()
+                hm_id_map[h['id']] = obj.id
+            counts['hired_machines'] = len(hm_id_map)
+
+            # ── Stand Downs ────────────────────────────────────────────────
+            sd_count = 0
+            for s in data.get('stand_down', []):
+                new_hm_id = hm_id_map.get(s['hired_machine_id'])
+                if not new_hm_id:
+                    continue
+                new_entry_id = entry_id_map.get(s.get('entry_id')) if s.get('entry_id') else None
+                obj = StandDown(
+                    hired_machine_id=new_hm_id,
+                    entry_id=new_entry_id,
+                    stand_down_date=_d(s['stand_down_date']),
+                    reason=s.get('reason', ''),
+                )
+                db.session.add(obj)
+                sd_count += 1
+            counts['stand_downs'] = sd_count
+
+            # ── Planned Data ───────────────────────────────────────────────
+            pd_count = 0
+            for p in data.get('planned_data', []):
+                new_proj_id = proj_id_map.get(p['project_id'])
+                if not new_proj_id:
+                    continue
+                obj = PlannedData(
+                    project_id=new_proj_id,
+                    lot=p.get('lot'),
+                    location=p.get('location'),
+                    material=p.get('material'),
+                    day_number=p.get('day_number'),
+                    planned_sqm=p.get('planned_sqm'),
+                )
+                db.session.add(obj)
+                pd_count += 1
+            counts['planned_data'] = pd_count
+
+            # ── Project Non-Work Dates ─────────────────────────────────────
+            nwd_count = 0
+            for n in data.get('project_non_work_date', []):
+                new_proj_id = proj_id_map.get(n['project_id'])
+                if not new_proj_id:
+                    continue
+                db.session.add(ProjectNonWorkDate(
+                    project_id=new_proj_id,
+                    date=_d(n['date']),
+                    reason=n.get('reason'),
+                ))
+                nwd_count += 1
+            counts['non_work_dates'] = nwd_count
+
+            # ── Project Budgeted Roles ─────────────────────────────────────
+            br_count = 0
+            for b in data.get('project_budgeted_role', []):
+                new_proj_id = proj_id_map.get(b['project_id'])
+                if not new_proj_id:
+                    continue
+                db.session.add(ProjectBudgetedRole(
+                    project_id=new_proj_id,
+                    role_name=b['role_name'],
+                    budgeted_count=b.get('budgeted_count', 1),
+                ))
+                br_count += 1
+            counts['budgeted_roles'] = br_count
+
+            # ── Project Machines (own fleet) ───────────────────────────────
+            pm_count = 0
+            for p in data.get('project_machine', []):
+                new_proj_id = proj_id_map.get(p['project_id'])
+                new_mach_id = mach_id_map.get(p['machine_id'])
+                if not new_proj_id or not new_mach_id:
+                    continue
+                db.session.add(ProjectMachine(
+                    project_id=new_proj_id,
+                    machine_id=new_mach_id,
+                    assigned_date=_d(p.get('assigned_date')),
+                    notes=p.get('notes'),
+                ))
+                pm_count += 1
+            counts['project_machines'] = pm_count
+
+            # ── Worked Sundays ─────────────────────────────────────────────
+            ws_count = 0
+            for w in data.get('project_worked_sunday', []):
+                new_proj_id = proj_id_map.get(w['project_id'])
+                if not new_proj_id:
+                    continue
+                db.session.add(ProjectWorkedSunday(
+                    project_id=new_proj_id,
+                    date=_d(w['date']),
+                    reason=w.get('reason'),
+                ))
+                ws_count += 1
+            counts['worked_sundays'] = ws_count
+
+            db.session.commit()
+
+            summary = ', '.join(f'{v} {k}' for k, v in counts.items() if v)
+            flash(f'Import successful! {summary}. Note: uploaded photos/documents need to be re-uploaded manually.', 'success')
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Import failed: {e}', 'danger')
+
+        return redirect(url_for('admin_import_data'))
+
+    # GET — show the import page
+    entry_count = DailyEntry.query.count()
+    project_count = Project.query.count()
+    return render_template('admin/import_data.html',
+                           entry_count=entry_count,
+                           project_count=project_count)
+
+
+# ---------------------------------------------------------------------------
 # Admin — Projects / Employees / Machines / Roles / Settings
 # ---------------------------------------------------------------------------
 

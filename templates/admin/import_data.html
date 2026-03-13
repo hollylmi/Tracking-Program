@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Import Data &mdash; Project Tracker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <h2 class="fw-bold mb-1"><i class="bi bi-cloud-upload me-2"></i>Import Local Data</h2>
+    <p class="text-muted mb-4">Upload your <code>export.json</code> file to bring in all your local projects, entries, employees, and machines.</p>
+
+    {% if project_count > 0 or entry_count > 0 %}
+    <div class="alert alert-warning">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <strong>This database already has data</strong> — {{ project_count }} project(s) and {{ entry_count }} entry/entries.
+      Importing will add to what's already here. Duplicates may be created if you import more than once.
+    </div>
+    {% else %}
+    <div class="alert alert-success">
+      <i class="bi bi-check-circle me-2"></i>
+      Database is empty and ready for import.
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-semibold">Step 1 — Export from your local PC</div>
+      <div class="card-body">
+        <p class="mb-2">On your local PC, double-click <code>export_data.py</code> (or run it via <code>run.bat</code> in a terminal).</p>
+        <p class="mb-0">This creates an <code>export.json</code> file in your Tracking-Program folder.</p>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Step 2 — Upload the export file here</div>
+      <div class="card-body">
+        <form method="POST" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label">Select export.json</label>
+            <input type="file" class="form-control" name="export_file" accept=".json" required>
+          </div>
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary btn-lg"
+                    onclick="return confirm('Import all data from this file? This cannot be undone.')">
+              <i class="bi bi-cloud-upload me-1"></i>Import Data
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="alert alert-info mt-4 small">
+      <i class="bi bi-info-circle me-1"></i>
+      <strong>Photos and documents</strong> are not included in the export — only the database records.
+      After importing, any entries with photos will show as missing images until you re-upload them.
+    </div>
+  </div>
+</div>
+{% endblock %}
