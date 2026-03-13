@@ -1,0 +1,701 @@
+{% extends "base.html" %}
+{% block title %}{% if entry %}Edit Entry{% else %}New Entry{% endif %} — Project Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0">
+    <i class="bi bi-{% if entry %}pencil-square{% else %}plus-circle{% endif %} me-2 text-primary"></i>
+    {% if entry %}Edit Entry{% else %}New Daily Entry{% endif %}
+  </h2>
+  <a href="{{ url_for('entries') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Entries
+  </a>
+</div>
+
+<form method="POST" enctype="multipart/form-data"
+      action="{% if entry %}{{ url_for('edit_entry', entry_id=entry.id) }}{% else %}{{ url_for('new_entry') }}{% endif %}">
+
+  <div class="row g-4">
+
+    <!-- Left Column -->
+    <div class="col-lg-7">
+
+      <!-- Core Details Card -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-info-circle me-2 text-primary"></i>Entry Details</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+
+            <!-- Project -->
+            <div class="col-12">
+              <label class="form-label fw-semibold">Project <span class="text-danger">*</span></label>
+              <select name="project_id" class="form-select" required id="projectSelect">
+                <option value="">— Select a project —</option>
+                {% for project in projects %}
+                <option value="{{ project.id }}"
+                  {% if entry and entry.project_id == project.id %}selected{% endif %}>
+                  {{ project.name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Date and Day -->
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+              <input type="date" name="entry_date" class="form-control" required
+                     value="{% if entry %}{{ entry.entry_date.strftime('%Y-%m-%d') }}{% else %}{{ today.strftime('%Y-%m-%d') }}{% endif %}"
+                     id="entryDate">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Day</label>
+              <input type="text" class="form-control bg-light" id="dayDisplay" readonly
+                     placeholder="Auto-filled from date">
+            </div>
+
+            <!-- Lot Number, Location, Material -->
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Lot Number</label>
+              <input type="text" name="lot_number" class="form-control" id="lotInput"
+                     value="{{ entry.lot_number if entry and entry.lot_number else '' }}"
+                     placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off">
+              <datalist id="lotOptions"></datalist>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Location</label>
+              <input type="text" name="location" class="form-control"
+                     value="{{ entry.location if entry and entry.location else '' }}"
+                     placeholder="e.g. North End">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Material</label>
+              <input type="text" name="material" class="form-control" id="materialInput"
+                     value="{{ entry.material if entry and entry.material else '' }}"
+                     placeholder="e.g. HDPE" list="materialOptions" autocomplete="off">
+              <datalist id="materialOptions"></datalist>
+            </div>
+
+            <!-- Hours + SQM -->
+            <div class="col-sm-3">
+              <label class="form-label fw-semibold">People</label>
+              <input type="number" name="num_people" class="form-control bg-light" min="0"
+                     id="numPeopleInput"
+                     value="{{ entry.employees|length if entry else 0 }}"
+                     readonly tabindex="-1">
+              <div class="form-text">Auto-counted</div>
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label fw-semibold">Install Hours</label>
+              <input type="number" name="install_hours" class="form-control" min="0" step="0.25"
+                     value="{{ entry.install_hours if entry else '' }}"
+                     placeholder="0.00">
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label fw-semibold">Install SQM</label>
+              <input type="number" name="install_sqm" class="form-control" min="0" step="0.1"
+                     id="installSqmInput"
+                     value="{{ entry.install_sqm if entry else '' }}"
+                     placeholder="0.0">
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label fw-semibold">Delay Hours</label>
+              <input type="number" name="delay_hours" class="form-control" min="0" step="0.25"
+                     id="delayHoursInput"
+                     value="{{ entry.delay_hours if entry else '0' }}"
+                     placeholder="0.00">
+            </div>
+
+            <!-- Progress widget (shown when project + lot + material filled) -->
+            <div class="col-12" id="progressWidget" style="display:none">
+              <div class="rounded p-3 bg-light border">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-semibold small"><i class="bi bi-bar-chart-fill me-1 text-primary"></i>Lot Progress (to date, excl. this entry)</span>
+                  <span class="small text-muted" id="progressLotLabel"></span>
+                </div>
+                <div class="progress mb-2" style="height:14px">
+                  <div class="progress-bar bg-success" id="progressBar" role="progressbar" style="width:0%"></div>
+                </div>
+                <div class="row g-2 text-center small">
+                  <div class="col-4">
+                    <div class="fw-bold text-primary" id="progressPlanned">—</div>
+                    <div class="text-muted">Planned SQM</div>
+                  </div>
+                  <div class="col-4">
+                    <div class="fw-bold text-success" id="progressInstalled">—</div>
+                    <div class="text-muted">Installed</div>
+                  </div>
+                  <div class="col-4">
+                    <div class="fw-bold text-warning" id="progressRemaining">—</div>
+                    <div class="text-muted">Remaining</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Delay section (shown when delay_hours > 0) -->
+            <div class="col-12" id="delaySection"
+                 style="{% if not entry or not entry.delay_hours or entry.delay_hours == 0 %}display:none{% endif %}">
+
+              <!-- Billable toggle -->
+              <div class="rounded border p-3 mb-2"
+                   id="delayBillableGroup"
+                   style="background:#fff8f8">
+                <label class="form-label fw-semibold mb-2">
+                  <i class="bi bi-currency-dollar me-1"></i>Delay Type
+                </label>
+                <div class="d-flex gap-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="delay_billable" id="billableYes"
+                           value="true"
+                           {% if not entry or entry.delay_billable is none or entry.delay_billable %}checked{% endif %}>
+                    <label class="form-check-label fw-semibold text-danger" for="billableYes">
+                      <i class="bi bi-exclamation-circle me-1"></i>Client Delay — Billable
+                    </label>
+                    <div class="form-text">Client caused or responsible — charges apply</div>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="delay_billable" id="billableNo"
+                           value="false"
+                           {% if entry and entry.delay_billable == false %}checked{% endif %}>
+                    <label class="form-check-label fw-semibold text-secondary" for="billableNo">
+                      <i class="bi bi-shield-x me-1"></i>Own Delay — Non-Billable
+                    </label>
+                    <div class="form-text">Our own issue — not charged to client</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Delay Type (structured category for Gantt coloring) -->
+              <div class="mb-2">
+                <label class="form-label fw-semibold">Delay Type</label>
+                {% set _dr = entry.delay_reason if entry and entry.delay_reason else '' %}
+                <select name="delay_reason" class="form-select">
+                  <option value="Wet Weather" {% if _dr == 'Wet Weather' %}selected{% endif %}>Wet Weather</option>
+                  <option value="Client Delay" {% if _dr == 'Client Delay' %}selected{% endif %}>Client Delay (e.g. subgrade prep, access issues)</option>
+                  <option value="Equipment Failure" {% if _dr == 'Equipment Failure' %}selected{% endif %}>Equipment Failure</option>
+                  <option value="Other" {% if _dr not in ('Wet Weather','Client Delay','Equipment Failure') %}selected{% endif %}>Other</option>
+                </select>
+              </div>
+
+              <!-- Delay Description (detailed) -->
+              <div>
+                <label class="form-label fw-semibold">
+                  Delay Description
+                  <span class="text-muted fw-normal small">(for standdown emails to hire companies)</span>
+                </label>
+                <textarea name="delay_description" class="form-control" rows="3"
+                          placeholder="Detailed description of the delay — used in morning standdown emails to hire companies...">{{ entry.delay_description if entry and entry.delay_description else '' }}</textarea>
+              </div>
+
+              <!-- Wet Weather: machines stood down checkbox -->
+              <div id="machinesStoodDownGroup"
+                   style="{% if not entry or entry.delay_reason != 'Wet Weather' %}display:none{% endif %}">
+                <div class="form-check mt-2 p-3 rounded border bg-warning-subtle">
+                  <input class="form-check-input" type="checkbox" name="machines_stood_down"
+                         id="machinesStoodDownCheck" value="1"
+                         {% if entry and entry.machines_stood_down %}checked{% endif %}>
+                  <label class="form-check-label fw-semibold" for="machinesStoodDownCheck">
+                    <i class="bi bi-cloud-rain me-1"></i>Hired machines stood down
+                    <span class="text-muted fw-normal small">(wet weather — no hire charges today)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="col-12">
+              <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
+              <textarea name="notes" class="form-control" rows="2"
+                        placeholder="Any additional notes...">{{ entry.notes if entry and entry.notes else '' }}</textarea>
+            </div>
+
+            <!-- Other Work (Non-deployment) -->
+            <div class="col-12">
+              <label class="form-label fw-semibold">
+                Other Work Done <span class="text-muted fw-normal">(non-deployment, optional)</span>
+              </label>
+              <textarea name="other_work_description" class="form-control" rows="2"
+                        placeholder="e.g. Machine maintenance, site cleanup, cable laying — work done when not doing installation...">{{ entry.other_work_description if entry and entry.other_work_description else '' }}</textarea>
+              <div class="form-text">Record any work done that day that wasn't deployment — useful for wet weather or delay days.</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Photos Card -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-camera me-2 text-primary"></i>Site Photos</h5>
+        </div>
+        <div class="card-body">
+
+          {% if entry and entry.photos %}
+          <div class="row g-2 mb-3" id="existingPhotos">
+            {% for photo in entry.photos %}
+            <div class="col-sm-4 col-md-3" id="photoThumb_{{ photo.id }}">
+              <div class="card border shadow-sm h-100">
+                <a href="{{ url_for('serve_entry_photo', filename=photo.filename) }}" target="_blank">
+                  <img src="{{ url_for('serve_entry_photo', filename=photo.filename) }}"
+                       class="card-img-top" style="height:100px;object-fit:cover;"
+                       alt="{{ photo.original_name or 'Site photo' }}">
+                </a>
+                <div class="card-body p-1">
+                  <div class="text-muted small text-truncate">{{ photo.original_name or photo.filename }}</div>
+                  <form method="POST"
+                        action="{{ url_for('delete_photo', entry_id=entry.id, photo_id=photo.id) }}"
+                        onsubmit="return confirm('Delete this photo?')" class="mt-1">
+                    <button type="submit" class="btn btn-sm btn-outline-danger w-100 py-0">
+                      <i class="bi bi-trash"></i> Remove
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          <label class="form-label fw-semibold">
+            {% if entry and entry.photos %}Add More Photos{% else %}Upload Photos{% endif %}
+          </label>
+          <input type="file" name="photos" class="form-control" multiple
+                 accept="image/png,image/jpeg,image/gif,image/webp"
+                 id="photoInput">
+          <div class="form-text">PNG, JPG, GIF or WEBP. Multiple files accepted. Used in standdown emails to hire companies.</div>
+
+          <!-- Preview selected files -->
+          <div id="photoPreviewRow" class="row g-2 mt-2"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column — People & Machines -->
+    <div class="col-lg-5">
+
+      <!-- Employees Card -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Crew Members</h5>
+          <span class="badge bg-primary rounded-pill" id="selectedEmployeeCount">
+            {% if entry %}{{ entry.employees|length }}{% else %}0{% endif %} selected
+          </span>
+        </div>
+        <div class="card-body p-0">
+          {% if employees %}
+          <div class="checkbox-scroll-list">
+            {% for employee in employees %}
+            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2">
+              <input type="checkbox" name="employee_ids" value="{{ employee.id }}"
+                     class="form-check-input employee-check mt-0"
+                     {% if selected_employee_ids is defined and employee.id in selected_employee_ids %}checked{% endif %}>
+              <span>
+                {{ employee.name }}
+                {% if employee.role %}
+                  <small class="text-muted ms-1">— {{ employee.role }}</small>
+                {% endif %}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="px-3 py-2 border-top bg-light d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllEmployees">Select All</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearEmployees">Clear</button>
+          </div>
+          {% else %}
+          <div class="text-center py-4 text-muted small">
+            <i class="bi bi-person-plus d-block fs-3 mb-1"></i>
+            No employees added yet.<br>
+            <a href="{{ url_for('admin_employees') }}">Add employees</a> in Admin.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Machines Card -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-truck me-2 text-primary"></i>Machines Used</h5>
+          <span class="badge bg-primary rounded-pill" id="selectedMachineCount">
+            {% if entry %}{{ entry.machines|length }}{% else %}0{% endif %} selected
+          </span>
+        </div>
+        <div class="card-body p-0">
+          {% if machines %}
+          <div id="machineHint" class="px-3 py-2 text-muted small border-bottom bg-light" style="display:none">
+            <i class="bi bi-info-circle me-1"></i>Showing machines assigned to selected project.
+            <a href="#" id="showAllMachinesLink">Show all</a>
+          </div>
+          <div class="checkbox-scroll-list" id="machineList">
+            {% for machine in machines %}
+            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2"
+                   data-machine-id="{{ machine.id }}"
+                   data-project-ids="{{ machine_project_map.get(machine.id, [])|tojson if machine_project_map is defined else '[]' }}">
+              <input type="checkbox" name="machine_ids" value="{{ machine.id }}"
+                     class="form-check-input machine-check mt-0"
+                     {% if selected_machine_ids is defined and machine.id in selected_machine_ids %}checked{% endif %}>
+              <span>
+                {{ machine.name }}
+                {% if machine.machine_type %}
+                  <small class="text-muted ms-1">— {{ machine.machine_type }}</small>
+                {% endif %}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="px-3 py-2 border-top bg-light d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllMachines">Select All</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearMachines">Clear</button>
+          </div>
+          {% else %}
+          <div class="text-center py-4 text-muted small">
+            <i class="bi bi-truck d-block fs-3 mb-1"></i>
+            No machines added yet.<br>
+            <a href="{{ url_for('admin_machines') }}">Add machines</a> in Admin.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Hired Machine Stand-Downs Card -->
+      <div class="card border-0 shadow-sm mb-4" id="standdownCard"
+           style="{% if not entry or not entry.delay_hours or entry.delay_hours == 0 %}display:none{% endif %}">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-calendar-x me-2 text-danger"></i>Stand Down Hired Machines</h5>
+          <span class="badge bg-danger rounded-pill" id="selectedStanddownCount">
+            {% set pre = standdown_machine_ids | list %}
+            {{ pre | length }} selected
+          </span>
+        </div>
+        <div class="card-body p-0">
+          {% if hired_machines %}
+          <div class="px-3 py-2 text-muted small border-bottom bg-danger-subtle">
+            <i class="bi bi-info-circle me-1"></i>
+            Tick hired machines stood down due to this delay — a stand-down record and the delay description
+            will be used for morning emails to hire companies.
+          </div>
+          <div class="checkbox-scroll-list">
+            {% for hm in hired_machines %}
+            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2">
+              <input type="checkbox" name="standdown_machine_ids" value="{{ hm.id }}"
+                     class="form-check-input standdown-check mt-0"
+                     {% if hm.id in standdown_machine_ids %}checked{% endif %}>
+              <span>
+                {{ hm.machine_name }}
+                {% if hm.machine_type %}
+                  <small class="text-muted ms-1">— {{ hm.machine_type }}</small>
+                {% endif %}
+                <small class="badge bg-light border text-dark ms-1">{{ hm.project.name }}</small>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="px-3 py-2 border-top bg-light d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllStanddowns">Select All</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="clearStanddowns">Clear</button>
+          </div>
+          {% else %}
+          <div class="text-center py-4 text-muted small">
+            <i class="bi bi-truck d-block fs-3 mb-1"></i>
+            No active hired machines.<br>
+            <a href="{{ url_for('hire_new') }}">Add a hired machine</a> first.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Submit Buttons -->
+  <div class="d-flex gap-2 mb-5">
+    <button type="submit" class="btn btn-primary px-4">
+      <i class="bi bi-save me-1"></i>{% if entry %}Save Changes{% else %}Save Entry{% endif %}
+    </button>
+    <a href="{{ url_for('entries') }}" class="btn btn-outline-secondary px-4">Cancel</a>
+    {% if entry %}
+    <div class="ms-auto">
+      <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+        <i class="bi bi-trash me-1"></i>Delete Entry
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+</form>
+
+{% if entry %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Entry?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to delete this entry? This cannot be undone.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="POST" action="{{ url_for('delete_entry', entry_id=entry.id) }}" class="d-inline">
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const ENTRY_ID = {{ entry.id if entry else 'null' }};
+
+  function updateDayDisplay() {
+    const input = document.getElementById('entryDate');
+    const display = document.getElementById('dayDisplay');
+    if (input.value) {
+      const [y, m, d] = input.value.split('-').map(Number);
+      display.value = DAYS[new Date(y, m - 1, d).getDay()];
+    } else {
+      display.value = '';
+    }
+  }
+
+  document.getElementById('entryDate').addEventListener('change', updateDayDisplay);
+  updateDayDisplay();
+
+  // Show/hide delay section and machines-stood-down checkbox
+  const delayInput = document.getElementById('delayHoursInput');
+  const delaySection = document.getElementById('delaySection');
+  const standdownCard = document.getElementById('standdownCard');
+  const machinesStoodDownGroup = document.getElementById('machinesStoodDownGroup');
+  const delayReasonSelect = delaySection ? delaySection.querySelector('select[name="delay_reason"]') : null;
+
+  function updateMachinesStoodDownVisibility() {
+    if (!machinesStoodDownGroup || !delayReasonSelect) return;
+    const val = parseFloat(delayInput.value) || 0;
+    const isWetWeather = delayReasonSelect && delayReasonSelect.value === 'Wet Weather';
+    machinesStoodDownGroup.style.display = (val > 0 && isWetWeather) ? '' : 'none';
+    if (!(val > 0 && isWetWeather)) {
+      const cb = document.getElementById('machinesStoodDownCheck');
+      if (cb) cb.checked = false;
+    }
+  }
+
+  delayInput.addEventListener('input', () => {
+    const val = parseFloat(delayInput.value) || 0;
+    delaySection.style.display = val > 0 ? '' : 'none';
+    standdownCard.style.display = val > 0 ? '' : 'none';
+    if (val === 0) {
+      document.querySelectorAll('.standdown-check').forEach(cb => cb.checked = false);
+      updateStanddownCount();
+    }
+    updateMachinesStoodDownVisibility();
+  });
+
+  if (delayReasonSelect) {
+    delayReasonSelect.addEventListener('change', updateMachinesStoodDownVisibility);
+  }
+
+  // Run on load to set initial state
+  updateMachinesStoodDownVisibility();
+
+  // Progress widget
+  let progressTimeout = null;
+  function fetchProgress() {
+    const projectId = document.getElementById('projectSelect').value;
+    const lot = document.getElementById('lotInput').value.trim();
+    const material = document.getElementById('materialInput').value.trim();
+    const widget = document.getElementById('progressWidget');
+
+    if (!projectId || !lot || !material) {
+      widget.style.display = 'none';
+      return;
+    }
+
+    const params = new URLSearchParams({
+      project_id: projectId, lot, material,
+      ...(ENTRY_ID ? { exclude_id: ENTRY_ID } : {}),
+    });
+
+    fetch('/api/progress?' + params)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.has_planned) { widget.style.display = 'none'; return; }
+        widget.style.display = '';
+        document.getElementById('progressLotLabel').textContent =
+          `${data.pct_complete !== null ? data.pct_complete + '%' : '—'} complete`;
+        document.getElementById('progressBar').style.width =
+          (data.pct_complete !== null ? Math.min(data.pct_complete, 100) : 0) + '%';
+        document.getElementById('progressPlanned').textContent =
+          data.planned_sqm.toLocaleString() + ' m²';
+        document.getElementById('progressInstalled').textContent =
+          data.installed_sqm.toLocaleString() + ' m²';
+        document.getElementById('progressRemaining').textContent =
+          data.remaining.toLocaleString() + ' m²';
+      })
+      .catch(() => { widget.style.display = 'none'; });
+  }
+
+  function scheduleProgress() {
+    clearTimeout(progressTimeout);
+    progressTimeout = setTimeout(fetchProgress, 400);
+  }
+
+  // Populate lot / material datalists from planned data
+  function fetchPlannedOptions(lot) {
+    const projectId = document.getElementById('projectSelect').value;
+    if (!projectId) {
+      document.getElementById('lotOptions').innerHTML = '';
+      document.getElementById('materialOptions').innerHTML = '';
+      return;
+    }
+    const params = new URLSearchParams({ project_id: projectId });
+    if (lot !== undefined && lot !== '') params.set('lot', lot);
+    fetch('/api/planned-options?' + params)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('lotOptions').innerHTML =
+          data.lots.map(l => `<option value="${l}">`).join('');
+        document.getElementById('materialOptions').innerHTML =
+          data.materials.map(m => `<option value="${m}">`).join('');
+      })
+      .catch(() => {});
+  }
+
+  // Machine filtering by project
+  let showAllMachines = false;
+
+  function filterMachinesByProject() {
+    const projectId = parseInt(document.getElementById('projectSelect').value);
+    const machineItems = document.querySelectorAll('#machineList .checkbox-item[data-machine-id]');
+    const hint = document.getElementById('machineHint');
+
+    if (!projectId || showAllMachines) {
+      machineItems.forEach(item => item.style.display = '');
+      if (hint) hint.style.display = 'none';
+      return;
+    }
+
+    let hasAssigned = false;
+    machineItems.forEach(item => {
+      let projectIds = [];
+      try { projectIds = JSON.parse(item.dataset.projectIds || '[]'); } catch(e) {}
+      const assigned = projectIds.includes(projectId);
+      item.style.display = assigned ? '' : 'none';
+      if (assigned) hasAssigned = true;
+    });
+
+    if (hint) hint.style.display = hasAssigned ? '' : 'none';
+  }
+
+  document.getElementById('showAllMachinesLink')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    showAllMachines = true;
+    filterMachinesByProject();
+    showAllMachines = false; // reset so next project change filters again
+    document.getElementById('machineHint').style.display = 'none';
+  });
+
+  document.getElementById('projectSelect').addEventListener('change', () => {
+    showAllMachines = false;
+    filterMachinesByProject();
+    fetchPlannedOptions();
+    scheduleProgress();
+  });
+
+  // Run on page load
+  filterMachinesByProject();
+  document.getElementById('lotInput').addEventListener('change', () => {
+    fetchPlannedOptions(document.getElementById('lotInput').value.trim());
+    scheduleProgress();
+  });
+  document.getElementById('lotInput').addEventListener('input', scheduleProgress);
+  document.getElementById('materialInput').addEventListener('input', scheduleProgress);
+
+  // Initial load — populate material options for existing lot value
+  fetchPlannedOptions('{{ entry.lot_number if entry and entry.lot_number else "" }}');
+  fetchProgress();
+
+  // Employee checkbox counter
+  function updateEmployeeCount() {
+    const count = document.querySelectorAll('.employee-check:checked').length;
+    document.getElementById('selectedEmployeeCount').textContent = count + ' selected';
+    document.getElementById('numPeopleInput').value = count;
+  }
+  document.querySelectorAll('.employee-check').forEach(cb => cb.addEventListener('change', updateEmployeeCount));
+
+  // Machine checkbox counter
+  function updateMachineCount() {
+    const count = document.querySelectorAll('.machine-check:checked').length;
+    document.getElementById('selectedMachineCount').textContent = count + ' selected';
+  }
+  document.querySelectorAll('.machine-check').forEach(cb => cb.addEventListener('change', updateMachineCount));
+
+  // Select all / clear employees
+  document.getElementById('selectAllEmployees')?.addEventListener('click', () => {
+    document.querySelectorAll('.employee-check').forEach(cb => cb.checked = true);
+    updateEmployeeCount();
+  });
+  document.getElementById('clearEmployees')?.addEventListener('click', () => {
+    document.querySelectorAll('.employee-check').forEach(cb => cb.checked = false);
+    updateEmployeeCount();
+  });
+
+  // Select all / clear machines
+  document.getElementById('selectAllMachines')?.addEventListener('click', () => {
+    document.querySelectorAll('.machine-check').forEach(cb => cb.checked = true);
+    updateMachineCount();
+  });
+  document.getElementById('clearMachines')?.addEventListener('click', () => {
+    document.querySelectorAll('.machine-check').forEach(cb => cb.checked = false);
+    updateMachineCount();
+  });
+
+  // Stand-down counter
+  function updateStanddownCount() {
+    const count = document.querySelectorAll('.standdown-check:checked').length;
+    document.getElementById('selectedStanddownCount').textContent = count + ' selected';
+  }
+  document.querySelectorAll('.standdown-check').forEach(cb => cb.addEventListener('change', updateStanddownCount));
+  updateStanddownCount();
+
+  document.getElementById('selectAllStanddowns')?.addEventListener('click', () => {
+    document.querySelectorAll('.standdown-check').forEach(cb => cb.checked = true);
+    updateStanddownCount();
+  });
+  document.getElementById('clearStanddowns')?.addEventListener('click', () => {
+    document.querySelectorAll('.standdown-check').forEach(cb => cb.checked = false);
+    updateStanddownCount();
+  });
+
+  // Photo preview
+  document.getElementById('photoInput').addEventListener('change', function() {
+    const preview = document.getElementById('photoPreviewRow');
+    preview.innerHTML = '';
+    Array.from(this.files).forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        const col = document.createElement('div');
+        col.className = 'col-4 col-sm-3';
+        col.innerHTML = `
+          <div class="card border shadow-sm">
+            <img src="${e.target.result}" class="card-img-top" style="height:80px;object-fit:cover;">
+            <div class="card-body p-1">
+              <div class="text-muted small text-truncate">${file.name}</div>
+            </div>
+          </div>`;
+        preview.appendChild(col);
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+</script>
+{% endblock %}

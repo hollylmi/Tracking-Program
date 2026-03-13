@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block title %}Email Settings &mdash; Project Tracker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <h2 class="fw-bold mb-1"><i class="bi bi-envelope-gear me-2"></i>My Email Settings</h2>
+    <p class="text-muted mb-4">
+      Configure your own email account for sending standdown emails and reports.
+      If left blank, the system-wide settings (Admin &rarr; Settings) will be used instead.
+    </p>
+
+    {% if current_user.email_smtp_server %}
+    <div class="alert alert-success">
+      <i class="bi bi-check-circle me-2"></i>
+      Your personal email is configured — emails will send from <strong>{{ current_user.email_from_address or current_user.email_smtp_username }}</strong>.
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+      <i class="bi bi-info-circle me-2"></i>
+      No personal email configured. System-wide settings will be used.
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="POST">
+          <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:0.75rem; letter-spacing:0.05em;">Sender Details</h6>
+          <div class="mb-3">
+            <label class="form-label">Your Name <span class="text-muted small">(shown in From field)</span></label>
+            <input type="text" class="form-control" name="from_name"
+                   value="{{ current_user.email_from_name or '' }}"
+                   placeholder="e.g. Holly Smith">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Your Email Address</label>
+            <input type="email" class="form-control" name="from_email"
+                   value="{{ current_user.email_from_address or '' }}"
+                   placeholder="e.g. holly@company.com.au">
+          </div>
+
+          <hr>
+          <h6 class="fw-semibold mb-3 text-muted text-uppercase" style="font-size:0.75rem; letter-spacing:0.05em;">SMTP Server</h6>
+
+          <div class="row g-3 mb-3">
+            <div class="col-8">
+              <label class="form-label">SMTP Server</label>
+              <input type="text" class="form-control" name="smtp_server"
+                     value="{{ current_user.email_smtp_server or '' }}"
+                     placeholder="e.g. smtp.gmail.com">
+            </div>
+            <div class="col-4">
+              <label class="form-label">Port</label>
+              <input type="number" class="form-control" name="smtp_port"
+                     value="{{ current_user.email_smtp_port or 587 }}"
+                     placeholder="587">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Login Username / Email</label>
+            <input type="text" class="form-control" name="smtp_username"
+                   value="{{ current_user.email_smtp_username or '' }}"
+                   placeholder="e.g. holly@gmail.com"
+                   autocomplete="off">
+          </div>
+          <div class="mb-1">
+            <label class="form-label">
+              Password / App Password
+              {% if current_user.email_smtp_password %}
+                <span class="badge bg-success ms-1">Saved</span>
+              {% endif %}
+            </label>
+            <input type="password" class="form-control" name="smtp_password"
+                   placeholder="{% if current_user.email_smtp_password %}Leave blank to keep existing{% else %}Enter password{% endif %}"
+                   autocomplete="new-password">
+          </div>
+          {% if current_user.email_smtp_password %}
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="clear_password" name="clear_password">
+            <label class="form-check-label text-danger small" for="clear_password">Clear saved password</label>
+          </div>
+          {% else %}
+          <div class="mb-3"></div>
+          {% endif %}
+
+          <div class="alert alert-light border small mb-4">
+            <strong>Gmail tip:</strong> Use an <em>App Password</em> (not your regular Gmail password).
+            Go to your Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App passwords.
+            Set SMTP server to <code>smtp.gmail.com</code>, port <code>587</code>.
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-save me-1"></i>Save Settings
+            </button>
+            {% if current_user.email_smtp_server %}
+            <a href="{{ url_for('account_email_settings') }}" class="btn btn-outline-secondary">Cancel</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

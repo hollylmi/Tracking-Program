@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Hire Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-truck me-2 text-primary"></i>Hire Tracker</h2>
+  <a href="{{ url_for('hire_new') }}" class="btn btn-primary">
+    <i class="bi bi-plus-circle me-1"></i>Add Hired Machine
+  </a>
+</div>
+
+<!-- Filter -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-3">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-sm-4 col-md-3">
+        <label class="form-label fw-semibold mb-1 small">Project</label>
+        <select name="project_id" class="form-select form-select-sm">
+          <option value="">All Projects</option>
+          {% for project in projects %}
+          <option value="{{ project.id }}" {% if project_filter == project.id|string %}selected{% endif %}>
+            {{ project.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto d-flex gap-2">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-filter me-1"></i>Filter</button>
+        <a href="{{ url_for('hire_list') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="mb-2 text-muted small">{{ hired|length }} record{{ 's' if hired|length != 1 }}</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    {% if hired %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Machine</th>
+            <th>Type</th>
+            <th>Project</th>
+            <th>Hire Company</th>
+            <th>Delivery</th>
+            <th>Return</th>
+            <th>Rate</th>
+            <th>Stand-Downs</th>
+            <th>Invoice</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for hm in hired %}
+          <tr>
+            <td class="fw-semibold">
+              <a href="{{ url_for('hire_detail', hm_id=hm.id) }}" class="text-decoration-none">
+                {{ hm.machine_name }}
+              </a>
+            </td>
+            <td class="text-muted">{{ hm.machine_type or '—' }}</td>
+            <td><span class="badge bg-primary-subtle text-primary fw-semibold">{{ hm.project.name }}</span></td>
+            <td>{{ hm.hire_company or '—' }}</td>
+            <td class="text-nowrap">{{ hm.delivery_date.strftime('%d/%m/%Y') if hm.delivery_date else '—' }}</td>
+            <td class="text-nowrap">{{ hm.return_date.strftime('%d/%m/%Y') if hm.return_date else '—' }}</td>
+            <td class="text-nowrap">
+              {% if hm.cost_per_week %}
+                ${{ '%.2f'|format(hm.cost_per_week) }}/wk
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if hm.stand_downs %}
+                <span class="badge bg-danger-subtle text-danger">{{ hm.stand_downs|length }}</span>
+              {% else %}
+                <span class="text-muted">0</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if hm.invoice_filename %}
+                <a href="{{ url_for('hire_invoice', hm_id=hm.id) }}" target="_blank"
+                   class="btn btn-sm btn-outline-secondary" title="{{ hm.invoice_original_name }}">
+                  <i class="bi bi-file-earmark"></i>
+                </a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+              <a href="{{ url_for('hire_detail', hm_id=hm.id) }}" class="btn btn-sm btn-outline-primary" title="View">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{{ url_for('hire_report', hm_id=hm.id) }}" class="btn btn-sm btn-outline-success" title="Report">
+                <i class="bi bi-file-earmark-pdf"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-truck fs-1 d-block mb-2"></i>
+      No hired machines recorded yet.
+      <a href="{{ url_for('hire_new') }}">Add your first one</a>.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

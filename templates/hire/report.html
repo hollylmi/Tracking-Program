@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Stand-Down Report — {{ hm.machine_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h2 class="fw-bold mb-0">
+    <i class="bi bi-file-earmark-pdf me-2 text-success"></i>Stand-Down Report
+    <span class="text-muted fs-5 fw-normal ms-2">{{ hm.machine_name }}</span>
+  </h2>
+  <a href="{{ url_for('hire_detail', hm_id=hm.id) }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Machine
+  </a>
+</div>
+
+<!-- Date Range Picker -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-3">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label fw-semibold mb-1 small">Report Period From</label>
+        <input type="date" name="date_from" class="form-control form-control-sm"
+               value="{{ date_from_str }}">
+      </div>
+      <div class="col-auto">
+        <label class="form-label fw-semibold mb-1 small">To</label>
+        <input type="date" name="date_to" class="form-control form-control-sm"
+               value="{{ date_to_str }}">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-primary">
+          <i class="bi bi-arrow-repeat me-1"></i>Update Preview
+        </button>
+      </div>
+      <!-- Quick week buttons -->
+      <div class="col-auto ms-2 d-flex gap-1 flex-wrap">
+        {% for offset in [-1, 0] %}
+          {% set ws = date_from - timedelta(days=7) if offset == -1 else date_from %}
+          {% set label = 'This Week' if offset == 0 else 'Last Week' %}
+        {% endfor %}
+        <a href="{{ url_for('hire_report', hm_id=hm.id) }}" class="btn btn-sm btn-outline-secondary">
+          This Week
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  <!-- Left: Preview Table -->
+  <div class="col-lg-8">
+
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-4">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-1 fw-bold text-success">{{ summary.on_site }}</div>
+          <div class="text-muted small">Days On Site</div>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-1 fw-bold text-danger">{{ summary.stood_down }}</div>
+          <div class="text-muted small">Stood Down</div>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="card border-0 shadow-sm text-center py-3">
+          {% if summary.cost_day is not none %}
+            <div class="fs-2 fw-bold text-primary">${{ '{:,.2f}'.format(summary.cost_day) }}</div>
+            <div class="text-muted small">Est. Cost ({{ summary.on_site }} days @ ${{ '{:,.2f}'.format(summary.cost_per_day_derived) }}/day)</div>
+          {% elif summary.cost_week %}
+            <div class="fs-2 fw-bold text-primary">${{ '{:,.2f}'.format(summary.cost_week) }}</div>
+            <div class="text-muted small">Weekly Rate</div>
+          {% else %}
+            <div class="fs-2 fw-bold text-muted">—</div>
+            <div class="text-muted small">No Rate Set</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Day-by-Day Table -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold">
+          Daily Breakdown &mdash;
+          {{ date_from.strftime('%d/%m/%Y') }} to {{ date_to.strftime('%d/%m/%Y') }}
+        </h5>
+        <a href="{{ url_for('hire_report_pdf', hm_id=hm.id, date_from=date_from_str, date_to=date_to_str) }}"
+           class="btn btn-sm btn-success">
+          <i class="bi bi-download me-1"></i>Download PDF
+        </a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Day</th>
+              <th>Status</th>
+              <th>Reason / Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in days %}
+            <tr class="{% if d.status == 'stood_down' %}table-danger{% elif d.status == 'not_delivered' or d.status == 'returned' %}table-secondary{% elif d.status == 'non_working' %}table-light text-muted{% endif %}">
+              <td class="fw-semibold text-nowrap {% if d.status == 'non_working' %}text-muted{% endif %}">{{ d.date.strftime('%d/%m/%Y') }}</td>
+              <td {% if d.status == 'non_working' %}class="text-muted"{% endif %}>{{ d.day_name }}</td>
+              <td>
+                {% if d.status == 'on_site' %}
+                  <span class="badge bg-success-subtle text-success">On Site</span>
+                {% elif d.status == 'stood_down' %}
+                  <span class="badge bg-danger-subtle text-danger">Stood Down</span>
+                {% elif d.status == 'not_delivered' %}
+                  <span class="badge bg-secondary-subtle text-secondary">Not Yet Delivered</span>
+                {% elif d.status == 'returned' %}
+                  <span class="badge bg-secondary-subtle text-secondary">Returned</span>
+                {% elif d.status == 'non_working' %}
+                  <span class="badge bg-light text-muted border">Non-Working Day</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ d.reason or '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: Email Report -->
+  <div class="col-lg-4">
+
+    <div class="card border-0 shadow-sm sticky-top" style="top: 80px;">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-envelope me-2 text-primary"></i>Send Report</h5>
+      </div>
+      <div class="card-body">
+        <p class="small text-muted mb-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Download the PDF, then click <strong>Open in Outlook</strong> to compose the email — attach the PDF before sending.
+        </p>
+
+        <a href="{{ url_for('hire_report_pdf', hm_id=hm.id, date_from=date_from_str, date_to=date_to_str) }}"
+           class="btn btn-success w-100 mb-3">
+          <i class="bi bi-download me-1"></i>Download PDF
+        </a>
+
+        <div class="hire-composer">
+          <div class="mb-2">
+            <label class="form-label fw-semibold small">To</label>
+            <input type="email" class="form-control form-control-sm hire-to"
+                   value="{{ hm.hire_company_email or '' }}" placeholder="hire@company.com">
+          </div>
+          <div class="mb-2">
+            <label class="form-label fw-semibold small">Subject</label>
+            <input type="text" class="form-control form-control-sm hire-subject"
+                   value="Stand-Down Report — {{ hm.machine_name }} — {{ date_from.strftime('%d/%m/%Y') }} to {{ date_to.strftime('%d/%m/%Y') }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Message</label>
+            <textarea class="form-control form-control-sm hire-body" rows="7">Please find attached the stand-down report for {{ hm.machine_name }} for the period {{ date_from.strftime('%d/%m/%Y') }} to {{ date_to.strftime('%d/%m/%Y') }}.
+
+Summary:
+- Days on site: {{ summary.on_site }}
+- Days stood down: {{ summary.stood_down }}
+{% if summary.cost_day is not none %}- Estimated on-site cost: ${{ '{:,.2f}'.format(summary.cost_day) }} ({{ summary.on_site }} days @ ${{ '{:,.2f}'.format(summary.cost_per_day_derived) }}/day){% endif %}
+
+Please review the attached PDF for the full daily breakdown.
+
+Regards,
+{{ current_user.display_name or current_user.username }}</textarea>
+          </div>
+          <button type="button" class="btn btn-primary w-100" onclick="openInOutlookHire()">
+            <i class="bi bi-envelope-arrow-up me-1"></i>Open in Outlook
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openInOutlookHire() {
+  var c = document.querySelector('.hire-composer');
+  var to      = c.querySelector('.hire-to').value.trim();
+  var subject = c.querySelector('.hire-subject').value.trim();
+  var body    = c.querySelector('.hire-body').value;
+  if (!to) { alert('Please enter a recipient email address.'); return; }
+  window.location.href = 'mailto:' + encodeURIComponent(to)
+    + '?subject=' + encodeURIComponent(subject)
+    + '&body='    + encodeURIComponent(body);
+}
+</script>
+{% endblock %}

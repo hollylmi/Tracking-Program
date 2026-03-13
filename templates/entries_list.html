@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}All Entries — Project Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-table me-2 text-primary"></i>All Entries</h2>
+  <a href="{{ url_for('new_entry') }}" class="btn btn-primary">
+    <i class="bi bi-plus-circle me-1"></i>New Entry
+  </a>
+</div>
+
+<!-- Filters -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-3">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-sm-4 col-md-3">
+        <label class="form-label fw-semibold mb-1 small">Project</label>
+        <select name="project_id" class="form-select form-select-sm">
+          <option value="">All Projects</option>
+          {% for project in projects %}
+          <option value="{{ project.id }}" {% if project_filter == project.id|string %}selected{% endif %}>
+            {{ project.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-3 col-md-2">
+        <label class="form-label fw-semibold mb-1 small">Date From</label>
+        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+      </div>
+      <div class="col-sm-3 col-md-2">
+        <label class="form-label fw-semibold mb-1 small">Date To</label>
+        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+      </div>
+      <div class="col-auto d-flex gap-2">
+        <button type="submit" class="btn btn-sm btn-primary">
+          <i class="bi bi-filter me-1"></i>Filter
+        </button>
+        <a href="{{ url_for('entries') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Results count -->
+<div class="mb-2 text-muted small">
+  Showing <strong>{{ entries|length }}</strong> entr{{ 'y' if entries|length == 1 else 'ies' }}
+</div>
+
+<!-- Entries Table -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    {% if entries %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" id="entriesTable">
+        <thead class="table-light">
+          <tr>
+            <th>Date</th>
+            <th>Day</th>
+            <th>Project</th>
+            <th>Lot #</th>
+            <th>Material</th>
+            <th>Crew</th>
+            <th>Machines</th>
+            <th class="text-center">People</th>
+            <th class="text-center">Install Hrs</th>
+            <th class="text-center">Delay Hrs</th>
+            <th>Delay Reason</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in entries %}
+          <tr>
+            <td class="fw-semibold text-nowrap">{{ entry.entry_date.strftime('%m/%d/%Y') }}</td>
+            <td class="text-muted text-nowrap">{{ entry.day_name }}</td>
+            <td>
+              <span class="badge bg-primary-subtle text-primary fw-semibold">{{ entry.project.name }}</span>
+            </td>
+            <td>{{ entry.lot_number or '—' }}</td>
+            <td>{{ entry.material or '—' }}</td>
+            <td>
+              {% if entry.employees %}
+                <span class="text-nowrap" title="{{ entry.employees|map(attribute='name')|join(', ') }}">
+                  <i class="bi bi-people text-muted me-1"></i>
+                  {% if entry.employees|length <= 2 %}
+                    {{ entry.employees|map(attribute='name')|join(', ') }}
+                  {% else %}
+                    {{ entry.employees[0].name }} +{{ entry.employees|length - 1 }} more
+                  {% endif %}
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if entry.machines %}
+                <span class="text-nowrap" title="{{ entry.machines|map(attribute='name')|join(', ') }}">
+                  <i class="bi bi-truck text-muted me-1"></i>
+                  {% if entry.machines|length <= 2 %}
+                    {{ entry.machines|map(attribute='name')|join(', ') }}
+                  {% else %}
+                    {{ entry.machines[0].name }} +{{ entry.machines|length - 1 }} more
+                  {% endif %}
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-center">{{ entry.num_people or '—' }}</td>
+            <td class="text-center">{{ entry.install_hours }}</td>
+            <td class="text-center">
+              {% if entry.delay_hours and entry.delay_hours > 0 %}
+                <span class="text-danger fw-semibold">{{ entry.delay_hours }}</span>
+              {% else %}
+                0
+              {% endif %}
+            </td>
+            <td class="text-wrap" style="max-width:180px;">
+              {% if entry.delay_reason %}
+                <span class="text-danger small" title="{{ entry.delay_reason }}">
+                  {{ entry.delay_reason[:60] }}{% if entry.delay_reason|length > 60 %}...{% endif %}
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+              <a href="{{ url_for('edit_entry', entry_id=entry.id) }}" class="btn btn-sm btn-outline-secondary"
+                 title="Edit">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+      No entries found.
+      {% if project_filter or date_from or date_to %}
+        <a href="{{ url_for('entries') }}">Clear filters</a> or
+      {% endif %}
+      <a href="{{ url_for('new_entry') }}">create a new entry</a>.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

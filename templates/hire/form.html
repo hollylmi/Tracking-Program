@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}{% if hm %}Edit Hire Record{% else %}Add Hired Machine{% endif %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0">
+    <i class="bi bi-truck me-2 text-primary"></i>
+    {% if hm %}Edit Hire Record{% else %}Add Hired Machine{% endif %}
+  </h2>
+  <a href="{{ url_for('hire_list') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back
+  </a>
+</div>
+
+<form method="POST"
+      action="{% if hm %}{{ url_for('hire_edit', hm_id=hm.id) }}{% else %}{{ url_for('hire_new') }}{% endif %}"
+      enctype="multipart/form-data">
+
+  <div class="row g-4">
+
+    <!-- Left: Machine & Project -->
+    <div class="col-lg-6">
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-truck me-2 text-primary"></i>Machine Details</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Project <span class="text-danger">*</span></label>
+              <select name="project_id" class="form-select" required>
+                <option value="">— Select project —</option>
+                {% for project in projects %}
+                <option value="{{ project.id }}"
+                  {% if hm and hm.project_id == project.id %}selected{% endif %}>
+                  {{ project.name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-8">
+              <label class="form-label fw-semibold">Machine Name <span class="text-danger">*</span></label>
+              <input type="text" name="machine_name" class="form-control" required
+                     value="{{ hm.machine_name if hm else '' }}"
+                     placeholder="e.g. Excavator #1, CAT 308">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Type</label>
+              <input type="text" name="machine_type" class="form-control"
+                     value="{{ hm.machine_type if hm and hm.machine_type else '' }}"
+                     placeholder="e.g. Excavator">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Delivery to Site</label>
+              <input type="date" name="delivery_date" class="form-control"
+                     value="{{ hm.delivery_date.strftime('%Y-%m-%d') if hm and hm.delivery_date else '' }}">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Return Date</label>
+              <input type="date" name="return_date" class="form-control"
+                     value="{{ hm.return_date.strftime('%Y-%m-%d') if hm and hm.return_date else '' }}">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Saturday Billing</label>
+              <div class="form-check form-switch mt-1">
+                <input class="form-check-input" type="checkbox" name="count_saturdays"
+                       id="countSaturdays" role="switch"
+                       {% if not hm or hm.count_saturdays != False %}checked{% endif %}>
+                <label class="form-check-label" for="countSaturdays">
+                  Count Saturdays as billable / chargeable days
+                </label>
+              </div>
+              <div class="form-text">
+                Sundays are <strong>always</strong> excluded. Toggle this off if the hire company
+                does not charge for Saturday stand-downs.
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Notes</label>
+              <textarea name="notes" class="form-control" rows="2"
+                        placeholder="Any additional notes...">{{ hm.notes if hm and hm.notes else '' }}</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Hire Company & Costs -->
+    <div class="col-lg-6">
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-building me-2 text-primary"></i>Hire Company</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Company Name</label>
+              <input type="text" name="hire_company" class="form-control"
+                     value="{{ hm.hire_company if hm and hm.hire_company else '' }}"
+                     placeholder="e.g. ABC Plant Hire">
+            </div>
+            <div class="col-sm-7">
+              <label class="form-label fw-semibold">Email</label>
+              <input type="email" name="hire_company_email" class="form-control"
+                     value="{{ hm.hire_company_email if hm and hm.hire_company_email else '' }}"
+                     placeholder="hire@company.com">
+            </div>
+            <div class="col-sm-5">
+              <label class="form-label fw-semibold">Phone</label>
+              <input type="text" name="hire_company_phone" class="form-control"
+                     value="{{ hm.hire_company_phone if hm and hm.hire_company_phone else '' }}"
+                     placeholder="e.g. 0400 000 000">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-currency-dollar me-2 text-primary"></i>Hire Costs</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Weekly Hire Rate ($)</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="cost_per_week" class="form-control" min="0" step="0.01"
+                       value="{{ '%.2f'|format(hm.cost_per_week) if hm and hm.cost_per_week else '' }}"
+                       placeholder="0.00">
+                <span class="input-group-text">/week</span>
+              </div>
+              <div class="form-text">
+                Daily cost = weekly rate &divide; 5 (or &divide; 6 if Saturdays counted).
+                Used for all cost calculations and reports.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-paperclip me-2 text-primary"></i>Invoice / Quote</h5>
+        </div>
+        <div class="card-body">
+          {% if hm and hm.invoice_filename %}
+          <div class="alert alert-info py-2 d-flex align-items-center gap-2 mb-3">
+            <i class="bi bi-file-earmark-check"></i>
+            <span>Current file: <strong>{{ hm.invoice_original_name }}</strong></span>
+            <a href="{{ url_for('hire_invoice', hm_id=hm.id) }}" target="_blank"
+               class="ms-auto btn btn-sm btn-outline-primary">View</a>
+          </div>
+          <label class="form-label fw-semibold small">Replace file</label>
+          {% else %}
+          <label class="form-label fw-semibold">Attach Invoice or Quote</label>
+          {% endif %}
+          <input type="file" name="invoice_file" class="form-control"
+                 accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx">
+          <div class="form-text">PDF, image, Word or Excel files up to 16MB.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-5">
+    <button type="submit" class="btn btn-primary px-4">
+      <i class="bi bi-save me-1"></i>{% if hm %}Save Changes{% else %}Add Machine{% endif %}
+    </button>
+    <a href="{{ url_for('hire_list') }}" class="btn btn-outline-secondary px-4">Cancel</a>
+    {% if hm %}
+    <div class="ms-auto">
+      <button type="button" class="btn btn-outline-danger"
+              data-bs-toggle="modal" data-bs-target="#deleteModal">
+        <i class="bi bi-trash me-1"></i>Delete Record
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+</form>
+
+{% if hm %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Hire Record?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Delete <strong>{{ hm.machine_name }}</strong> and all its stand-down records? This cannot be undone.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="POST" action="{{ url_for('hire_delete', hm_id=hm.id) }}" class="d-inline">
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

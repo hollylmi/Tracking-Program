@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}{{ hm.machine_name }} — Hire Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h2 class="fw-bold mb-0">
+    <i class="bi bi-truck me-2 text-primary"></i>{{ hm.machine_name }}
+    <span class="badge bg-primary-subtle text-primary fw-semibold fs-6 ms-2">{{ hm.project.name }}</span>
+  </h2>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('hire_report', hm_id=hm.id) }}" class="btn btn-success">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Weekly Report
+    </a>
+    <a href="{{ url_for('hire_edit', hm_id=hm.id) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-pencil me-1"></i>Edit
+    </a>
+    <a href="{{ url_for('hire_list') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  <!-- Left: Machine Details -->
+  <div class="col-lg-5">
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-info-circle me-2 text-primary"></i>Machine Details</h5>
+      </div>
+      <div class="card-body">
+        <table class="table table-sm table-borderless mb-0">
+          <tr><th class="text-muted fw-normal small" style="width:40%">Machine</th>
+              <td class="fw-semibold">{{ hm.machine_name }}</td></tr>
+          <tr><th class="text-muted fw-normal small">Type</th>
+              <td>{{ hm.machine_type or '—' }}</td></tr>
+          <tr><th class="text-muted fw-normal small">Project</th>
+              <td>{{ hm.project.name }}</td></tr>
+          <tr><th class="text-muted fw-normal small">Delivery Date</th>
+              <td>{{ hm.delivery_date.strftime('%d/%m/%Y') if hm.delivery_date else '—' }}</td></tr>
+          <tr><th class="text-muted fw-normal small">Return Date</th>
+              <td>{{ hm.return_date.strftime('%d/%m/%Y') if hm.return_date else '—' }}</td></tr>
+          <tr><th class="text-muted fw-normal small">Saturday Billing</th>
+              <td>
+                {% if hm.count_saturdays != False %}
+                  <span class="badge bg-success-subtle text-success"><i class="bi bi-check me-1"></i>Saturdays billable</span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary"><i class="bi bi-x me-1"></i>Saturdays excluded</span>
+                {% endif %}
+              </td></tr>
+          {% if hm.notes %}
+          <tr><th class="text-muted fw-normal small">Notes</th>
+              <td class="small">{{ hm.notes }}</td></tr>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-building me-2 text-primary"></i>Hire Company</h5>
+      </div>
+      <div class="card-body">
+        <table class="table table-sm table-borderless mb-0">
+          <tr><th class="text-muted fw-normal small" style="width:40%">Company</th>
+              <td class="fw-semibold">{{ hm.hire_company or '—' }}</td></tr>
+          <tr><th class="text-muted fw-normal small">Email</th>
+              <td>
+                {% if hm.hire_company_email %}
+                  <a href="mailto:{{ hm.hire_company_email }}">{{ hm.hire_company_email }}</a>
+                {% else %}—{% endif %}
+              </td></tr>
+          <tr><th class="text-muted fw-normal small">Phone</th>
+              <td>{{ hm.hire_company_phone or '—' }}</td></tr>
+          <tr><th class="text-muted fw-normal small">Cost/Week</th>
+              <td>{% if hm.cost_per_week %}${{ '%.2f'|format(hm.cost_per_week) }}{% else %}—{% endif %}</td></tr>
+          <tr><th class="text-muted fw-normal small">Cost/Day (derived)</th>
+              <td>
+                {% if hm.cost_per_week %}
+                  {% set days_pw = 6 if hm.count_saturdays != False else 5 %}
+                  ${{ '%.2f'|format(hm.cost_per_week / days_pw) }}
+                  <small class="text-muted">(weekly &divide; {{ days_pw }})</small>
+                {% else %}—{% endif %}
+              </td></tr>
+        </table>
+      </div>
+    </div>
+
+    {% if hm.invoice_filename %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-paperclip me-2 text-primary"></i>Invoice / Quote</h5>
+      </div>
+      <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-file-earmark-text fs-2 text-muted"></i>
+        <div class="flex-grow-1">
+          <div class="fw-semibold small">{{ hm.invoice_original_name }}</div>
+        </div>
+        <a href="{{ url_for('hire_invoice', hm_id=hm.id) }}" target="_blank"
+           class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-eye me-1"></i>View
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Right: Stand-Down Tracker -->
+  <div class="col-lg-7">
+
+    <!-- Add Stand-Down -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-calendar-x me-2 text-danger"></i>Record a Stand-Down Day</h5>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('standdown_add', hm_id=hm.id) }}">
+          <div class="row g-3 align-items-end">
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+              <input type="date" name="stand_down_date" class="form-control" required
+                     value="{{ week_start.strftime('%Y-%m-%d') }}">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Reason <span class="text-danger">*</span></label>
+              <input type="text" name="reason" class="form-control" required
+                     placeholder="e.g. Rain, Breakdown, No work available">
+            </div>
+            <div class="col-sm-2">
+              <button type="submit" class="btn btn-danger w-100">
+                <i class="bi bi-plus-lg"></i> Add
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Stand-Down List -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold">
+          <i class="bi bi-list-ul me-2 text-danger"></i>Stand-Down Log
+        </h5>
+        <span class="badge bg-danger-subtle text-danger rounded-pill">
+          {{ hm.stand_downs|length }} day{{ 's' if hm.stand_downs|length != 1 }}
+        </span>
+      </div>
+      <div class="card-body p-0">
+        {% if hm.stand_downs %}
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Day</th>
+              <th>Reason</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sd in hm.stand_downs %}
+            <tr>
+              <td class="fw-semibold text-nowrap text-danger">{{ sd.stand_down_date.strftime('%d/%m/%Y') }}</td>
+              <td class="text-muted">{{ sd.stand_down_date.strftime('%A') }}</td>
+              <td>{{ sd.reason }}</td>
+              <td class="text-end">
+                <form method="POST"
+                      action="{{ url_for('standdown_delete', hm_id=hm.id, sd_id=sd.id) }}"
+                      onsubmit="return confirm('Remove stand-down for {{ sd.stand_down_date.strftime('%d/%m/%Y') }}?')">
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-calendar-check fs-2 d-block mb-1 text-success"></i>
+          No stand-down days recorded yet.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Quick link to report -->
+    <div class="mt-3 text-end">
+      <a href="{{ url_for('hire_report', hm_id=hm.id) }}" class="btn btn-success">
+        <i class="bi bi-file-earmark-pdf me-1"></i>Generate Weekly Report & Send Email
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

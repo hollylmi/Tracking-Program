@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Settings — Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-sliders me-2 text-primary"></i>Settings</h2>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <form method="POST">
+
+      <!-- Company -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-building me-2 text-primary"></i>Company</h5>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Company Name</label>
+            <input type="text" name="company_name" class="form-control"
+                   value="{{ settings.company_name or '' }}"
+                   placeholder="Appears in PDF report headers">
+          </div>
+        </div>
+      </div>
+
+      <!-- Email / SMTP -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-envelope me-2 text-primary"></i>Email (SMTP)</h5>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info small py-2 mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Gmail users:</strong> Use <code>smtp.gmail.com</code>, port <code>587</code>, and an
+            <a href="https://myaccount.google.com/apppasswords" target="_blank" class="alert-link">App Password</a>
+            (not your regular password).<br>
+            <strong>Outlook/Office 365:</strong> Use <code>smtp.office365.com</code>, port <code>587</code>.
+          </div>
+          <div class="row g-3">
+            <div class="col-sm-8">
+              <label class="form-label fw-semibold">SMTP Server</label>
+              <input type="text" name="smtp_server" class="form-control"
+                     value="{{ settings.smtp_server or 'smtp.gmail.com' }}"
+                     placeholder="smtp.gmail.com">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Port</label>
+              <input type="number" name="smtp_port" class="form-control"
+                     value="{{ settings.smtp_port or 587 }}">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Email Address (username)</label>
+              <input type="email" name="smtp_username" class="form-control"
+                     value="{{ settings.smtp_username or '' }}"
+                     placeholder="you@company.com">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">
+                Password / App Password
+                {% if settings.smtp_username %}
+                  <span class="text-muted fw-normal">(leave blank to keep existing)</span>
+                {% endif %}
+              </label>
+              <input type="password" name="smtp_password" class="form-control"
+                     placeholder="{% if settings.smtp_username %}••••••••{% else %}Enter password or app password{% endif %}">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">From Name</label>
+              <input type="text" name="from_name" class="form-control"
+                     value="{{ settings.from_name or '' }}"
+                     placeholder="e.g. LMI Projects">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">From Email <span class="text-muted fw-normal">(if different)</span></label>
+              <input type="email" name="from_email" class="form-control"
+                     value="{{ settings.from_email or '' }}"
+                     placeholder="Defaults to username above">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary px-4">
+        <i class="bi bi-save me-1"></i>Save Settings
+      </button>
+
+    </form>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-question-circle me-2 text-primary"></i>Help</h5>
+      </div>
+      <div class="card-body small text-muted">
+        <p><strong>Getting email working:</strong></p>
+        <ol class="ps-3">
+          <li class="mb-2">
+            <strong>Gmail:</strong> Go to your Google Account → Security → 2-Step Verification (must be on) →
+            App Passwords → Create one for "Mail". Use that 16-character code as your password here.
+          </li>
+          <li class="mb-2">
+            <strong>Outlook / Office 365:</strong> Use <code>smtp.office365.com</code> port <code>587</code>
+            with your regular email and password (or your IT team may need to enable SMTP AUTH for your account).
+          </li>
+          <li>
+            <strong>Other providers:</strong> Check your email provider's SMTP settings documentation.
+          </li>
+        </ol>
+        <hr>
+        <p><strong>PDF reports</strong> are generated on-demand — no settings needed for PDF download.
+        Email settings are only required for sending via the report page.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,271 @@
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
+from datetime import datetime
+
+db = SQLAlchemy()
+
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), nullable=False, unique=True)
+    display_name = db.Column(db.String(200))       # full name shown in entries
+    password_hash = db.Column(db.String(256), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    entries = db.relationship('DailyEntry', backref='submitted_by_user', lazy=True)
+
+    @property
+    def is_active(self):
+        return self.active
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+# Association tables for many-to-many relationships
+entry_employees = db.Table(
+    'entry_employees',
+    db.Column('entry_id', db.Integer, db.ForeignKey('daily_entry.id'), primary_key=True),
+    db.Column('employee_id', db.Integer, db.ForeignKey('employee.id'), primary_key=True)
+)
+
+entry_machines = db.Table(
+    'entry_machines',
+    db.Column('entry_id', db.Integer, db.ForeignKey('daily_entry.id'), primary_key=True),
+    db.Column('machine_id', db.Integer, db.ForeignKey('machine.id'), primary_key=True)
+)
+
+
+class Project(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    active = db.Column(db.Boolean, default=True)
+    start_date = db.Column(db.Date)           # Day 1 of installation (for Gantt day→date mapping)
+    planned_crew = db.Column(db.Integer)      # Estimated crew size for efficiency calculations
+    hours_per_day = db.Column(db.Float)       # Quoted hours per working day
+    quoted_days = db.Column(db.Integer)       # Total quoted working days for the job
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    entries = db.relationship('DailyEntry', backref='project', lazy=True)
+    planned_data = db.relationship('PlannedData', backref='project',
+                                   cascade='all, delete-orphan', lazy=True)
+    non_work_dates = db.relationship('ProjectNonWorkDate', backref='project',
+                                     cascade='all, delete-orphan',
+                                     order_by='ProjectNonWorkDate.date')
+    budgeted_roles = db.relationship('ProjectBudgetedRole', backref='project',
+                                     cascade='all, delete-orphan', lazy=True)
+
+    def __repr__(self):
+        return f'<Project {self.name}>'
+
+
+class Role(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    delay_rate = db.Column(db.Float)
+    employees = db.relationship('Employee', backref='role_obj', lazy=True)
+
+    def __repr__(self):
+        return f'<Role {self.name}>'
+
+
+class Employee(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    role = db.Column(db.String(100))              # display string, synced from Role on save
+    role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=True)
+    delay_rate = db.Column(db.Float)              # overridable; defaults from Role on create
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Employee {self.name}>'
+
+
+class Machine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    machine_type = db.Column(db.String(100))
+    delay_rate = db.Column(db.Float)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Machine {self.name}>'
+
+
+class DailyEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    entry_date = db.Column(db.Date, nullable=False)
+    lot_number = db.Column(db.String(100))
+    location = db.Column(db.String(200))
+    material = db.Column(db.String(200))
+    num_people = db.Column(db.Integer)
+    install_hours = db.Column(db.Float, default=0)
+    install_sqm = db.Column(db.Float, default=0)       # actual SQM installed this entry
+    delay_hours = db.Column(db.Float, default=0)
+    delay_billable = db.Column(db.Boolean, default=True)   # True=client delay (billed), False=own delay
+    delay_reason = db.Column(db.Text)                       # short category / type
+    delay_description = db.Column(db.Text)                  # detailed description for standdown emails
+    machines_stood_down = db.Column(db.Boolean, default=False)  # True = hired machines stood down (wet weather)
+    notes = db.Column(db.Text)
+    other_work_description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    employees = db.relationship(
+        'Employee', secondary=entry_employees, lazy='subquery',
+        backref=db.backref('entries', lazy=True)
+    )
+    machines = db.relationship(
+        'Machine', secondary=entry_machines, lazy='subquery',
+        backref=db.backref('entries', lazy=True)
+    )
+    photos = db.relationship('EntryPhoto', backref='entry',
+                             cascade='all, delete-orphan', lazy=True)
+
+    @property
+    def day_name(self):
+        return self.entry_date.strftime('%A') if self.entry_date else ''
+
+    def __repr__(self):
+        return f'<DailyEntry {self.entry_date} - {self.project.name}>'
+
+
+class EntryPhoto(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
+    filename = db.Column(db.String(500), nullable=False)
+    original_name = db.Column(db.String(500))
+    caption = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<EntryPhoto {self.filename}>'
+
+
+class HiredMachine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    machine_name = db.Column(db.String(200), nullable=False)
+    machine_type = db.Column(db.String(100))
+    hire_company = db.Column(db.String(200))
+    hire_company_email = db.Column(db.String(200))
+    hire_company_phone = db.Column(db.String(50))
+    delivery_date = db.Column(db.Date)
+    return_date = db.Column(db.Date)
+    cost_per_day = db.Column(db.Float)
+    cost_per_week = db.Column(db.Float)
+    count_saturdays = db.Column(db.Boolean, default=True)
+    invoice_filename = db.Column(db.String(500))
+    invoice_original_name = db.Column(db.String(500))
+    notes = db.Column(db.Text)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref='hired_machines')
+    stand_downs = db.relationship(
+        'StandDown', backref='hired_machine',
+        cascade='all, delete-orphan',
+        order_by='StandDown.stand_down_date'
+    )
+
+    def __repr__(self):
+        return f'<HiredMachine {self.machine_name} - {self.hire_company}>'
+
+
+class StandDown(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    hired_machine_id = db.Column(db.Integer, db.ForeignKey('hired_machine.id'), nullable=False)
+    entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=True)
+    stand_down_date = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    entry = db.relationship('DailyEntry', backref='stand_downs')
+
+    def __repr__(self):
+        return f'<StandDown {self.stand_down_date} - {self.reason[:30]}>'
+
+
+class PlannedData(db.Model):
+    """Stores planned daily installation data uploaded from spreadsheet."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    lot = db.Column(db.String(100))
+    location = db.Column(db.String(200))
+    material = db.Column(db.String(200))
+    day_number = db.Column(db.Integer)     # installation day number (not calendar date)
+    planned_sqm = db.Column(db.Float)
+
+    def __repr__(self):
+        return f'<PlannedData {self.lot} {self.material} Day {self.day_number}>'
+
+
+class ProjectNonWorkDate(db.Model):
+    """Non-working dates for a project (public holidays, shutdowns, wet weather days, etc.)."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(500))
+
+    def __repr__(self):
+        return f'<ProjectNonWorkDate {self.date}>'
+
+
+class ProjectBudgetedRole(db.Model):
+    """Budgeted crew count per role type for a project."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    role_name = db.Column(db.String(100), nullable=False)
+    budgeted_count = db.Column(db.Integer, nullable=False, default=1)
+
+    def __repr__(self):
+        return f'<ProjectBudgetedRole {self.role_name} x{self.budgeted_count}>'
+
+
+class ProjectMachine(db.Model):
+    """Owned (own fleet) machines assigned to a specific project."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False)
+    assigned_date = db.Column(db.Date)        # optional: date machine arrived on site
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref='project_machines')
+    machine = db.relationship('Machine', backref='project_assignments')
+
+    def __repr__(self):
+        return f'<ProjectMachine project={self.project_id} machine={self.machine_id}>'
+
+
+class ProjectWorkedSunday(db.Model):
+    """Sundays that were actually worked on a project (exceptions to the Sunday skip rule)."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(500))
+
+    project = db.relationship('Project', backref='worked_sundays')
+
+    def __repr__(self):
+        return f'<ProjectWorkedSunday {self.date}>'
+
+
+class ProjectDocument(db.Model):
+    """Documents attached to a project (drawings, specifications, etc.)."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    filename = db.Column(db.String(500), nullable=False)       # stored filename (UUID)
+    original_name = db.Column(db.String(500))                  # original uploaded filename
+    doc_type = db.Column(db.String(50), default='other')       # drawing / specification / other
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref='documents')
+
+    def __repr__(self):
+        return f'<ProjectDocument {self.original_name}>'

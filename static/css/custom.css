@@ -1,0 +1,90 @@
+body {
+  background-color: #f5f7fa;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.container-fluid {
+  max-width: 1400px;
+}
+
+/* Stat icon boxes */
+.stat-icon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Scrollable checkbox lists */
+.checkbox-scroll-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.checkbox-item {
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.1s;
+  user-select: none;
+}
+
+.checkbox-item:last-child {
+  border-bottom: none;
+}
+
+.checkbox-item:hover {
+  background-color: #f8f9ff;
+}
+
+.checkbox-item input[type="checkbox"]:checked ~ span {
+  font-weight: 600;
+  color: #0d6efd;
+}
+
+/* Card styling */
+.card {
+  border-radius: 0.75rem;
+}
+
+.card-header {
+  border-radius: 0.75rem 0.75rem 0 0 !important;
+  border-bottom: 1px solid #eee;
+}
+
+/* Table tweaks */
+.table th {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+  white-space: nowrap;
+}
+
+.table td {
+  font-size: 0.9rem;
+}
+
+/* Navbar active state */
+.navbar-dark .nav-link.active {
+  font-weight: 600;
+}
+
+/* Footer */
+.footer {
+  margin-top: auto;
+}
+
+/* Form labels */
+.form-label.fw-semibold {
+  font-size: 0.875rem;
+}
+
+/* Badge tweaks */
+.badge {
+  font-size: 0.75rem;
+}

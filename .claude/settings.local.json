@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Read(//c/Users/Holly/AppData/Local/Programs/**)",
+      "Bash(echo $PATH)"
+    ]
+  }
+}

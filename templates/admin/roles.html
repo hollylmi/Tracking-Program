@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Roles & Rates — Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-person-badge me-2 text-primary"></i>Roles &amp; Delay Rates</h2>
+</div>
+
+<div class="alert alert-info small py-2 mb-4">
+  <i class="bi bi-info-circle me-1"></i>
+  Define position titles and their delay rates here. When you add an employee and select their role,
+  the delay rate is automatically filled. You can still override it per employee.
+</div>
+
+<div class="row g-4">
+
+  <!-- Role List -->
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold">All Roles</h5>
+      </div>
+      <div class="card-body p-0">
+        {% if roles %}
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Role / Position</th>
+              <th>Delay Rate</th>
+              <th>Employees</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for role in roles %}
+            <tr>
+              <td class="fw-semibold">{{ role.name }}</td>
+              <td>
+                {% if role.delay_rate %}
+                  <span class="text-success fw-semibold">${{ '%.2f'|format(role.delay_rate) }}/hr</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge bg-secondary-subtle text-secondary">{{ role.employees|length }}</span>
+              </td>
+              <td class="text-end">
+                <div class="d-flex gap-1 justify-content-end">
+                  <button class="btn btn-sm btn-outline-secondary" type="button"
+                          onclick="openEditRole({{ role.id }}, '{{ role.name|replace("'", "\\'") }}', '{{ role.delay_rate or '' }}')"
+                          title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  {% if not role.employees %}
+                  <form method="POST" class="d-inline"
+                        onsubmit="return confirm('Delete role \'{{ role.name }}\'?')">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="{{ role.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                  {% else %}
+                  <span class="text-muted small" title="Cannot delete — has employees assigned">
+                    <i class="bi bi-lock"></i>
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-person-badge fs-1 d-block mb-2"></i>
+          No roles yet. Add your first role and its delay rate.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Form -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold" id="formTitle">Add Role</h5>
+      </div>
+      <div class="card-body">
+        <form method="POST" id="roleForm">
+          <input type="hidden" name="action" id="formAction" value="add">
+          <input type="hidden" name="id" id="editId" value="">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Role / Position Title <span class="text-danger">*</span></label>
+            <input type="text" name="name" id="roleName" class="form-control" required
+                   placeholder="e.g. Site Supervisor, Labourer, Operator">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">
+              Delay Rate ($/hr) <span class="text-muted fw-normal">(optional)</span>
+            </label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" name="delay_rate" id="roleDelayRate" class="form-control"
+                     min="0" step="0.01" placeholder="0.00">
+              <span class="input-group-text">/hr</span>
+            </div>
+            <div class="form-text">Rate charged to client per hour of delay for this role.</div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" id="submitBtn">Add Role</button>
+            <button type="button" class="btn btn-outline-secondary d-none" id="cancelEditBtn"
+                    onclick="cancelEdit()">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Help card -->
+    <div class="card border-0 shadow-sm mt-3 border-start border-4 border-info">
+      <div class="card-body py-3">
+        <h6 class="fw-semibold text-info mb-2"><i class="bi bi-lightbulb me-1"></i>How it works</h6>
+        <ul class="small text-muted mb-0 ps-3">
+          <li>Add each position (e.g. Supervisor, Operator, Labourer)</li>
+          <li>Set the delay rate for each — the rate charged to the client per hour during a delay</li>
+          <li>When adding an employee, select their role and the rate auto-fills</li>
+          <li>You can override the rate per employee if needed</li>
+          <li>Delay reports group by role title (not individual names)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function openEditRole(id, name, delayRate) {
+    document.getElementById('formTitle').textContent = 'Edit Role';
+    document.getElementById('formAction').value = 'edit';
+    document.getElementById('editId').value = id;
+    document.getElementById('roleName').value = name;
+    document.getElementById('roleDelayRate').value = delayRate;
+    document.getElementById('submitBtn').textContent = 'Save Changes';
+    document.getElementById('cancelEditBtn').classList.remove('d-none');
+    document.getElementById('roleName').focus();
+    document.getElementById('roleForm').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function cancelEdit() {
+    document.getElementById('formTitle').textContent = 'Add Role';
+    document.getElementById('formAction').value = 'add';
+    document.getElementById('editId').value = '';
+    document.getElementById('roleName').value = '';
+    document.getElementById('roleDelayRate').value = '';
+    document.getElementById('submitBtn').textContent = 'Add Role';
+    document.getElementById('cancelEditBtn').classList.add('d-none');
+  }
+</script>
+{% endblock %}

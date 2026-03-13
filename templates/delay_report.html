@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}Delay Report{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h2 class="fw-bold mb-0">
+    <i class="bi bi-exclamation-triangle me-2 text-warning"></i>Delay Charge Report
+  </h2>
+</div>
+
+<!-- Filters -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-3">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-sm-4 col-md-3">
+        <label class="form-label fw-semibold mb-1 small">Project</label>
+        <select name="project_id" class="form-select form-select-sm">
+          <option value="">All Projects</option>
+          {% for project in projects %}
+          <option value="{{ project.id }}" {% if project_id == project.id|string %}selected{% endif %}>
+            {{ project.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label fw-semibold mb-1 small">From</label>
+        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from_str }}">
+      </div>
+      <div class="col-auto">
+        <label class="form-label fw-semibold mb-1 small">To</label>
+        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to_str }}">
+      </div>
+      <div class="col-sm-3 col-md-2">
+        <label class="form-label fw-semibold mb-1 small">Type</label>
+        <select name="billable" class="form-select form-select-sm">
+          <option value="all" {% if billable_filter == 'all' %}selected{% endif %}>All Delays</option>
+          <option value="billable" {% if billable_filter == 'billable' %}selected{% endif %}>Billable Only</option>
+          <option value="non_billable" {% if billable_filter == 'non_billable' %}selected{% endif %}>Non-Billable Only</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-primary">
+          <i class="bi bi-arrow-repeat me-1"></i>Update
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  <!-- Left: Delay Events -->
+  <div class="col-lg-8">
+
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-2 fw-bold text-warning">{{ summary.entry_count }}</div>
+          <div class="text-muted small">Total Events</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-2 fw-bold text-danger">{{ summary.billable_count }}</div>
+          <div class="text-muted small">Billable Events</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-2 fw-bold text-primary">{{ summary.total_hours_billable }}</div>
+          <div class="text-muted small">Billable Hours</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-2 fw-bold text-success">${{ '{:,.2f}'.format(summary.total_cost) }}</div>
+          <div class="text-muted small">Total Charges</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Billable/Non-billable split notice -->
+    {% if summary.non_billable_count > 0 %}
+    <div class="alert alert-secondary small py-2 mb-3">
+      <i class="bi bi-info-circle me-1"></i>
+      <strong>{{ summary.non_billable_count }}</strong> non-billable event{{ 's' if summary.non_billable_count != 1 }}
+      ({{ summary.total_hours_non_billable }} hrs) are shown below but <strong>not included</strong> in the charge total.
+    </div>
+    {% endif %}
+
+    <!-- Billable events -->
+    {% set billable_rows = rows | selectattr('billable') | list %}
+    {% set non_billable_rows = rows | rejectattr('billable') | list %}
+
+    {% if billable_rows %}
+    <h6 class="fw-bold text-danger mb-2">
+      <i class="bi bi-exclamation-circle me-1"></i>Billable Delays — Charged to Client
+    </h6>
+    {% for row in billable_rows %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header py-2 d-flex justify-content-between align-items-center"
+           style="background:#fff0f0;">
+        <div>
+          <span class="fw-bold text-danger me-2">
+            {{ row.entry.entry_date.strftime('%d/%m/%Y') }} &mdash; {{ row.entry.day_name }}
+          </span>
+          <span class="badge bg-primary-subtle text-primary">{{ row.entry.project.name }}</span>
+          <span class="ms-2 text-muted small">{{ row.entry.delay_hours }} hrs</span>
+          {% if row.entry.delay_reason %}
+          <span class="ms-2 badge bg-danger-subtle text-danger">{{ row.entry.delay_reason }}</span>
+          {% endif %}
+        </div>
+        <span class="fw-bold text-danger">${{ '{:,.2f}'.format(row.entry_cost) }}</span>
+      </div>
+      {% if row.entry.delay_description %}
+      <div class="px-3 pt-2 text-muted small fst-italic">
+        <i class="bi bi-chat-left-text me-1"></i>{{ row.entry.delay_description }}
+      </div>
+      {% endif %}
+      <div class="card-body py-2">
+        {% if row.emp_lines or row.machine_lines %}
+        <table class="table table-sm table-borderless mb-0">
+          <thead class="table-light">
+            <tr class="small text-muted">
+              <th>Role / Equipment</th>
+              <th class="text-end">Rate/hr</th>
+              <th class="text-end">Hours</th>
+              <th class="text-end">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if row.emp_lines %}
+            <tr><td colspan="4" class="fw-semibold small pb-0 pt-2 text-muted">
+              <i class="bi bi-people me-1"></i>People
+            </td></tr>
+            {% for line in row.emp_lines %}
+            <tr>
+              <td class="ps-3">{{ line.name }}</td>
+              <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
+              <td class="text-end text-muted">{{ line.hours }}</td>
+              <td class="text-end fw-semibold">${{ '%.2f'|format(line.cost) }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+            {% if row.machine_lines %}
+            <tr><td colspan="4" class="fw-semibold small pb-0 pt-2 text-muted">
+              <i class="bi bi-tools me-1"></i>Equipment
+            </td></tr>
+            {% for line in row.machine_lines %}
+            <tr>
+              <td class="ps-3">{{ line.name }}</td>
+              <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
+              <td class="text-end text-muted">{{ line.hours }}</td>
+              <td class="text-end fw-semibold">${{ '%.2f'|format(line.cost) }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-muted small fst-italic">
+          No people or equipment with delay rates recorded.
+          <a href="{{ url_for('admin_roles') }}">Set delay rates</a> in Admin → Roles.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Non-billable events -->
+    {% if non_billable_rows %}
+    <h6 class="fw-bold text-secondary mb-2 mt-4">
+      <i class="bi bi-shield-x me-1"></i>Non-Billable Delays — Own Cost
+    </h6>
+    {% for row in non_billable_rows %}
+    <div class="card border-0 shadow-sm mb-3 opacity-75">
+      <div class="card-header py-2 d-flex justify-content-between align-items-center"
+           style="background:#f0f0f0;">
+        <div>
+          <span class="fw-bold text-secondary me-2">
+            {{ row.entry.entry_date.strftime('%d/%m/%Y') }} &mdash; {{ row.entry.day_name }}
+          </span>
+          <span class="badge bg-secondary-subtle text-secondary">{{ row.entry.project.name }}</span>
+          <span class="ms-2 text-muted small">{{ row.entry.delay_hours }} hrs</span>
+          {% if row.entry.delay_reason %}
+          <span class="ms-2 badge bg-secondary-subtle text-secondary">{{ row.entry.delay_reason }}</span>
+          {% endif %}
+          <span class="ms-2 badge bg-secondary text-white">Not billed</span>
+        </div>
+        <span class="fw-bold text-muted">${{ '{:,.2f}'.format(row.entry_cost) }} (not charged)</span>
+      </div>
+      {% if row.entry.delay_description %}
+      <div class="px-3 pt-2 text-muted small fst-italic">
+        <i class="bi bi-chat-left-text me-1"></i>{{ row.entry.delay_description }}
+      </div>
+      {% endif %}
+      <div class="card-body py-2">
+        {% if row.emp_lines or row.machine_lines %}
+        <table class="table table-sm table-borderless mb-0">
+          <thead class="table-light">
+            <tr class="small text-muted">
+              <th>Role / Equipment</th>
+              <th class="text-end">Rate/hr</th>
+              <th class="text-end">Hours</th>
+              <th class="text-end">Internal Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in row.emp_lines %}
+            <tr>
+              <td class="ps-3 text-muted">{{ line.name }}</td>
+              <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
+              <td class="text-end text-muted">{{ line.hours }}</td>
+              <td class="text-end text-muted">${{ '%.2f'|format(line.cost) }}</td>
+            </tr>
+            {% endfor %}
+            {% for line in row.machine_lines %}
+            <tr>
+              <td class="ps-3 text-muted">{{ line.name }}</td>
+              <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
+              <td class="text-end text-muted">{{ line.hours }}</td>
+              <td class="text-end text-muted">${{ '%.2f'|format(line.cost) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if not rows %}
+    <div class="card border-0 shadow-sm">
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+        No delays recorded for this period{% if project_name %} on {{ project_name }}{% endif %}.
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Grand Total -->
+    {% if rows %}
+    <div class="card border-0 shadow-sm bg-primary text-white mt-3">
+      <div class="card-body d-flex justify-content-between align-items-center py-3">
+        <div>
+          <div class="fw-bold fs-5">TOTAL BILLABLE DELAY CHARGES</div>
+          <div class="small opacity-75">
+            {{ summary.billable_count }} billable event{{ 's' if summary.billable_count != 1 }} &mdash;
+            {{ summary.total_hours_billable }} hrs &mdash;
+            {{ date_from.strftime('%d/%m/%Y') }} to {{ date_to.strftime('%d/%m/%Y') }}
+            {% if project_name %}&mdash; {{ project_name }}{% endif %}
+          </div>
+        </div>
+        <div class="fs-2 fw-bold">${{ '{:,.2f}'.format(summary.total_cost) }}</div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Right: Download & Email -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm sticky-top" style="top: 80px;">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-envelope me-2 text-primary"></i>Send to Client</h5>
+      </div>
+      <div class="card-body">
+        <p class="small text-muted mb-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Download the PDF, then click <strong>Open in Outlook</strong> to compose the email — attach the PDF before sending.
+        </p>
+
+        <a href="{{ url_for('delay_report_pdf', date_from=date_from_str, date_to=date_to_str, project_id=project_id, billable=billable_filter) }}"
+           class="btn btn-success w-100 mb-3">
+          <i class="bi bi-download me-1"></i>Download PDF
+        </a>
+
+        <div class="delay-composer">
+          <div class="mb-2">
+            <label class="form-label fw-semibold small">To</label>
+            <input type="email" class="form-control form-control-sm delay-to"
+                   placeholder="client@company.com">
+          </div>
+          <div class="mb-2">
+            <label class="form-label fw-semibold small">Subject</label>
+            <input type="text" class="form-control form-control-sm delay-subject"
+                   value="Delay Charges — {% if project_name %}{{ project_name }} — {% endif %}{{ date_from.strftime('%d/%m/%Y') }} to {{ date_to.strftime('%d/%m/%Y') }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Message</label>
+            <textarea class="form-control form-control-sm delay-body" rows="8">Please find attached our delay charge report{% if project_name %} for {{ project_name }}{% endif %} for the period {{ date_from.strftime('%d/%m/%Y') }} to {{ date_to.strftime('%d/%m/%Y') }}.
+
+Summary:
+- Billable delay events: {{ summary.billable_count }}
+- Total billable hours: {{ summary.total_hours_billable }}
+- Total charges: ${{ '{:,.2f}'.format(summary.total_cost) }}
+
+Please review the attached PDF for a full breakdown by date, role, and equipment.
+
+Regards,
+{{ current_user.display_name or current_user.username }}</textarea>
+          </div>
+          <button type="button" class="btn btn-primary w-100 mb-2" onclick="openInOutlookDelay()">
+            <i class="bi bi-envelope-arrow-up me-1"></i>Open in Outlook
+          </button>
+        </div>
+
+        <a href="{{ url_for('morning_standdown') }}"
+           class="btn btn-outline-warning w-100">
+          <i class="bi bi-envelope-exclamation me-1"></i>Morning Standdown Emails
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openInOutlookDelay() {
+  var c = document.querySelector('.delay-composer');
+  var to      = c.querySelector('.delay-to').value.trim();
+  var subject = c.querySelector('.delay-subject').value.trim();
+  var body    = c.querySelector('.delay-body').value;
+  if (!to) { alert('Please enter a recipient email address.'); return; }
+  window.location.href = 'mailto:' + encodeURIComponent(to)
+    + '?subject=' + encodeURIComponent(subject)
+    + '&body='    + encodeURIComponent(body);
+}
+</script>
+{% endblock %}
