@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+{% block title %}Scheduling Overview — Project Tracker{% endblock %}
+
+{% block head %}
+<style>
+  .sched-table { border-collapse: collapse; font-size: 0.78rem; }
+  .sched-table th, .sched-table td { border: 1px solid #dee2e6; padding: 3px 5px; white-space: nowrap; }
+  .sched-table th { background: #f8f9fa; text-align: center; }
+  .sched-table td.emp-name { background: #fff; font-weight: 500; min-width: 140px; position: sticky; left: 0; z-index: 2; border-right: 2px solid #adb5bd; }
+  .sched-table tr.role-header td { background: #e9ecef; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: .05em; color: #495057; }
+  .cell-available  { background: #d1e7dd; color: #0a3622; text-align: center; }
+  .cell-assigned   { background: #cfe2ff; color: #084298; text-align: center; font-weight: 600; }
+  .cell-rdo        { background: #ffe5d0; color: #6c3a00; text-align: center; }
+  .cell-leave      { background: #fff3cd; color: #664d03; text-align: center; }
+  .cell-weekend    { background: #f8f9fa; color: #adb5bd; text-align: center; }
+  .col-today       { outline: 2px solid #0d6efd; outline-offset: -2px; }
+  .sched-wrapper   { overflow-x: auto; }
+  th.col-today     { background: #cfe2ff !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h2 class="fw-bold mb-0"><i class="bi bi-calendar3-week me-2"></i>Scheduling Overview</h2>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('scheduling_overview', week=prev_week) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-chevron-left"></i> Prev Week
+    </a>
+    <a href="{{ url_for('scheduling_overview') }}" class="btn btn-outline-primary btn-sm">Today</a>
+    <a href="{{ url_for('scheduling_overview', week=next_week) }}" class="btn btn-outline-secondary btn-sm">
+      Next Week <i class="bi bi-chevron-right"></i>
+    </a>
+    {% if current_user.is_admin %}
+    <a href="{{ url_for('admin_swings') }}" class="btn btn-outline-dark btn-sm">
+      <i class="bi bi-gear me-1"></i>Swing Patterns
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<p class="text-muted small mb-3">
+  {{ week_start.strftime('%d %b %Y') }} &ndash; {{ week_end.strftime('%d %b %Y') }}
+</p>
+
+<!-- Quick jump to project view -->
+{% if projects %}
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <span class="text-muted small">Zoom into project:</span>
+  {% for p in projects %}
+  <a href="{{ url_for('scheduling_project', project_id=p.id, week=week_start.isoformat()) }}"
+     class="btn btn-sm btn-outline-info">
+    <i class="bi bi-zoom-in me-1"></i>{{ p.name }}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Schedule grid -->
+<div class="sched-wrapper mb-4">
+  <table class="sched-table">
+    <thead>
+      <tr>
+        <th style="min-width:140px; position:sticky; left:0; z-index:3; background:#f8f9fa;">Employee</th>
+        {% for d in date_list %}
+        <th class="{{ 'col-today' if d == today else '' }}" style="min-width:72px;">
+          {{ d.strftime('%a') }}<br><span class="fw-normal text-muted">{{ d.strftime('%d/%m') }}</span>
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for role_name, emps in roles_grouped %}
+      <tr class="role-header">
+        <td colspan="{{ date_list|length + 1 }}">{{ role_name }}</td>
+      </tr>
+      {% for emp in emps %}
+      <tr>
+        <td class="emp-name">{{ emp.name }}</td>
+        {% for d in date_list %}
+        {% set ds = d.isoformat() %}
+        {% set cell = grid.get(emp.id, {}).get(ds, {}) %}
+        {% set status = cell.get('status', 'available') %}
+        {% set is_weekend = d.weekday() >= 6 %}
+        {% if is_weekend and status == 'available' %}
+        <td class="cell-weekend {{ 'col-today' if d == today else '' }}">—</td>
+        {% else %}
+        <td class="cell-{{ status }} {{ 'col-today' if d == today else '' }}"
+            title="{{ cell.get('project_name', '') }}">
+          {{ cell.get('label', '') }}
+        </td>
+        {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      {% endfor %}
+      {% if not employees %}
+      <tr>
+        <td colspan="{{ date_list|length + 1 }}" class="text-center text-muted py-4">
+          No active employees. <a href="{{ url_for('admin_employees') }}">Add employees</a> first.
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Legend -->
+<div class="d-flex gap-3 flex-wrap mb-4">
+  <span class="badge" style="background:#cfe2ff;color:#084298;font-size:.85rem;">Assigned to project</span>
+  <span class="badge" style="background:#d1e7dd;color:#0a3622;font-size:.85rem;">Available</span>
+  <span class="badge" style="background:#ffe5d0;color:#6c3a00;font-size:.85rem;">RDO</span>
+  <span class="badge" style="background:#fff3cd;color:#664d03;font-size:.85rem;">Leave</span>
+  <span class="badge" style="background:#f8f9fa;color:#adb5bd;font-size:.85rem;">Weekend</span>
+</div>
+
+<!-- Add Assignment / Leave panels -->
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold"><i class="bi bi-person-plus me-2"></i>Assign Employee to Project</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('scheduling_assign_add') }}">
+          <input type="hidden" name="redirect_to" value="scheduling_overview">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Employee</label>
+            <select class="form-select form-select-sm" name="employee_id" required>
+              <option value="">— select —</option>
+              {% for emp in employees %}
+              <option value="{{ emp.id }}">{{ emp.name }}{% if emp.role %} ({{ emp.role }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Project</label>
+            <select class="form-select form-select-sm" name="project_id" required>
+              <option value="">— select —</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col">
+              <label class="form-label small mb-1">From</label>
+              <input type="date" class="form-control form-control-sm" name="date_from" required value="{{ today.isoformat() }}">
+            </div>
+            <div class="col">
+              <label class="form-label small mb-1">To (blank = ongoing)</label>
+              <input type="date" class="form-control form-control-sm" name="date_to">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Notes (optional)</label>
+            <input type="text" class="form-control form-control-sm" name="notes">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">Add Assignment</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold"><i class="bi bi-calendar-x me-2"></i>Record Leave</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('scheduling_leave_add') }}">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Employee</label>
+            <select class="form-select form-select-sm" name="employee_id" required>
+              <option value="">— select —</option>
+              {% for emp in employees %}
+              <option value="{{ emp.id }}">{{ emp.name }}{% if emp.role %} ({{ emp.role }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col">
+              <label class="form-label small mb-1">From</label>
+              <input type="date" class="form-control form-control-sm" name="date_from" required value="{{ today.isoformat() }}">
+            </div>
+            <div class="col">
+              <label class="form-label small mb-1">To</label>
+              <input type="date" class="form-control form-control-sm" name="date_to" required value="{{ today.isoformat() }}">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Type</label>
+            <select class="form-select form-select-sm" name="leave_type">
+              <option value="annual">Annual</option>
+              <option value="sick">Sick</option>
+              <option value="personal">Personal</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Notes (optional)</label>
+            <input type="text" class="form-control form-control-sm" name="notes">
+          </div>
+          <button type="submit" class="btn btn-warning btn-sm w-100">Record Leave</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

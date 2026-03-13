@@ -1,0 +1,276 @@
+{% extends 'base.html' %}
+{% block title %}{{ project.name }} — Scheduling — Project Tracker{% endblock %}
+
+{% block head %}
+<style>
+  .sched-table { border-collapse: collapse; font-size: 0.78rem; }
+  .sched-table th, .sched-table td { border: 1px solid #dee2e6; padding: 3px 6px; white-space: nowrap; }
+  .sched-table th { background: #f8f9fa; text-align: center; }
+  .sched-table td.emp-name { background: #fff; font-weight: 500; min-width: 140px; position: sticky; left: 0; z-index: 2; border-right: 2px solid #adb5bd; }
+  .cell-available  { background: #d1e7dd; color: #0a3622; text-align: center; }
+  .cell-assigned   { background: #cfe2ff; color: #084298; text-align: center; font-weight: 600; }
+  .cell-rdo        { background: #ffe5d0; color: #6c3a00; text-align: center; }
+  .cell-leave      { background: #fff3cd; color: #664d03; text-align: center; }
+  .cell-weekend    { background: #f8f9fa; color: #adb5bd; text-align: center; }
+  .col-today       { outline: 2px solid #0d6efd; outline-offset: -2px; }
+  .sched-wrapper   { overflow-x: auto; }
+  th.col-today     { background: #cfe2ff !important; }
+  .gap-badge       { font-size: .8rem; }
+  .role-gap        { background: #f8d7da; color: #842029; }
+  .role-ok         { background: #d1e7dd; color: #0a3622; }
+  .role-over       { background: #fff3cd; color: #664d03; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="d-flex align-items-start justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <a href="{{ url_for('scheduling_overview', week=week_start.isoformat()) }}"
+       class="btn btn-sm btn-outline-secondary mb-2">
+      <i class="bi bi-arrow-left me-1"></i>All Employees
+    </a>
+    <h2 class="fw-bold mb-0"><i class="bi bi-zoom-in me-2"></i>{{ project.name }}</h2>
+    <p class="text-muted small mb-0">Project scheduling view</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <a href="{{ url_for('scheduling_project', project_id=project.id, week=prev_week) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-chevron-left"></i> Prev Week
+    </a>
+    <a href="{{ url_for('scheduling_project', project_id=project.id) }}" class="btn btn-outline-primary btn-sm">Today</a>
+    <a href="{{ url_for('scheduling_project', project_id=project.id, week=next_week) }}" class="btn btn-outline-secondary btn-sm">
+      Next Week <i class="bi bi-chevron-right"></i>
+    </a>
+  </div>
+</div>
+
+<p class="text-muted small mb-3">
+  {{ week_start.strftime('%d %b %Y') }} &ndash; {{ week_end.strftime('%d %b %Y') }}
+</p>
+
+<!-- Role gap summary -->
+{% if budgeted %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold"><i class="bi bi-people me-2"></i>Role Coverage vs Budget</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered mb-0" style="font-size:.82rem;">
+        <thead class="table-light">
+          <tr>
+            <th>Role</th>
+            <th class="text-center">Budget</th>
+            {% for d in date_list %}
+            <th class="text-center {{ 'table-primary' if d == today else '' }}" style="min-width:58px;">
+              {{ d.strftime('%a %d') }}
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for role_name, budget_count in budgeted.items() %}
+          <tr>
+            <td class="fw-medium">{{ role_name }}</td>
+            <td class="text-center fw-bold">{{ budget_count }}</td>
+            {% for d in date_list %}
+            {% set ds = d.isoformat() %}
+            {% set count = role_coverage.get(role_name, {}).get(ds, 0) %}
+            {% if d.weekday() >= 6 %}
+            <td class="text-center text-muted">—</td>
+            {% elif count < budget_count %}
+            <td class="text-center role-gap fw-bold">{{ count }}/{{ budget_count }}</td>
+            {% elif count > budget_count %}
+            <td class="text-center role-over">{{ count }}/{{ budget_count }}</td>
+            {% else %}
+            <td class="text-center role-ok">{{ count }}/{{ budget_count }}</td>
+            {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Employee grid -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold"><i class="bi bi-grid me-2"></i>Assigned Employees</div>
+  <div class="card-body p-2">
+    {% if assigned_employees %}
+    <div class="sched-wrapper">
+      <table class="sched-table">
+        <thead>
+          <tr>
+            <th style="min-width:140px; position:sticky; left:0; z-index:3; background:#f8f9fa;">Employee</th>
+            {% for d in date_list %}
+            <th class="{{ 'col-today' if d == today else '' }}" style="min-width:68px;">
+              {{ d.strftime('%a') }}<br><span class="fw-normal text-muted">{{ d.strftime('%d/%m') }}</span>
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for emp in assigned_employees %}
+          <tr>
+            <td class="emp-name">
+              {{ emp.name }}<br>
+              <small class="text-muted">{{ emp.role or '' }}</small>
+            </td>
+            {% for d in date_list %}
+            {% set ds = d.isoformat() %}
+            {% set cell = grid.get(emp.id, {}).get(ds, {}) %}
+            {% set status = cell.get('status', 'available') %}
+            {% if d.weekday() >= 6 and status == 'available' %}
+            <td class="cell-weekend {{ 'col-today' if d == today else '' }}">—</td>
+            {% else %}
+            <td class="cell-{{ status }} {{ 'col-today' if d == today else '' }}"
+                title="{{ cell.get('project_name', '') }}">
+              {{ cell.get('label', '') }}
+            </td>
+            {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted text-center py-3 mb-0">No employees assigned to this project in this period.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Current assignments list -->
+{% if assignments %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold"><i class="bi bi-list-check me-2"></i>Active Assignments</div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+      <thead class="table-light">
+        <tr>
+          <th>Employee</th>
+          <th>Role</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in assignments %}
+        <tr>
+          <td>{{ a.employee.name }}</td>
+          <td class="text-muted">{{ a.employee.role or '—' }}</td>
+          <td>{{ a.date_from.strftime('%d/%m/%Y') }}</td>
+          <td>{{ a.date_to.strftime('%d/%m/%Y') if a.date_to else '<span class="text-success">Ongoing</span>'|safe }}</td>
+          <td class="text-muted">{{ a.notes or '' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('scheduling_assign_delete', pa_id=a.id) }}" class="d-inline"
+                  onsubmit="return confirm('Remove this assignment?')">
+              <input type="hidden" name="redirect_to" value="scheduling_project">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Legend -->
+<div class="d-flex gap-3 flex-wrap mb-4">
+  <span class="badge" style="background:#cfe2ff;color:#084298;font-size:.85rem;">On this project</span>
+  <span class="badge" style="background:#d1e7dd;color:#0a3622;font-size:.85rem;">Available</span>
+  <span class="badge" style="background:#ffe5d0;color:#6c3a00;font-size:.85rem;">RDO</span>
+  <span class="badge" style="background:#fff3cd;color:#664d03;font-size:.85rem;">Leave</span>
+</div>
+
+<!-- Add Assignment / Leave side by side -->
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold"><i class="bi bi-person-plus me-2"></i>Assign Employee to This Project</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('scheduling_assign_add') }}">
+          <input type="hidden" name="redirect_to" value="scheduling_project">
+          <input type="hidden" name="redirect_project_id" value="{{ project.id }}">
+          <input type="hidden" name="project_id" value="{{ project.id }}">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Employee</label>
+            <select class="form-select form-select-sm" name="employee_id" required>
+              <option value="">— select —</option>
+              {% for emp in all_employees %}
+              <option value="{{ emp.id }}">{{ emp.name }}{% if emp.role %} ({{ emp.role }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col">
+              <label class="form-label small mb-1">From</label>
+              <input type="date" class="form-control form-control-sm" name="date_from" required value="{{ today.isoformat() }}">
+            </div>
+            <div class="col">
+              <label class="form-label small mb-1">To (blank = ongoing)</label>
+              <input type="date" class="form-control form-control-sm" name="date_to">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Notes (optional)</label>
+            <input type="text" class="form-control form-control-sm" name="notes">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">Add Assignment</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold"><i class="bi bi-calendar-x me-2"></i>Record Leave</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('scheduling_leave_add') }}">
+          <input type="hidden" name="redirect_project_id" value="{{ project.id }}">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Employee</label>
+            <select class="form-select form-select-sm" name="employee_id" required>
+              <option value="">— select —</option>
+              {% for emp in all_employees %}
+              <option value="{{ emp.id }}">{{ emp.name }}{% if emp.role %} ({{ emp.role }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col">
+              <label class="form-label small mb-1">From</label>
+              <input type="date" class="form-control form-control-sm" name="date_from" required value="{{ today.isoformat() }}">
+            </div>
+            <div class="col">
+              <label class="form-label small mb-1">To</label>
+              <input type="date" class="form-control form-control-sm" name="date_to" required value="{{ today.isoformat() }}">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Type</label>
+            <select class="form-select form-select-sm" name="leave_type">
+              <option value="annual">Annual</option>
+              <option value="sick">Sick</option>
+              <option value="personal">Personal</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Notes (optional)</label>
+            <input type="text" class="form-control form-control-sm" name="notes">
+          </div>
+          <button type="submit" class="btn btn-warning btn-sm w-100">Record Leave</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

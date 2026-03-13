@@ -4,7 +4,8 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from models import (db, User, Project, Employee, Machine, DailyEntry, HiredMachine,
                     StandDown, Role, EntryPhoto, PlannedData, ProjectNonWorkDate,
                     ProjectBudgetedRole, ProjectMachine, ProjectWorkedSunday,
-                    ProjectDocument)
+                    ProjectDocument, SwingPattern, EmployeeSwing, EmployeeLeave,
+                    ProjectAssignment)
 from datetime import date, datetime, timedelta
 from fpdf import FPDF, XPos, YPos
 import os, json, uuid, smtplib, math, re
@@ -3298,6 +3299,407 @@ def delay_report_pdf():
                     headers={'Content-Disposition': f'attachment; filename="{filename}"'})
 
 
+
+
+# ---------------------------------------------------------------------------
+# Scheduling helpers
+# ---------------------------------------------------------------------------
+
+def build_schedule_grid(employees, date_list):
+    """
+    Build a status grid for the given employees over the given dates.
+    Returns: grid[employee_id][date_iso_str] = {status, label, project_name}
+    Status priority: leave > rdo > assigned > available
+    """
+    from collections import defaultdict
+
+    if not employees or not date_list:
+        return {}
+
+    emp_ids = [e.id for e in employees]
+    min_date = min(date_list)
+    max_date = max(date_list)
+
+    # Bulk load all relevant data
+    assignments = ProjectAssignment.query.filter(
+        ProjectAssignment.employee_id.in_(emp_ids),
+        ProjectAssignment.date_from <= max_date,
+        db.or_(ProjectAssignment.date_to.is_(None), ProjectAssignment.date_to >= min_date)
+    ).all()
+
+    leaves = EmployeeLeave.query.filter(
+        EmployeeLeave.employee_id.in_(emp_ids),
+        EmployeeLeave.date_from <= max_date,
+        EmployeeLeave.date_to >= min_date
+    ).all()
+
+    swings = EmployeeSwing.query.filter(
+        EmployeeSwing.employee_id.in_(emp_ids),
+        EmployeeSwing.start_date <= max_date
+    ).order_by(EmployeeSwing.employee_id, EmployeeSwing.start_date).all()
+
+    # Group by employee for O(1) lookup per employee
+    assign_by_emp = defaultdict(list)
+    for a in assignments:
+        assign_by_emp[a.employee_id].append(a)
+
+    leave_by_emp = defaultdict(list)
+    for lv in leaves:
+        leave_by_emp[lv.employee_id].append(lv)
+
+    swing_by_emp = defaultdict(list)
+    for s in swings:
+        swing_by_emp[s.employee_id].append(s)
+
+    grid = {}
+    for emp in employees:
+        grid[emp.id] = {}
+        emp_swings = swing_by_emp.get(emp.id, [])   # sorted by start_date ASC
+        emp_leaves = leave_by_emp.get(emp.id, [])
+        emp_assigns = assign_by_emp.get(emp.id, [])
+
+        for d in date_list:
+            date_str = d.isoformat()
+
+            # Priority 1: Leave
+            leave = next((lv for lv in emp_leaves if lv.date_from <= d <= lv.date_to), None)
+            if leave:
+                grid[emp.id][date_str] = {
+                    'status': 'leave',
+                    'label': leave.leave_type.title(),
+                    'project_name': ''
+                }
+                continue
+
+            # Priority 2: RDO — find the most recent swing whose start_date <= d
+            applicable_swing = None
+            for s in emp_swings:
+                if s.start_date <= d:
+                    applicable_swing = s
+                # swings are ordered ASC so keep going to find latest
+            if applicable_swing and applicable_swing.is_rdo(d):
+                grid[emp.id][date_str] = {
+                    'status': 'rdo',
+                    'label': 'RDO',
+                    'project_name': ''
+                }
+                continue
+
+            # Priority 3: Project assignment
+            assignment = next(
+                (a for a in emp_assigns
+                 if a.date_from <= d and (a.date_to is None or a.date_to >= d)),
+                None
+            )
+            if assignment:
+                grid[emp.id][date_str] = {
+                    'status': 'assigned',
+                    'label': assignment.project.name[:16],
+                    'project_name': assignment.project.name
+                }
+                continue
+
+            # Default: available
+            grid[emp.id][date_str] = {
+                'status': 'available',
+                'label': 'Available',
+                'project_name': ''
+            }
+
+    return grid
+
+
+# ---------------------------------------------------------------------------
+# Scheduling routes — overview
+# ---------------------------------------------------------------------------
+
+@app.route('/scheduling')
+def scheduling_overview():
+    # Week navigation: ?week=YYYY-MM-DD  (Monday of the target week)
+    week_str = request.args.get('week')
+    try:
+        week_start = datetime.strptime(week_str, '%Y-%m-%d').date()
+        # Snap to Monday
+        week_start = week_start - timedelta(days=week_start.weekday())
+    except (ValueError, TypeError):
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+
+    # Show 14 days (2 weeks)
+    date_list = [week_start + timedelta(days=i) for i in range(14)]
+    week_end = date_list[-1]
+    prev_week = (week_start - timedelta(days=7)).isoformat()
+    next_week = (week_start + timedelta(days=7)).isoformat()
+
+    employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
+    grid = build_schedule_grid(employees, date_list)
+
+    # Group employees by role for display
+    from itertools import groupby
+    roles_grouped = []
+    for role_name, emp_iter in groupby(employees, key=lambda e: e.role or 'No Role'):
+        roles_grouped.append((role_name, list(emp_iter)))
+
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    return render_template(
+        'scheduling/overview.html',
+        date_list=date_list,
+        week_start=week_start,
+        week_end=week_end,
+        prev_week=prev_week,
+        next_week=next_week,
+        employees=employees,
+        roles_grouped=roles_grouped,
+        grid=grid,
+        projects=projects,
+        today=date.today()
+    )
+
+
+@app.route('/scheduling/project/<int:project_id>')
+def scheduling_project(project_id):
+    project = Project.query.get_or_404(project_id)
+
+    week_str = request.args.get('week')
+    try:
+        week_start = datetime.strptime(week_str, '%Y-%m-%d').date()
+        week_start = week_start - timedelta(days=week_start.weekday())
+    except (ValueError, TypeError):
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+
+    date_list = [week_start + timedelta(days=i) for i in range(14)]
+    week_end = date_list[-1]
+    prev_week = (week_start - timedelta(days=7)).isoformat()
+    next_week = (week_start + timedelta(days=7)).isoformat()
+
+    # Employees currently assigned to this project (date range overlaps view window)
+    assignments = ProjectAssignment.query.filter(
+        ProjectAssignment.project_id == project_id,
+        ProjectAssignment.date_from <= week_end,
+        db.or_(ProjectAssignment.date_to.is_(None), ProjectAssignment.date_to >= week_start)
+    ).order_by(ProjectAssignment.date_from).all()
+
+    assigned_emp_ids = list({a.employee_id for a in assignments})
+    assigned_employees = Employee.query.filter(Employee.id.in_(assigned_emp_ids)).order_by(Employee.role, Employee.name).all() if assigned_emp_ids else []
+
+    grid = build_schedule_grid(assigned_employees, date_list)
+
+    # Build role count per date vs budgeted
+    budgeted = {br.role_name: br.budgeted_count for br in project.budgeted_roles}
+
+    # Count assigned+present employees by role per date
+    role_coverage = {}   # role_name -> {date_str -> count}
+    for emp in assigned_employees:
+        role = emp.role or 'No Role'
+        if role not in role_coverage:
+            role_coverage[role] = {d.isoformat(): 0 for d in date_list}
+        for d in date_list:
+            ds = d.isoformat()
+            cell = grid.get(emp.id, {}).get(ds, {})
+            if cell.get('status') == 'assigned':
+                role_coverage[role][ds] += 1
+
+    all_employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
+
+    return render_template(
+        'scheduling/project.html',
+        project=project,
+        date_list=date_list,
+        week_start=week_start,
+        week_end=week_end,
+        prev_week=prev_week,
+        next_week=next_week,
+        assignments=assignments,
+        assigned_employees=assigned_employees,
+        grid=grid,
+        budgeted=budgeted,
+        role_coverage=role_coverage,
+        all_employees=all_employees,
+        today=date.today()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scheduling — assignment management
+# ---------------------------------------------------------------------------
+
+@app.route('/scheduling/assign/add', methods=['POST'])
+def scheduling_assign_add():
+    employee_id = request.form.get('employee_id', type=int)
+    project_id = request.form.get('project_id', type=int)
+    date_from_str = request.form.get('date_from', '').strip()
+    date_to_str = request.form.get('date_to', '').strip()
+    notes = request.form.get('notes', '').strip()
+    redirect_to = request.form.get('redirect_to', 'scheduling_overview')
+    redirect_project = request.form.get('redirect_project_id', type=int)
+
+    try:
+        date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date() if date_to_str else None
+    except ValueError:
+        flash('Invalid date format.', 'danger')
+        return redirect(url_for(redirect_to))
+
+    if not employee_id or not project_id:
+        flash('Employee and project are required.', 'danger')
+        return redirect(url_for(redirect_to))
+
+    pa = ProjectAssignment(
+        employee_id=employee_id,
+        project_id=project_id,
+        date_from=date_from,
+        date_to=date_to,
+        notes=notes or None
+    )
+    db.session.add(pa)
+    db.session.commit()
+    flash('Assignment added.', 'success')
+
+    if redirect_to == 'scheduling_project' and redirect_project:
+        return redirect(url_for('scheduling_project', project_id=redirect_project))
+    return redirect(url_for('scheduling_overview'))
+
+
+@app.route('/scheduling/assign/<int:pa_id>/delete', methods=['POST'])
+def scheduling_assign_delete(pa_id):
+    pa = ProjectAssignment.query.get_or_404(pa_id)
+    project_id = pa.project_id
+    redirect_to = request.form.get('redirect_to', 'scheduling_overview')
+    db.session.delete(pa)
+    db.session.commit()
+    flash('Assignment removed.', 'success')
+    if redirect_to == 'scheduling_project':
+        return redirect(url_for('scheduling_project', project_id=project_id))
+    return redirect(url_for('scheduling_overview'))
+
+
+# ---------------------------------------------------------------------------
+# Scheduling — leave management
+# ---------------------------------------------------------------------------
+
+@app.route('/scheduling/leave/add', methods=['POST'])
+def scheduling_leave_add():
+    employee_id = request.form.get('employee_id', type=int)
+    date_from_str = request.form.get('date_from', '').strip()
+    date_to_str = request.form.get('date_to', '').strip()
+    leave_type = request.form.get('leave_type', 'annual').strip()
+    notes = request.form.get('notes', '').strip()
+    redirect_project = request.form.get('redirect_project_id', type=int)
+
+    try:
+        date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid date format.', 'danger')
+        return redirect(url_for('scheduling_overview'))
+
+    if not employee_id:
+        flash('Employee is required.', 'danger')
+        return redirect(url_for('scheduling_overview'))
+
+    lv = EmployeeLeave(
+        employee_id=employee_id,
+        date_from=date_from,
+        date_to=date_to,
+        leave_type=leave_type,
+        notes=notes or None
+    )
+    db.session.add(lv)
+    db.session.commit()
+    flash('Leave recorded.', 'success')
+
+    if redirect_project:
+        return redirect(url_for('scheduling_project', project_id=redirect_project))
+    return redirect(url_for('scheduling_overview'))
+
+
+@app.route('/scheduling/leave/<int:leave_id>/delete', methods=['POST'])
+def scheduling_leave_delete(leave_id):
+    lv = EmployeeLeave.query.get_or_404(leave_id)
+    redirect_project = request.form.get('redirect_project_id', type=int)
+    db.session.delete(lv)
+    db.session.commit()
+    flash('Leave removed.', 'success')
+    if redirect_project:
+        return redirect(url_for('scheduling_project', project_id=redirect_project))
+    return redirect(url_for('scheduling_overview'))
+
+
+# ---------------------------------------------------------------------------
+# Admin — swing patterns
+# ---------------------------------------------------------------------------
+
+@app.route('/admin/swings', methods=['GET', 'POST'])
+def admin_swings():
+    if not current_user.is_admin:
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+
+        if action == 'add_pattern':
+            name = request.form.get('name', '').strip()
+            work_days = request.form.get('work_days', type=int)
+            off_days = request.form.get('off_days', type=int)
+            description = request.form.get('description', '').strip()
+            if not name or not work_days or not off_days:
+                flash('Name, work days, and off days are required.', 'danger')
+            else:
+                sp = SwingPattern(name=name, work_days=work_days, off_days=off_days,
+                                  description=description or None)
+                db.session.add(sp)
+                db.session.commit()
+                flash(f'Pattern "{name}" added.', 'success')
+
+        elif action == 'delete_pattern':
+            pattern_id = request.form.get('pattern_id', type=int)
+            sp = SwingPattern.query.get(pattern_id)
+            if sp:
+                db.session.delete(sp)
+                db.session.commit()
+                flash('Pattern deleted.', 'success')
+
+        elif action == 'assign_swing':
+            employee_id = request.form.get('employee_id', type=int)
+            pattern_id = request.form.get('pattern_id', type=int)
+            start_date_str = request.form.get('start_date', '').strip()
+            notes = request.form.get('notes', '').strip()
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Invalid start date.', 'danger')
+                return redirect(url_for('admin_swings'))
+            if not employee_id or not pattern_id:
+                flash('Employee and pattern are required.', 'danger')
+            else:
+                es = EmployeeSwing(employee_id=employee_id, pattern_id=pattern_id,
+                                   start_date=start_date, notes=notes or None)
+                db.session.add(es)
+                db.session.commit()
+                flash('Swing pattern assigned.', 'success')
+
+        elif action == 'delete_swing':
+            swing_id = request.form.get('swing_id', type=int)
+            es = EmployeeSwing.query.get(swing_id)
+            if es:
+                db.session.delete(es)
+                db.session.commit()
+                flash('Swing assignment removed.', 'success')
+
+        return redirect(url_for('admin_swings'))
+
+    patterns = SwingPattern.query.order_by(SwingPattern.name).all()
+    employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
+    # Load all swing assignments with employee + pattern eager
+    swing_assignments = EmployeeSwing.query.order_by(EmployeeSwing.employee_id, EmployeeSwing.start_date).all()
+
+    return render_template('admin/swings.html',
+                           patterns=patterns,
+                           employees=employees,
+                           swing_assignments=swing_assignments)
 
 
 if __name__ == '__main__':

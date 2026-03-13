@@ -269,3 +269,82 @@ class ProjectDocument(db.Model):
 
     def __repr__(self):
         return f'<ProjectDocument {self.original_name}>'
+
+
+# ---------------------------------------------------------------------------
+# Scheduling models
+# ---------------------------------------------------------------------------
+
+class SwingPattern(db.Model):
+    """RDO swing pattern definition, e.g. '4 on 1 off'."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    work_days = db.Column(db.Integer, nullable=False)   # consecutive work days per cycle
+    off_days = db.Column(db.Integer, nullable=False)    # consecutive RDO days per cycle
+    description = db.Column(db.String(300))
+
+    @property
+    def cycle_length(self):
+        return self.work_days + self.off_days
+
+    def __repr__(self):
+        return f'<SwingPattern {self.name}>'
+
+
+class EmployeeSwing(db.Model):
+    """Assigns a swing pattern to an employee from a given start date."""
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    pattern_id = db.Column(db.Integer, db.ForeignKey('swing_pattern.id'), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    employee = db.relationship('Employee', backref='swings')
+    pattern = db.relationship('SwingPattern', backref='employee_swings')
+
+    def is_rdo(self, check_date):
+        """Returns True if check_date falls on an RDO under this swing assignment."""
+        days_since = (check_date - self.start_date).days
+        if days_since < 0:
+            return False
+        position = days_since % self.pattern.cycle_length
+        return position >= self.pattern.work_days
+
+    def __repr__(self):
+        return f'<EmployeeSwing emp={self.employee_id} pattern={self.pattern_id}>'
+
+
+class EmployeeLeave(db.Model):
+    """Leave period for an employee (annual, sick, etc.)."""
+    LEAVE_TYPES = ['annual', 'sick', 'personal', 'other']
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    date_from = db.Column(db.Date, nullable=False)
+    date_to = db.Column(db.Date, nullable=False)
+    leave_type = db.Column(db.String(50), default='annual')
+    notes = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    employee = db.relationship('Employee', backref='leaves')
+
+    def __repr__(self):
+        return f'<EmployeeLeave emp={self.employee_id} {self.date_from}-{self.date_to}>'
+
+
+class ProjectAssignment(db.Model):
+    """Assigns an employee to a project for a date range."""
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    date_from = db.Column(db.Date, nullable=False)
+    date_to = db.Column(db.Date, nullable=True)    # None = ongoing / no end date
+    notes = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    employee = db.relationship('Employee', backref='project_assignments')
+    project = db.relationship('Project', backref='employee_assignments')
+
+    def __repr__(self):
+        return f'<ProjectAssignment emp={self.employee_id} proj={self.project_id}>'
