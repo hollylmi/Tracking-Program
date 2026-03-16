@@ -26,6 +26,7 @@
           <thead class="table-light">
             <tr>
               <th>Role / Position</th>
+              <th>Scheduling Group</th>
               <th>Delay Rate</th>
               <th>Employees</th>
               <th class="text-end">Actions</th>
@@ -35,6 +36,13 @@
             {% for role in roles %}
             <tr>
               <td class="fw-semibold">{{ role.name }}</td>
+              <td>
+                {% if role.group_name %}
+                  <span class="badge bg-primary-subtle text-primary">{{ role.group_name }}</span>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
               <td>
                 {% if role.delay_rate %}
                   <span class="text-success fw-semibold">${{ '%.2f'|format(role.delay_rate) }}/hr</span>
@@ -48,7 +56,7 @@
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
                   <button class="btn btn-sm btn-outline-secondary" type="button"
-                          onclick="openEditRole({{ role.id }}, '{{ role.name|replace("'", "\\'") }}', '{{ role.delay_rate or '' }}')"
+                          onclick="openEditRole({{ role.id }}, '{{ role.name|replace("'", "\\'") }}', '{{ role.delay_rate or '' }}', '{{ (role.group_name or '')|replace("'", "\\'") }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -99,6 +107,17 @@
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">
+              Scheduling Group <span class="text-muted fw-normal">(optional)</span>
+            </label>
+            <input type="text" name="group_name" id="roleGroupName" class="form-control"
+                   placeholder="e.g. Supervisor, Labourer, PE Welder">
+            <div class="form-text">
+              Roles in the same group are interchangeable in scheduling coverage.
+              E.g. set "Supervisor" on Site Supervisor I, II and III so they all count toward a "Supervisor" budget.
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">
               Delay Rate ($/hr) <span class="text-muted fw-normal">(optional)</span>
             </label>
             <div class="input-group">
@@ -123,11 +142,11 @@
       <div class="card-body py-3">
         <h6 class="fw-semibold text-info mb-2"><i class="bi bi-lightbulb me-1"></i>How it works</h6>
         <ul class="small text-muted mb-0 ps-3">
-          <li>Add each position (e.g. Supervisor, Operator, Labourer)</li>
-          <li>Set the delay rate for each — the rate charged to the client per hour during a delay</li>
+          <li>Add each position (e.g. Site Supervisor I, Labourer)</li>
+          <li>Set a <strong>Scheduling Group</strong> to make similar roles interchangeable — e.g. set "Supervisor" on Site Supervisor I, II &amp; III so any of them satisfies a supervisor budget slot</li>
+          <li>Set the delay rate for each — charged to the client per hour during a delay</li>
           <li>When adding an employee, select their role and the rate auto-fills</li>
           <li>You can override the rate per employee if needed</li>
-          <li>Delay reports group by role title (not individual names)</li>
         </ul>
       </div>
     </div>
@@ -138,12 +157,13 @@
 
 {% block scripts %}
 <script>
-  function openEditRole(id, name, delayRate) {
+  function openEditRole(id, name, delayRate, groupName) {
     document.getElementById('formTitle').textContent = 'Edit Role';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
     document.getElementById('roleName').value = name;
     document.getElementById('roleDelayRate').value = delayRate;
+    document.getElementById('roleGroupName').value = groupName || '';
     document.getElementById('submitBtn').textContent = 'Save Changes';
     document.getElementById('cancelEditBtn').classList.remove('d-none');
     document.getElementById('roleName').focus();
@@ -156,6 +176,7 @@
     document.getElementById('editId').value = '';
     document.getElementById('roleName').value = '';
     document.getElementById('roleDelayRate').value = '';
+    document.getElementById('roleGroupName').value = '';
     document.getElementById('submitBtn').textContent = 'Add Role';
     document.getElementById('cancelEditBtn').classList.add('d-none');
   }

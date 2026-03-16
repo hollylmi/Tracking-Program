@@ -3,19 +3,28 @@
 
 {% block head %}
 <style>
-  .sched-table { border-collapse: collapse; font-size: 0.78rem; }
-  .sched-table th, .sched-table td { border: 1px solid #dee2e6; padding: 3px 5px; white-space: nowrap; }
-  .sched-table th { background: #f8f9fa; text-align: center; }
-  .sched-table td.emp-name { background: #fff; font-weight: 500; min-width: 140px; position: sticky; left: 0; z-index: 2; border-right: 2px solid #adb5bd; }
-  .sched-table tr.role-header td { background: #e9ecef; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: .05em; color: #495057; }
+  .sched-table { border-collapse: collapse; font-size: 0.72rem; }
+  .sched-table th, .sched-table td { border: 1px solid #dee2e6; padding: 2px 4px; white-space: nowrap; }
+  .sched-table th { background: #f8f9fa; text-align: center; vertical-align: bottom; }
+  .sched-table th.wk-header { background: #e9ecef; font-size: .68rem; text-align: center; letter-spacing: .03em; }
+  .sched-table td.emp-name { background: #fff; font-weight: 500; min-width: 130px; max-width: 150px;
+    position: sticky; left: 0; z-index: 2; border-right: 2px solid #adb5bd; overflow: hidden; text-overflow: ellipsis; }
+  .sched-table tr.role-header td { background: #e9ecef; font-weight: 700; font-size: .69rem;
+    text-transform: uppercase; letter-spacing: .05em; color: #495057; }
   .cell-available  { background: #d1e7dd; color: #0a3622; text-align: center; }
   .cell-assigned   { background: #cfe2ff; color: #084298; text-align: center; font-weight: 600; }
   .cell-rdo        { background: #ffe5d0; color: #6c3a00; text-align: center; }
   .cell-leave      { background: #fff3cd; color: #664d03; text-align: center; }
-  .cell-weekend    { background: #f8f9fa; color: #adb5bd; text-align: center; }
+  .cell-r_and_r    { background: #e0cffc; color: #3d1a78; text-align: center; font-weight: 600; }
+  .cell-travel     { background: #d2f4ea; color: #0b4c34; text-align: center; }
+  .cell-weekend    { background: #f1f3f5; color: #ced4da; text-align: center; }
   .col-today       { outline: 2px solid #0d6efd; outline-offset: -2px; }
-  .sched-wrapper   { overflow-x: auto; }
   th.col-today     { background: #cfe2ff !important; }
+  .sched-wrapper   { overflow-x: auto; max-width: 100%; }
+  .sched-clickable { cursor: pointer; }
+  .sched-clickable:hover { filter: brightness(0.9); }
+  .cell-override-dot::after { content: '•'; font-size:.55rem; vertical-align:super; margin-left:1px; opacity:.6; }
+  .month-divider   { border-left: 2px solid #6c757d !important; }
 </style>
 {% endblock %}
 
@@ -23,32 +32,32 @@
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <h2 class="fw-bold mb-0"><i class="bi bi-calendar3-week me-2"></i>Scheduling Overview</h2>
   <div class="d-flex gap-2 flex-wrap">
-    <a href="{{ url_for('scheduling_overview', week=prev_week) }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-chevron-left"></i> Prev Week
+    <a href="{{ url_for('scheduling_overview', week=prev_period) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-chevron-double-left"></i> &minus;4 weeks
     </a>
     <a href="{{ url_for('scheduling_overview') }}" class="btn btn-outline-primary btn-sm">Today</a>
-    <a href="{{ url_for('scheduling_overview', week=next_week) }}" class="btn btn-outline-secondary btn-sm">
-      Next Week <i class="bi bi-chevron-right"></i>
+    <a href="{{ url_for('scheduling_overview', week=next_period) }}" class="btn btn-outline-secondary btn-sm">
+      +4 weeks <i class="bi bi-chevron-double-right"></i>
     </a>
     {% if current_user.is_admin %}
     <a href="{{ url_for('admin_swings') }}" class="btn btn-outline-dark btn-sm">
-      <i class="bi bi-gear me-1"></i>Swing Patterns
+      <i class="bi bi-arrow-repeat me-1"></i>Swing Patterns
     </a>
     {% endif %}
   </div>
 </div>
 
-<p class="text-muted small mb-3">
-  {{ week_start.strftime('%d %b %Y') }} &ndash; {{ week_end.strftime('%d %b %Y') }}
+<p class="text-muted small mb-2">
+  Showing 12 weeks: {{ week_start.strftime('%d %b %Y') }} &ndash; {{ week_end.strftime('%d %b %Y') }}
 </p>
 
 <!-- Quick jump to project view -->
 {% if projects %}
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-  <span class="text-muted small">Zoom into project:</span>
+  <span class="text-muted small fw-medium">Zoom into project:</span>
   {% for p in projects %}
   <a href="{{ url_for('scheduling_project', project_id=p.id, week=week_start.isoformat()) }}"
-     class="btn btn-sm btn-outline-info">
+     class="btn btn-sm btn-outline-info py-0">
     <i class="bi bi-zoom-in me-1"></i>{{ p.name }}
   </a>
   {% endfor %}
@@ -59,11 +68,36 @@
 <div class="sched-wrapper mb-4">
   <table class="sched-table">
     <thead>
+      <!-- Week number / month row -->
       <tr>
-        <th style="min-width:140px; position:sticky; left:0; z-index:3; background:#f8f9fa;">Employee</th>
+        <th style="min-width:130px; position:sticky; left:0; z-index:3; background:#f8f9fa;"></th>
+        {% set ns = namespace(prev_month=-1, prev_wk=-1) %}
         {% for d in date_list %}
-        <th class="{{ 'col-today' if d == today else '' }}" style="min-width:72px;">
-          {{ d.strftime('%a') }}<br><span class="fw-normal text-muted">{{ d.strftime('%d/%m') }}</span>
+          {% set wk = d.isocalendar()[1] %}
+          {% if d.month != ns.prev_month %}
+            {# count remaining days in this month in date_list #}
+            {% set ns.prev_month = d.month %}
+            <th class="wk-header {{ 'month-divider' if not loop.first else '' }}">
+              {{ d.strftime('%b %Y') }}
+            </th>
+          {% elif wk != ns.prev_wk %}
+            <th class="wk-header">Wk{{ wk }}</th>
+          {% else %}
+            {# skip — spanned by month header #}
+          {% endif %}
+          {% set ns.prev_wk = wk %}
+        {% endfor %}
+      </tr>
+      <!-- Day row -->
+      <tr>
+        <th style="min-width:130px; position:sticky; left:0; z-index:3; background:#f8f9fa;">Employee</th>
+        {% for d in date_list %}
+        <th class="{{ 'col-today' if d == today else '' }}
+                   {{ 'month-divider' if d.day == 1 and not loop.first else '' }}"
+            style="min-width:30px; font-size:.65rem;">
+          <span class="{{ 'text-danger' if d.weekday() == 6 else '' }}">
+            {{ d.strftime('%a')[0] }}<br>{{ d.day }}
+          </span>
         </th>
         {% endfor %}
       </tr>
@@ -75,20 +109,37 @@
       </tr>
       {% for emp in emps %}
       <tr>
-        <td class="emp-name">{{ emp.name }}</td>
+        <td class="emp-name" title="{{ emp.name }}">{{ emp.name }}</td>
         {% for d in date_list %}
         {% set ds = d.isoformat() %}
         {% set cell = grid.get(emp.id, {}).get(ds, {}) %}
-        {% set status = cell.get('status', 'available') %}
-        {% set is_weekend = d.weekday() >= 6 %}
-        {% if is_weekend and status == 'available' %}
-        <td class="cell-weekend {{ 'col-today' if d == today else '' }}">—</td>
-        {% else %}
-        <td class="cell-{{ status }} {{ 'col-today' if d == today else '' }}"
-            title="{{ cell.get('project_name', '') }}">
-          {{ cell.get('label', '') }}
+        {% set status = cell.get('status', 'sunday' if d.weekday() == 6 else 'available') %}
+        {% set ov_id = cell.get('override_id', '') %}
+        {% set css_class = 'cell-weekend' if status == 'sunday' else 'cell-' + status %}
+        {% set pid = cell.get('project_id') or (cell.get('override_project_id') | int(0) or None) %}
+        {% set colours = project_colour_map.get(pid) if pid else None %}
+        {% set cell_style = ('background:' + colours[0] + ';color:' + colours[1] + ';') if (status == 'assigned' and colours) else '' %}
+        <td class="{{ css_class }} sched-clickable {{ 'col-today' if d == today else '' }}
+                   {{ 'month-divider' if d.day == 1 and not loop.first else '' }}"
+            style="{{ cell_style }}"
+            title="{{ cell.get('nwd_reason', '') or cell.get('project_name', '') or cell.get('label', status.title()) }}"
+            data-emp-id="{{ emp.id }}"
+            data-emp-name="{{ emp.name }}"
+            data-date="{{ ds }}"
+            data-override-id="{{ ov_id }}"
+            data-override-status="{{ cell.get('override_status', '') }}"
+            data-override-project="{{ cell.get('override_project_id', '') }}"
+            onclick="openSchedModal(this)">
+          {% if status == 'assigned' %}
+            {% set pname = cell.get('project_name', '') %}
+            <span style="font-size:.6rem;" class="{{ 'cell-override-dot' if ov_id else '' }}">{{ pname[:8] if pname else '—' }}</span>
+          {% elif status == 'sunday' %}—
+          {% elif status == 'rdo' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.6rem;">{{ cell.get('label', 'RDO') }}</span>
+          {% elif status == 'r_and_r' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">R&R</span>
+          {% elif status == 'travel' %}<i class="bi bi-airplane-fill {{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.6rem;"></i>
+          {% elif status == 'leave' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">L</span>
+          {% else %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">&bull;</span>{% endif %}
         </td>
-        {% endif %}
         {% endfor %}
       </tr>
       {% endfor %}
@@ -105,12 +156,19 @@
 </div>
 
 <!-- Legend -->
-<div class="d-flex gap-3 flex-wrap mb-4">
-  <span class="badge" style="background:#cfe2ff;color:#084298;font-size:.85rem;">Assigned to project</span>
-  <span class="badge" style="background:#d1e7dd;color:#0a3622;font-size:.85rem;">Available</span>
-  <span class="badge" style="background:#ffe5d0;color:#6c3a00;font-size:.85rem;">RDO</span>
-  <span class="badge" style="background:#fff3cd;color:#664d03;font-size:.85rem;">Leave</span>
-  <span class="badge" style="background:#f8f9fa;color:#adb5bd;font-size:.85rem;">Weekend</span>
+<div class="d-flex gap-2 flex-wrap mb-4 align-items-center">
+  <span class="small text-muted fw-medium">Projects:</span>
+  {% for p in projects %}
+  {% set pc = project_colour_map.get(p.id) %}
+  {% if pc %}<span class="badge px-2" style="background:{{ pc[0] }};color:{{ pc[1] }};">{{ p.name }}</span>{% endif %}
+  {% endfor %}
+  <span class="ms-2 small text-muted fw-medium">Status:</span>
+  <span class="badge px-2" style="background:#d1e7dd;color:#0a3622;">Available</span>
+  <span class="badge px-2" style="background:#ffe5d0;color:#6c3a00;">RDO</span>
+  <span class="badge px-2" style="background:#e0cffc;color:#3d1a78;">R&amp;R</span>
+  <span class="badge px-2" style="background:#d2f4ea;color:#0b4c34;">Travel</span>
+  <span class="badge px-2" style="background:#fff3cd;color:#664d03;">Leave</span>
+  <span class="badge px-2" style="background:#f1f3f5;color:#adb5bd;">Sun off</span>
 </div>
 
 <!-- Add Assignment / Leave panels -->
@@ -161,7 +219,7 @@
 
   <div class="col-md-6">
     <div class="card shadow-sm">
-      <div class="card-header fw-semibold"><i class="bi bi-calendar-x me-2"></i>Record Leave</div>
+      <div class="card-header fw-semibold"><i class="bi bi-calendar-x me-2"></i>Record Leave / R&R / Travel</div>
       <div class="card-body">
         <form method="POST" action="{{ url_for('scheduling_leave_add') }}">
           <div class="mb-2">
@@ -186,8 +244,10 @@
           <div class="mb-2">
             <label class="form-label small mb-1">Type</label>
             <select class="form-select form-select-sm" name="leave_type">
-              <option value="annual">Annual</option>
-              <option value="sick">Sick</option>
+              <option value="r_and_r">R&R (Rest &amp; Relaxation)</option>
+              <option value="travel">Travel Day</option>
+              <option value="annual">Annual Leave</option>
+              <option value="sick">Sick Leave</option>
               <option value="personal">Personal</option>
               <option value="other">Other</option>
             </select>
@@ -196,10 +256,100 @@
             <label class="form-label small mb-1">Notes (optional)</label>
             <input type="text" class="form-control form-control-sm" name="notes">
           </div>
-          <button type="submit" class="btn btn-warning btn-sm w-100">Record Leave</button>
+          <button type="submit" class="btn btn-warning btn-sm w-100">Record</button>
         </form>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Schedule Override Modal -->
+<div class="modal fade" id="schedOverrideModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold" id="schedModalTitle">Edit Schedule</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('schedule_override') }}">
+        <div class="modal-body py-3">
+          <input type="hidden" name="employee_id" id="schedEmpId">
+          <input type="hidden" name="date" id="schedDate">
+          <input type="hidden" name="week" id="schedWeek" value="{{ week_start.isoformat() }}">
+          <input type="hidden" name="redirect_project_id" value="">
+          <input type="hidden" name="action" id="schedAction" value="set">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Status</label>
+            <select class="form-select form-select-sm" name="status" id="schedStatus"
+                    onchange="schedStatusChanged(this)">
+              <option value="available">Available</option>
+              <option value="project">On Job →</option>
+              <option value="r_and_r">R&amp;R</option>
+              <option value="travel">Travel</option>
+              <option value="annual">Annual Leave</option>
+              <option value="sick">Sick Leave</option>
+              <option value="personal">Personal Leave</option>
+              <option value="rdo">RDO (manual)</option>
+              <option value="other">Other Leave</option>
+            </select>
+          </div>
+          <div class="mb-2" id="schedProjectDiv" style="display:none;">
+            <label class="form-label small fw-semibold mb-1">Project</label>
+            <select class="form-select form-select-sm" name="project_id" id="schedProjectId">
+              <option value="">— select —</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-1">
+            <label class="form-label small fw-semibold mb-1">Notes (optional)</label>
+            <input type="text" class="form-control form-control-sm" name="notes" id="schedNotes">
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-danger me-auto" id="schedClearBtn"
+                  onclick="document.getElementById('schedAction').value='clear';this.closest('form').submit();"
+                  style="display:none;">
+            <i class="bi bi-x-circle me-1"></i>Clear
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function schedStatusChanged(sel) {
+  document.getElementById('schedProjectDiv').style.display = sel.value === 'project' ? '' : 'none';
+}
+function openSchedModal(td) {
+  const empId = td.dataset.empId;
+  const empName = td.dataset.empName;
+  const dt = td.dataset.date;
+  const ovId = td.dataset.overrideId;
+  const ovStatus = td.dataset.overrideStatus;
+  const ovProject = td.dataset.overrideProject;
+
+  const d = new Date(dt + 'T00:00:00');
+  const displayDate = d.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+  document.getElementById('schedModalTitle').textContent = empName + '  —  ' + displayDate;
+  document.getElementById('schedEmpId').value = empId;
+  document.getElementById('schedDate').value = dt;
+  document.getElementById('schedAction').value = 'set';
+  document.getElementById('schedNotes').value = '';
+
+  const sel = document.getElementById('schedStatus');
+  sel.value = ovStatus || 'available';
+  schedStatusChanged(sel);
+  if (ovProject) document.getElementById('schedProjectId').value = ovProject;
+
+  document.getElementById('schedClearBtn').style.display = ovId ? '' : 'none';
+  new bootstrap.Modal(document.getElementById('schedOverrideModal')).show();
+}
+</script>
 {% endblock %}

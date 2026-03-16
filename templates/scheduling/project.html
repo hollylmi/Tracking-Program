@@ -3,22 +3,29 @@
 
 {% block head %}
 <style>
-  .sched-table { border-collapse: collapse; font-size: 0.78rem; }
-  .sched-table th, .sched-table td { border: 1px solid #dee2e6; padding: 3px 6px; white-space: nowrap; }
-  .sched-table th { background: #f8f9fa; text-align: center; }
-  .sched-table td.emp-name { background: #fff; font-weight: 500; min-width: 140px; position: sticky; left: 0; z-index: 2; border-right: 2px solid #adb5bd; }
+  .sched-table { border-collapse: collapse; font-size: 0.72rem; }
+  .sched-table th, .sched-table td { border: 1px solid #dee2e6; padding: 2px 4px; white-space: nowrap; }
+  .sched-table th { background: #f8f9fa; text-align: center; vertical-align: bottom; }
+  .sched-table th.wk-header { background: #e9ecef; font-size: .68rem; text-align: center; letter-spacing: .03em; }
+  .sched-table td.emp-name { background: #fff; font-weight: 500; min-width: 140px; position: sticky;
+    left: 0; z-index: 2; border-right: 2px solid #adb5bd; }
   .cell-available  { background: #d1e7dd; color: #0a3622; text-align: center; }
   .cell-assigned   { background: #cfe2ff; color: #084298; text-align: center; font-weight: 600; }
   .cell-rdo        { background: #ffe5d0; color: #6c3a00; text-align: center; }
   .cell-leave      { background: #fff3cd; color: #664d03; text-align: center; }
-  .cell-weekend    { background: #f8f9fa; color: #adb5bd; text-align: center; }
+  .cell-r_and_r    { background: #e0cffc; color: #3d1a78; text-align: center; font-weight: 600; }
+  .cell-travel     { background: #d2f4ea; color: #0b4c34; text-align: center; }
+  .cell-weekend    { background: #f1f3f5; color: #ced4da; text-align: center; }
   .col-today       { outline: 2px solid #0d6efd; outline-offset: -2px; }
-  .sched-wrapper   { overflow-x: auto; }
+  .sched-clickable { cursor: pointer; }
+  .sched-clickable:hover { filter: brightness(0.9); }
+  .cell-override-dot::after { content: '•'; font-size:.55rem; vertical-align:super; margin-left:1px; opacity:.6; }
   th.col-today     { background: #cfe2ff !important; }
-  .gap-badge       { font-size: .8rem; }
-  .role-gap        { background: #f8d7da; color: #842029; }
-  .role-ok         { background: #d1e7dd; color: #0a3622; }
-  .role-over       { background: #fff3cd; color: #664d03; }
+  .sched-wrapper   { overflow-x: auto; max-width: 100%; }
+  .month-divider   { border-left: 2px solid #6c757d !important; }
+  .gap-cell        { background: #f8d7da; color: #842029; text-align: center; font-weight: 700; }
+  .ok-cell         { background: #d1e7dd; color: #0a3622; text-align: center; }
+  .over-cell       { background: #fff3cd; color: #664d03; text-align: center; }
 </style>
 {% endblock %}
 
@@ -31,15 +38,18 @@
       <i class="bi bi-arrow-left me-1"></i>All Employees
     </a>
     <h2 class="fw-bold mb-0"><i class="bi bi-zoom-in me-2"></i>{{ project.name }}</h2>
-    <p class="text-muted small mb-0">Project scheduling view</p>
+    <p class="text-muted small mb-0">Project staffing — 12 week view</p>
   </div>
   <div class="d-flex gap-2 flex-wrap align-items-center">
-    <a href="{{ url_for('scheduling_project', project_id=project.id, week=prev_week) }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-chevron-left"></i> Prev Week
+    <a href="{{ url_for('scheduling_project', project_id=project.id, week=prev_period) }}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-chevron-double-left"></i> &minus;4 weeks
     </a>
-    <a href="{{ url_for('scheduling_project', project_id=project.id) }}" class="btn btn-outline-primary btn-sm">Today</a>
-    <a href="{{ url_for('scheduling_project', project_id=project.id, week=next_week) }}" class="btn btn-outline-secondary btn-sm">
-      Next Week <i class="bi bi-chevron-right"></i>
+    <a href="{{ url_for('scheduling_project', project_id=project.id) }}"
+       class="btn btn-outline-primary btn-sm">Today</a>
+    <a href="{{ url_for('scheduling_project', project_id=project.id, week=next_period) }}"
+       class="btn btn-outline-secondary btn-sm">
+      +4 weeks <i class="bi bi-chevron-double-right"></i>
     </a>
   </div>
 </div>
@@ -48,20 +58,37 @@
   {{ week_start.strftime('%d %b %Y') }} &ndash; {{ week_end.strftime('%d %b %Y') }}
 </p>
 
-<!-- Role gap summary -->
+<!-- Role gap summary (grouped by role group) -->
 {% if budgeted %}
 <div class="card shadow-sm mb-4">
   <div class="card-header fw-semibold"><i class="bi bi-people me-2"></i>Role Coverage vs Budget</div>
   <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-sm table-bordered mb-0" style="font-size:.82rem;">
-        <thead class="table-light">
+    <div class="sched-wrapper">
+      <table class="sched-table">
+        <thead>
+          <!-- Month row -->
           <tr>
-            <th>Role</th>
-            <th class="text-center">Budget</th>
+            <th style="min-width:140px; position:sticky; left:0; z-index:3; background:#f8f9fa;"></th>
+            <th style="position:sticky; left:140px; z-index:3; background:#f8f9fa; min-width:50px;">Budget</th>
+            {% set ns = namespace(prev_month=-1) %}
             {% for d in date_list %}
-            <th class="text-center {{ 'table-primary' if d == today else '' }}" style="min-width:58px;">
-              {{ d.strftime('%a %d') }}
+              {% if d.month != ns.prev_month %}
+                {% set ns.prev_month = d.month %}
+                <th class="wk-header {{ 'month-divider' if not loop.first else '' }}">{{ d.strftime('%b') }}</th>
+              {% else %}{# skip #}{% endif %}
+            {% endfor %}
+          </tr>
+          <!-- Day row -->
+          <tr>
+            <th style="min-width:140px; position:sticky; left:0; z-index:3; background:#f8f9fa;">Role Group</th>
+            <th style="position:sticky; left:140px; z-index:3; background:#f8f9fa; min-width:50px;">Needed</th>
+            {% for d in date_list %}
+            <th class="{{ 'col-today' if d == today else '' }}
+                       {{ 'month-divider' if d.day == 1 and not loop.first else '' }}"
+                style="min-width:28px; font-size:.65rem;">
+              <span class="{{ 'text-danger' if d.weekday() == 6 else '' }}">
+                {{ d.strftime('%a')[0] }}<br>{{ d.day }}
+              </span>
             </th>
             {% endfor %}
           </tr>
@@ -69,19 +96,28 @@
         <tbody>
           {% for role_name, budget_count in budgeted.items() %}
           <tr>
-            <td class="fw-medium">{{ role_name }}</td>
-            <td class="text-center fw-bold">{{ budget_count }}</td>
+            <td class="emp-name">{{ role_name }}</td>
+            <td class="text-center fw-bold"
+                style="position:sticky; left:140px; z-index:2; background:#f8f9fa;">{{ budget_count }}</td>
             {% for d in date_list %}
             {% set ds = d.isoformat() %}
             {% set count = role_coverage.get(role_name, {}).get(ds, 0) %}
-            {% if d.weekday() >= 6 %}
-            <td class="text-center text-muted">—</td>
+            {% if d.weekday() == 6 %}
+            <td class="cell-weekend {{ 'col-today' if d == today else '' }}
+                        {{ 'month-divider' if d.day == 1 and not loop.first else '' }}">—</td>
             {% elif count < budget_count %}
-            <td class="text-center role-gap fw-bold">{{ count }}/{{ budget_count }}</td>
+            <td class="gap-cell {{ 'col-today' if d == today else '' }}
+                        {{ 'month-divider' if d.day == 1 and not loop.first else '' }}"
+                title="{{ count }}/{{ budget_count }} — {{ budget_count - count }} short">
+              {{ count }}/{{ budget_count }}
+            </td>
             {% elif count > budget_count %}
-            <td class="text-center role-over">{{ count }}/{{ budget_count }}</td>
+            <td class="over-cell {{ 'col-today' if d == today else '' }}
+                        {{ 'month-divider' if d.day == 1 and not loop.first else '' }}"
+                title="{{ count }}/{{ budget_count }}">{{ count }}/{{ budget_count }}</td>
             {% else %}
-            <td class="text-center role-ok">{{ count }}/{{ budget_count }}</td>
+            <td class="ok-cell {{ 'col-today' if d == today else '' }}
+                        {{ 'month-divider' if d.day == 1 and not loop.first else '' }}">{{ count }}</td>
             {% endif %}
             {% endfor %}
           </tr>
@@ -94,7 +130,7 @@
 {% endif %}
 
 <!-- Employee grid -->
-<div class="card shadow-sm mb-4">
+<div class="card shadow-sm mb-3">
   <div class="card-header fw-semibold"><i class="bi bi-grid me-2"></i>Assigned Employees</div>
   <div class="card-body p-2">
     {% if assigned_employees %}
@@ -102,10 +138,24 @@
       <table class="sched-table">
         <thead>
           <tr>
+            <th style="min-width:140px; position:sticky; left:0; z-index:3; background:#f8f9fa;"></th>
+            {% set ns2 = namespace(prev_month=-1) %}
+            {% for d in date_list %}
+              {% if d.month != ns2.prev_month %}
+                {% set ns2.prev_month = d.month %}
+                <th class="wk-header {{ 'month-divider' if not loop.first else '' }}">{{ d.strftime('%b') }}</th>
+              {% else %}{# skip #}{% endif %}
+            {% endfor %}
+          </tr>
+          <tr>
             <th style="min-width:140px; position:sticky; left:0; z-index:3; background:#f8f9fa;">Employee</th>
             {% for d in date_list %}
-            <th class="{{ 'col-today' if d == today else '' }}" style="min-width:68px;">
-              {{ d.strftime('%a') }}<br><span class="fw-normal text-muted">{{ d.strftime('%d/%m') }}</span>
+            <th class="{{ 'col-today' if d == today else '' }}
+                       {{ 'month-divider' if d.day == 1 and not loop.first else '' }}"
+                style="min-width:28px; font-size:.65rem;">
+              <span class="{{ 'text-danger' if d.weekday() == 6 else '' }}">
+                {{ d.strftime('%a')[0] }}<br>{{ d.day }}
+              </span>
             </th>
             {% endfor %}
           </tr>
@@ -114,21 +164,38 @@
           {% for emp in assigned_employees %}
           <tr>
             <td class="emp-name">
-              {{ emp.name }}<br>
-              <small class="text-muted">{{ emp.role or '' }}</small>
+              {{ emp.name }}<br><small class="text-muted">{{ emp.role or '' }}</small>
             </td>
             {% for d in date_list %}
             {% set ds = d.isoformat() %}
             {% set cell = grid.get(emp.id, {}).get(ds, {}) %}
-            {% set status = cell.get('status', 'available') %}
-            {% if d.weekday() >= 6 and status == 'available' %}
-            <td class="cell-weekend {{ 'col-today' if d == today else '' }}">—</td>
-            {% else %}
-            <td class="cell-{{ status }} {{ 'col-today' if d == today else '' }}"
-                title="{{ cell.get('project_name', '') }}">
-              {{ cell.get('label', '') }}
+            {% set status = cell.get('status', 'sunday' if d.weekday() == 6 else 'available') %}
+            {% set ov_id = cell.get('override_id', '') %}
+            {% set css_class = 'cell-weekend' if status == 'sunday' else 'cell-' + status %}
+            {% set pid = cell.get('project_id') or (cell.get('override_project_id') | int(0) or None) %}
+            {% set colours = project_colour_map.get(pid) if pid else None %}
+            {% set cell_style = ('background:' + colours[0] + ';color:' + colours[1] + ';') if (status == 'assigned' and colours) else '' %}
+            <td class="{{ css_class }} sched-clickable {{ 'col-today' if d == today else '' }}
+                        {{ 'month-divider' if d.day == 1 and not loop.first else '' }}"
+                style="{{ cell_style }}"
+                title="{{ cell.get('nwd_reason', '') or cell.get('project_name', '') or cell.get('label', status.title()) }}"
+                data-emp-id="{{ emp.id }}"
+                data-emp-name="{{ emp.name }}"
+                data-date="{{ ds }}"
+                data-override-id="{{ ov_id }}"
+                data-override-status="{{ cell.get('override_status', '') }}"
+                data-override-project="{{ cell.get('override_project_id', '') }}"
+                onclick="openSchedModal(this)">
+              {% if status == 'assigned' %}
+                {% set pname = cell.get('project_name', '') %}
+                <span style="font-size:.6rem;" class="{{ 'cell-override-dot' if ov_id else '' }}">{{ pname[:8] if pname else '—' }}</span>
+              {% elif status == 'sunday' %}—
+              {% elif status == 'rdo' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.6rem;">{{ cell.get('label', 'RDO') }}</span>
+              {% elif status == 'r_and_r' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">R&R</span>
+              {% elif status == 'travel' %}<i class="bi bi-airplane-fill {{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.6rem;"></i>
+              {% elif status == 'leave' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">L</span>
+              {% else %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">&bull;</span>{% endif %}
             </td>
-            {% endif %}
             {% endfor %}
           </tr>
           {% endfor %}
@@ -141,20 +208,94 @@
   </div>
 </div>
 
-<!-- Current assignments list -->
+<!-- Legend -->
+<div class="d-flex gap-2 flex-wrap mb-4 align-items-center">
+  <span class="small text-muted fw-medium">Legend:</span>
+  <span class="badge px-2" style="background:#cfe2ff;color:#084298;">On this Project</span>
+  <span class="badge px-2" style="background:#d1e7dd;color:#0a3622;">Available</span>
+  <span class="badge px-2" style="background:#ffe5d0;color:#6c3a00;">RDO</span>
+  <span class="badge px-2" style="background:#e0cffc;color:#3d1a78;">R&amp;R</span>
+  <span class="badge px-2" style="background:#d2f4ea;color:#0b4c34;">Travel</span>
+  <span class="badge px-2" style="background:#fff3cd;color:#664d03;">Leave</span>
+  <span class="badge px-2" style="background:#f8d7da;color:#842029;">Gap (understaffed)</span>
+</div>
+
+<!-- Equipment Coverage -->
+{% if equip_coverage %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold d-flex align-items-center justify-content-between">
+    <span><i class="bi bi-truck me-2"></i>Equipment</span>
+    <a href="{{ url_for('project_dashboard', project_id=project.id) }}#tab-scheduling"
+       class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-pencil me-1"></i>Manage Requirements
+    </a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0" style="font-size:.85rem;">
+      <thead class="table-light">
+        <tr>
+          <th>Requirement</th>
+          <th class="text-center">Need</th>
+          <th class="text-center">Assigned</th>
+          <th class="text-center">Gap</th>
+          <th>Machines</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in equip_coverage %}
+        <tr class="{{ 'table-danger' if row.gap > 0 else '' }}">
+          <td class="fw-semibold">{{ row.label }}</td>
+          <td class="text-center">{{ row.required }}</td>
+          <td class="text-center">{{ row.assigned }}</td>
+          <td class="text-center">
+            {% if row.gap > 0 %}
+              <span class="badge bg-danger">{{ row.gap }} missing</span>
+            {% elif row.assigned > row.required %}
+              <span class="badge bg-warning-subtle text-warning">+{{ row.assigned - row.required }}</span>
+            {% else %}
+              <span class="badge bg-success-subtle text-success">Met</span>
+            {% endif %}
+          </td>
+          <td>
+            {% for item in row.machines %}
+            <span class="badge {{ 'bg-danger' if item.broken else 'bg-primary-subtle text-primary' }} me-1">
+              <i class="bi bi-{{ 'tools' if item.broken else ('wrench' if item.assignment.machine_id else 'building') }} me-1"></i>
+              {{ item.assignment.display_name }}
+              {% if item.broken %}
+                <span class="fw-normal">(Broken Down{% if item.broken.anticipated_return %} — est. {{ item.broken.anticipated_return.strftime('%d/%m') }}{% endif %})</span>
+              {% endif %}
+            </span>
+            {% else %}
+            <span class="text-muted small fst-italic">None assigned —
+              <a href="{{ url_for('project_dashboard', project_id=project.id) }}#tab-scheduling">assign now</a>
+            </span>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-light border small mb-4">
+  <i class="bi bi-truck me-2 text-muted"></i>
+  No equipment requirements set for this project.
+  <a href="{{ url_for('project_dashboard', project_id=project.id) }}#tab-scheduling">Set requirements</a>
+</div>
+{% endif %}
+
+<!-- Active assignments list -->
 {% if assignments %}
 <div class="card shadow-sm mb-4">
-  <div class="card-header fw-semibold"><i class="bi bi-list-check me-2"></i>Active Assignments</div>
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-list-check me-2"></i>Active Assignments</span>
+  </div>
   <div class="card-body p-0">
     <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
       <thead class="table-light">
         <tr>
-          <th>Employee</th>
-          <th>Role</th>
-          <th>From</th>
-          <th>To</th>
-          <th>Notes</th>
-          <th></th>
+          <th>Employee</th><th>Role</th><th>From</th><th>To</th><th>Notes</th><th></th>
         </tr>
       </thead>
       <tbody>
@@ -163,11 +304,11 @@
           <td>{{ a.employee.name }}</td>
           <td class="text-muted">{{ a.employee.role or '—' }}</td>
           <td>{{ a.date_from.strftime('%d/%m/%Y') }}</td>
-          <td>{{ a.date_to.strftime('%d/%m/%Y') if a.date_to else '<span class="text-success">Ongoing</span>'|safe }}</td>
+          <td>{{ a.date_to.strftime('%d/%m/%Y') if a.date_to else '<span class="text-success fw-medium">Ongoing</span>'|safe }}</td>
           <td class="text-muted">{{ a.notes or '' }}</td>
           <td>
-            <form method="POST" action="{{ url_for('scheduling_assign_delete', pa_id=a.id) }}" class="d-inline"
-                  onsubmit="return confirm('Remove this assignment?')">
+            <form method="POST" action="{{ url_for('scheduling_assign_delete', pa_id=a.id) }}"
+                  class="d-inline" onsubmit="return confirm('Remove this assignment?')">
               <input type="hidden" name="redirect_to" value="scheduling_project">
               <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1">
                 <i class="bi bi-trash"></i>
@@ -182,15 +323,7 @@
 </div>
 {% endif %}
 
-<!-- Legend -->
-<div class="d-flex gap-3 flex-wrap mb-4">
-  <span class="badge" style="background:#cfe2ff;color:#084298;font-size:.85rem;">On this project</span>
-  <span class="badge" style="background:#d1e7dd;color:#0a3622;font-size:.85rem;">Available</span>
-  <span class="badge" style="background:#ffe5d0;color:#6c3a00;font-size:.85rem;">RDO</span>
-  <span class="badge" style="background:#fff3cd;color:#664d03;font-size:.85rem;">Leave</span>
-</div>
-
-<!-- Add Assignment / Leave side by side -->
+<!-- Add forms -->
 <div class="row g-3">
   <div class="col-md-6">
     <div class="card shadow-sm">
@@ -231,7 +364,7 @@
 
   <div class="col-md-6">
     <div class="card shadow-sm">
-      <div class="card-header fw-semibold"><i class="bi bi-calendar-x me-2"></i>Record Leave</div>
+      <div class="card-header fw-semibold"><i class="bi bi-calendar-x me-2"></i>Record Leave / R&R / Travel</div>
       <div class="card-body">
         <form method="POST" action="{{ url_for('scheduling_leave_add') }}">
           <input type="hidden" name="redirect_project_id" value="{{ project.id }}">
@@ -257,8 +390,10 @@
           <div class="mb-2">
             <label class="form-label small mb-1">Type</label>
             <select class="form-select form-select-sm" name="leave_type">
-              <option value="annual">Annual</option>
-              <option value="sick">Sick</option>
+              <option value="r_and_r">R&R (Rest &amp; Relaxation)</option>
+              <option value="travel">Travel Day</option>
+              <option value="annual">Annual Leave</option>
+              <option value="sick">Sick Leave</option>
               <option value="personal">Personal</option>
               <option value="other">Other</option>
             </select>
@@ -267,10 +402,100 @@
             <label class="form-label small mb-1">Notes (optional)</label>
             <input type="text" class="form-control form-control-sm" name="notes">
           </div>
-          <button type="submit" class="btn btn-warning btn-sm w-100">Record Leave</button>
+          <button type="submit" class="btn btn-warning btn-sm w-100">Record</button>
         </form>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Schedule Override Modal -->
+<div class="modal fade" id="schedOverrideModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold" id="schedModalTitle">Edit Schedule</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('schedule_override') }}">
+        <div class="modal-body py-3">
+          <input type="hidden" name="employee_id" id="schedEmpId">
+          <input type="hidden" name="date" id="schedDate">
+          <input type="hidden" name="week" id="schedWeek" value="{{ week_start.isoformat() }}">
+          <input type="hidden" name="redirect_project_id" id="schedRedirectProject" value="{{ project.id }}">
+          <input type="hidden" name="action" id="schedAction" value="set">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Status</label>
+            <select class="form-select form-select-sm" name="status" id="schedStatus"
+                    onchange="schedStatusChanged(this)">
+              <option value="available">Available</option>
+              <option value="project">On Job →</option>
+              <option value="r_and_r">R&amp;R</option>
+              <option value="travel">Travel</option>
+              <option value="annual">Annual Leave</option>
+              <option value="sick">Sick Leave</option>
+              <option value="personal">Personal Leave</option>
+              <option value="rdo">RDO (manual)</option>
+              <option value="other">Other Leave</option>
+            </select>
+          </div>
+          <div class="mb-2" id="schedProjectDiv" style="display:none;">
+            <label class="form-label small fw-semibold mb-1">Project</label>
+            <select class="form-select form-select-sm" name="project_id" id="schedProjectId">
+              <option value="">— select —</option>
+              {% for p in all_projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-1">
+            <label class="form-label small fw-semibold mb-1">Notes (optional)</label>
+            <input type="text" class="form-control form-control-sm" name="notes" id="schedNotes">
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-danger me-auto" id="schedClearBtn"
+                  onclick="document.getElementById('schedAction').value='clear';this.closest('form').submit();"
+                  style="display:none;">
+            <i class="bi bi-x-circle me-1"></i>Clear
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function schedStatusChanged(sel) {
+  document.getElementById('schedProjectDiv').style.display = sel.value === 'project' ? '' : 'none';
+}
+function openSchedModal(td) {
+  const empId = td.dataset.empId;
+  const empName = td.dataset.empName;
+  const dt = td.dataset.date;
+  const ovId = td.dataset.overrideId;
+  const ovStatus = td.dataset.overrideStatus;
+  const ovProject = td.dataset.overrideProject;
+
+  const d = new Date(dt + 'T00:00:00');
+  const displayDate = d.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+  document.getElementById('schedModalTitle').textContent = empName + '  —  ' + displayDate;
+  document.getElementById('schedEmpId').value = empId;
+  document.getElementById('schedDate').value = dt;
+  document.getElementById('schedAction').value = 'set';
+  document.getElementById('schedNotes').value = '';
+
+  const sel = document.getElementById('schedStatus');
+  sel.value = ovStatus || 'available';
+  schedStatusChanged(sel);
+  if (ovProject) document.getElementById('schedProjectId').value = ovProject;
+
+  document.getElementById('schedClearBtn').style.display = ovId ? '' : 'none';
+  new bootstrap.Modal(document.getElementById('schedOverrideModal')).show();
+}
+</script>
 {% endblock %}

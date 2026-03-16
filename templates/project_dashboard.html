@@ -41,6 +41,7 @@
 {% endblock %}
 
 {% block content %}
+<!-- ── Page Header ─────────────────────────────────────────────────── -->
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <div>
     <h2 class="fw-bold mb-0">
@@ -72,1040 +73,1337 @@
     <a href="{{ url_for('entries') }}?project_id={{ project.id }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-list-ul me-1"></i>Entry History
     </a>
-    <a href="{{ url_for('admin_projects') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-gear me-1"></i>Project Settings
-    </a>
   </div>
 </div>
 
-{% if not progress %}
-<!-- No planned data -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-body text-center py-5 text-muted">
-    <i class="bi bi-cloud-upload fs-1 d-block mb-2 text-primary"></i>
-    <h5>No planned data uploaded yet</h5>
-    <p class="mb-3">Upload your planned schedule (Excel/CSV) to see progress tracking and the Gantt chart.</p>
-    <button class="btn btn-primary btn-sm" type="button"
-            data-bs-toggle="collapse" data-bs-target="#uploadForm">
-      <i class="bi bi-upload me-1"></i>Upload Planned Data
+<!-- ── Tab Navigation ─────────────────────────────────────────────── -->
+<ul class="nav nav-tabs mb-0 border-bottom-0" id="projectTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="tab-progress-btn" data-bs-toggle="tab"
+            data-bs-target="#tab-progress" type="button" role="tab">
+      <i class="bi bi-bar-chart-line me-1"></i>Progress
     </button>
-  </div>
-</div>
-{% else %}
-
-<!-- ── Summary Cards ──────────────────────────────────────────────── -->
-<div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
-    <div class="card border-0 shadow-sm text-center py-3">
-      <div class="fs-4 fw-bold text-primary">{{ progress.total_planned | round(0) | int }} m²</div>
-      <div class="small text-muted">Total Planned</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card border-0 shadow-sm text-center py-3">
-      <div class="fs-4 fw-bold text-success">{{ progress.total_actual | round(0) | int }} m²</div>
-      <div class="small text-muted">Installed</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card border-0 shadow-sm text-center py-3">
-      <div class="fs-4 fw-bold text-warning">{{ progress.total_remaining | round(0) | int }} m²</div>
-      <div class="small text-muted">Remaining</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card border-0 shadow-sm text-center py-3">
-      <div class="fs-4 fw-bold {% if progress.overall_pct >= 100 %}text-success{% elif progress.overall_pct >= 50 %}text-primary{% else %}text-danger{% endif %}">
-        {{ progress.overall_pct }}%
-      </div>
-      <div class="small text-muted">Complete</div>
-    </div>
-  </div>
-</div>
-
-<!-- ── Overall Progress Bar ───────────────────────────────────────── -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <span class="fw-semibold">Overall Progress</span>
-      <span class="badge bg-primary-subtle text-primary fs-6">{{ progress.overall_pct }}%</span>
-    </div>
-    <div class="progress mb-3" style="height:20px;">
-      <div class="progress-bar bg-success" style="width:{{ progress.overall_pct }}%">
-        {% if progress.overall_pct > 8 %}{{ progress.overall_pct }}%{% endif %}
-      </div>
-    </div>
-    <div class="row g-3 text-center small">
-      {% if progress.install_rate %}
-      <div class="col-auto">
-        <div class="fw-semibold">{{ progress.install_rate }} m²/hr</div>
-        <div class="text-muted">Install Rate</div>
-      </div>
-      {% endif %}
-      {% if progress.current_crew %}
-      <div class="col-auto">
-        <div class="fw-semibold">{{ progress.current_crew }}</div>
-        <div class="text-muted">Current Crew</div>
-      </div>
-      {% endif %}
-      {% if project.planned_crew %}
-      <div class="col-auto">
-        <div class="fw-semibold">{{ project.planned_crew }}</div>
-        <div class="text-muted">Budgeted Crew</div>
-      </div>
-      {% endif %}
-      {% if project.hours_per_day %}
-      <div class="col-auto">
-        <div class="fw-semibold">{{ project.hours_per_day }}h</div>
-        <div class="text-muted">Hrs / Day</div>
-      </div>
-      {% endif %}
-      {% if project.quoted_days %}
-      <div class="col-auto">
-        <div class="fw-semibold">{{ project.quoted_days }}</div>
-        <div class="text-muted">Quoted Days</div>
-      </div>
-      {% endif %}
-      {% if gantt_data and gantt_data.variance_days is not none %}
-      <div class="col-auto">
-        <div class="fw-semibold {% if gantt_data.variance_days > 0 %}text-danger{% elif gantt_data.variance_days < 0 %}text-success{% endif %}">
-          {% if gantt_data.variance_days > 0 %}+{% endif %}{{ gantt_data.variance_days }}d
-        </div>
-        <div class="text-muted">Schedule</div>
-      </div>
-      {% endif %}
-      {% if gantt_data and gantt_data.est_finish %}
-      <div class="col-auto">
-        <div class="fw-semibold">{{ gantt_data.est_finish }}</div>
-        <div class="text-muted">Forecast Finish</div>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-</div>
-
-<!-- ── Gantt Chart ────────────────────────────────────────────────── -->
-{% if gantt_data %}
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-bar-chart-steps me-2 text-primary"></i>Schedule Gantt</h5>
-    <div class="d-flex flex-wrap gap-3 small text-muted align-items-center">
-      <span><span style="display:inline-block;width:14px;height:10px;background:deeppink;opacity:0.4;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Planned</span>
-      <span><span style="display:inline-block;width:14px;height:10px;background:#00c060;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Actual</span>
-      <span><span style="display:inline-block;width:14px;height:10px;background:gold;border:1px dashed #aaa;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Forecast</span>
-      <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,105,180,0.4);vertical-align:middle;margin-right:3px;"></span>Weekend</span>
-      <span><span style="display:inline-block;width:12px;height:10px;background:rgba(100,180,255,0.45);vertical-align:middle;margin-right:3px;"></span>Non-work</span>
-      <span><span style="display:inline-block;width:12px;height:10px;background:rgba(0,160,210,0.45);vertical-align:middle;margin-right:3px;"></span>Wet Weather</span>
-      <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,140,0,0.4);vertical-align:middle;margin-right:3px;"></span>Client Delay</span>
-      <span><span style="display:inline-block;width:2px;height:12px;background:#dc3545;vertical-align:middle;margin-right:3px;"></span>Today</span>
-      <span><span style="display:inline-block;width:2px;height:12px;background:#0d6efd;vertical-align:middle;margin-right:3px;"></span>Target</span>
-    </div>
-  </div>
-  <div class="card-body pb-2">
-    <div class="gantt-wrap">
-      <div class="gantt-container">
-
-        <!-- Month / week header -->
-        <div style="display:flex;">
-          <div style="min-width:160px;max-width:160px;"></div>
-          <div style="flex:1;position:relative;" class="gantt-header-row">
-            {% for m in gantt_data.month_markers %}
-            <div class="gantt-month-label" style="left:{{ m.left_pct }}%;">{{ m.label }}</div>
-            {% endfor %}
-            {% for w in gantt_data.week_markers %}
-            <div class="gantt-week-tick" style="left:{{ w.left_pct }}%;"></div>
-            <div class="gantt-week-label" style="left:{{ w.left_pct }}%;">{{ w.date }}</div>
-            {% endfor %}
-          </div>
-          <div style="min-width:72px;"></div>
-        </div>
-
-        <!-- Task rows -->
-        {% for row in gantt_data.rows %}
-        <div style="display:flex;margin-bottom:4px;">
-
-          <!-- Label -->
-          <div style="min-width:160px;max-width:160px;padding-right:8px;display:flex;align-items:center;">
-            <div style="font-size:0.74rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                 title="{{ row.label }}">{{ row.label }}</div>
-          </div>
-
-          <!-- Bar area -->
-          <div style="flex:1;position:relative;height:52px;overflow:hidden;">
-
-            <!-- Shade stripes (Sunday=pink, non-work=blue) -->
-            {% for s in gantt_data.shade_stripes %}
-            <div class="gantt-stripe gantt-stripe-{{ s.type }}"
-                 style="left:{{ s.left }}%;width:{{ s.w }}%;"></div>
-            {% endfor %}
-
-            <!-- Today line -->
-            {% if gantt_data.today_pct is not none and gantt_data.today_pct >= 0 and gantt_data.today_pct <= 100 %}
-            <div class="gantt-today-line" style="left:{{ gantt_data.today_pct }}%;"></div>
-            {% endif %}
-
-            <!-- Target finish line -->
-            {% if gantt_data.target_finish_pct is not none %}
-            <div class="gantt-target-line" style="left:{{ gantt_data.target_finish_pct }}%;"></div>
-            {% endif %}
-
-            <!-- Planned days (top row, deeppink) -->
-            {% for lft in row.planned_days %}
-            <div class="gantt-day gantt-planned"
-                 style="left:{{ lft }}%;width:{{ gantt_data.day_width_pct }}%;"></div>
-            {% endfor %}
-
-            <!-- Actual days (bottom row, green) -->
-            {% for lft in row.actual_days %}
-            <div class="gantt-day gantt-actual"
-                 style="left:{{ lft }}%;width:{{ gantt_data.day_width_pct }}%;"></div>
-            {% endfor %}
-
-            <!-- Forecast days (bottom row, gold) -->
-            {% for lft in row.forecast_days %}
-            <div class="gantt-day gantt-forecast"
-                 style="left:{{ lft }}%;width:{{ gantt_data.day_width_pct }}%;"></div>
-            {% endfor %}
-
-          </div>
-
-          <!-- Variance label -->
-          <div class="gantt-var {% if row.variance_days is not none %}{% if row.variance_days > 0 %}gantt-var-late{% elif row.variance_days < 0 %}gantt-var-early{% else %}gantt-var-ontime{% endif %}{% endif %}">
-            {% if row.variance_days is not none %}
-              {% if row.variance_days > 0 %}+{{ row.variance_days }}d
-              {% elif row.variance_days < 0 %}{{ row.variance_days }}d
-              {% else %}On time
-              {% endif %}
-            {% endif %}
-          </div>
-
-        </div>
-        {% endfor %}
-
-        <!-- Footer axis labels -->
-        <div style="display:flex;margin-top:4px;">
-          <div style="min-width:160px;max-width:160px;"></div>
-          <div style="flex:1;position:relative;height:18px;">
-            {% if gantt_data.today_pct is not none and gantt_data.today_pct >= 0 and gantt_data.today_pct <= 100 %}
-            <div style="position:absolute;left:{{ gantt_data.today_pct }}%;transform:translateX(-50%);
-                        font-size:0.6rem;font-weight:700;color:#dc3545;white-space:nowrap;">Today</div>
-            {% endif %}
-            {% if gantt_data.target_finish_pct is not none %}
-            <div style="position:absolute;left:{{ gantt_data.target_finish_pct }}%;transform:translateX(-50%);
-                        font-size:0.6rem;font-weight:700;color:#0d6efd;white-space:nowrap;">Target</div>
-            {% endif %}
-          </div>
-          <div style="min-width:72px;"></div>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- Summary box -->
-    <div class="mt-3 p-3 rounded small" style="background:#f8f9fa;font-family:monospace;border:1px solid #dee2e6;">
-      <div><strong>TARGET FINISH: </strong>{{ gantt_data.target_finish or '—' }}</div>
-      <div><strong>EST. FINISH:   </strong>{{ gantt_data.est_finish or '—' }}</div>
-      {% if gantt_data.variance_days is not none %}
-      <div class="{% if gantt_data.variance_days > 0 %}text-danger{% elif gantt_data.variance_days < 0 %}text-success{% else %}text-muted{% endif %} fw-bold">
-        VARIANCE:      {% if gantt_data.variance_days > 0 %}+{% endif %}{{ gantt_data.variance_days }} DAYS
-        {% if gantt_data.variance_days > 0 %} (BEHIND){% elif gantt_data.variance_days < 0 %} (AHEAD){% else %} (ON SCHEDULE){% endif %}
-      </div>
-      {% endif %}
-    </div>
-
-  </div>
-</div>
-{% endif %}{# end if gantt_data #}
-
-<!-- ── Delay Summary ──────────────────────────────────────────────── -->
-{% if delay_summary %}
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-clock-history me-2 text-danger"></i>Delay Summary</h5>
-    <button class="btn btn-sm btn-outline-secondary" type="button"
-            data-bs-toggle="collapse" data-bs-target="#delaySummaryBody">
-      <i class="bi bi-chevron-down me-1"></i>Toggle
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-scheduling-btn" data-bs-toggle="tab"
+            data-bs-target="#tab-scheduling" type="button" role="tab">
+      <i class="bi bi-calendar3 me-1"></i>Scheduling
     </button>
-  </div>
-  <div class="collapse show" id="delaySummaryBody">
-  <div class="card-body p-0">
-    <table class="table table-sm mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Reason</th>
-          <th>Type</th>
-          <th class="text-end">Events</th>
-          <th class="text-end">Hours</th>
-          <th class="text-end">Schedule Impact</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for cat in delay_summary %}
-        {% set hrs_per_day = project.hours_per_day or 8 %}
-        {% set impact_days = (cat.hours / hrs_per_day) | round(1) %}
-        <tr>
-          <td class="fw-semibold small">{{ cat.reason }}</td>
-          <td>
-            {% if cat.billable %}
-              <span class="badge bg-danger-subtle text-danger">Client (Billable)</span>
-            {% else %}
-              <span class="badge bg-secondary-subtle text-secondary">Own (Non-billable)</span>
-            {% endif %}
-          </td>
-          <td class="text-end small">{{ cat.events }}</td>
-          <td class="text-end small">{{ cat.hours }}h</td>
-          <td class="text-end small text-muted">
-            ~{{ impact_days }} day{{ 's' if impact_days != 1.0 }}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot class="table-light">
-        <tr>
-          <td colspan="2" class="fw-semibold small">Total</td>
-          <td class="text-end fw-semibold small">{{ delay_summary | sum(attribute='events') }}</td>
-          <td class="text-end fw-semibold small">{{ delay_summary | sum(attribute='hours') | round(1) }}h</td>
-          <td class="text-end small text-muted">
-            ~{{ (delay_summary | sum(attribute='hours') / (project.hours_per_day or 8)) | round(1) }} days
-          </td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-  <div class="card-footer bg-white small text-muted">
-    <i class="bi bi-info-circle me-1"></i>
-    Schedule impact = delay hours ÷ {{ project.hours_per_day or 8 }}h/day.
-    <strong>Client delays</strong> extend the project end date and should be billed back.
-    <strong>Own delays</strong> (wet weather, breakdowns) are absorbed internally.
-  </div>
-  </div>{# end collapse #}
-</div>
-{% endif %}
-
-<!-- ── Progress Table ─────────────────────────────────────────────── -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-table me-2 text-primary"></i>Progress by Lot / Material</h5>
-    <button class="btn btn-sm btn-outline-secondary" type="button"
-            data-bs-toggle="collapse" data-bs-target="#progressTableBody">
-      <i class="bi bi-chevron-down me-1"></i>Toggle
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-settings-btn" data-bs-toggle="tab"
+            data-bs-target="#tab-settings" type="button" role="tab">
+      <i class="bi bi-gear me-1"></i>Settings
     </button>
-  </div>
-  <div class="collapse show" id="progressTableBody">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-sm table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>Lot</th>
-            <th>Material</th>
-            <th class="text-end">Planned m²</th>
-            <th class="text-end">Actual m²</th>
-            <th class="text-end">Remaining</th>
-            <th style="min-width:120px;">Progress</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for task in progress.tasks %}
-          <tr>
-            <td class="fw-semibold small">{{ task.lot or '—' }}</td>
-            <td class="small">{{ task.material or '—' }}</td>
-            <td class="text-end small">{{ task.planned_sqm }}</td>
-            <td class="text-end small">{{ task.actual_sqm }}</td>
-            <td class="text-end small {% if task.remaining == 0 %}text-success fw-semibold{% endif %}">
-              {{ task.remaining }}
-            </td>
-            <td>
-              <div class="d-flex align-items-center gap-2">
-                <div class="progress flex-grow-1" style="height:10px;">
-                  <div class="progress-bar {% if task.pct_complete >= 100 %}bg-success{% elif task.pct_complete >= 50 %}bg-primary{% else %}bg-warning{% endif %}"
-                       style="width:{{ task.pct_complete }}%"></div>
-                </div>
-                <span class="small text-muted" style="min-width:36px;">{{ task.pct_complete }}%</span>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot class="table-light fw-semibold">
-          <tr>
-            <td colspan="2">Total</td>
-            <td class="text-end">{{ progress.total_planned }}</td>
-            <td class="text-end text-success">{{ progress.total_actual }}</td>
-            <td class="text-end">{{ progress.total_remaining }}</td>
-            <td>
-              <div class="d-flex align-items-center gap-2">
-                <div class="progress flex-grow-1" style="height:10px;">
-                  <div class="progress-bar bg-success" style="width:{{ progress.overall_pct }}%"></div>
-                </div>
-                <span class="small" style="min-width:36px;">{{ progress.overall_pct }}%</span>
-              </div>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </div>
-  </div>{# end collapse #}
-</div>
-
-{% endif %}{# end if progress #}
-
-<!-- ── Machines on Site ────────────────────────────────────────────── -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-truck me-2 text-secondary"></i>Machines on Site</h5>
-    <button class="btn btn-sm btn-outline-secondary" type="button"
-            data-bs-toggle="collapse" data-bs-target="#assignEquipCard">
-      <i class="bi bi-wrench me-1"></i>Assign Own Equipment
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-documents-btn" data-bs-toggle="tab"
+            data-bs-target="#tab-documents" type="button" role="tab">
+      <i class="bi bi-folder2-open me-1"></i>Documents
     </button>
-  </div>
-  <div class="card-body p-0">
+  </li>
+</ul>
 
-    <!-- Own Equipment subsection -->
-    <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center">
-      <span class="fw-semibold small text-secondary">
-        <i class="bi bi-wrench me-1"></i>Own Equipment
-      </span>
-      <span class="badge bg-secondary-subtle text-secondary">{{ owned_machines_list | length }} assigned</span>
+<div class="tab-content border border-top-0 rounded-bottom p-3 bg-white shadow-sm mb-4">
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB 1: PROGRESS                                               -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade show active" id="tab-progress" role="tabpanel">
+
+    {% if not progress %}
+    <!-- No planned data -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body text-center py-5 text-muted">
+        <i class="bi bi-cloud-upload fs-1 d-block mb-2 text-primary"></i>
+        <h5>No planned data uploaded yet</h5>
+        <p class="mb-3">Upload your planned schedule (Excel/CSV) to see progress tracking and the Gantt chart.</p>
+        <button class="btn btn-primary btn-sm" type="button"
+                onclick="document.getElementById('tab-settings-btn').click(); setTimeout(function(){ document.getElementById('uploadForm').classList.add('show'); }, 300);">
+          <i class="bi bi-upload me-1"></i>Upload Planned Data
+        </button>
+      </div>
     </div>
-    {% if owned_machines_list %}
-    <table class="table table-sm table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Machine</th>
-          <th>Type</th>
-          <th class="text-end">Hourly Rate</th>
-          <th class="text-end">Est. Daily Cost</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for pm in owned_machines_list %}
-        <tr>
-          <td class="fw-semibold small">{{ pm.machine.name }}</td>
-          <td class="text-muted small">{{ pm.machine.machine_type or '—' }}</td>
-          <td class="text-end small">
-            {% if pm.machine.delay_rate %}${{ '{:,.2f}'.format(pm.machine.delay_rate) }}/hr{% else %}—{% endif %}
-          </td>
-          <td class="text-end small">
-            {% if pm.machine.delay_rate and project.hours_per_day %}
-              ${{ '{:,.2f}'.format(pm.machine.delay_rate * project.hours_per_day) }}
-            {% else %}—{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
     {% else %}
-    <div class="text-center py-3 text-muted small">
-      No own equipment assigned to this project yet.
-    </div>
-    {% endif %}
 
-    <!-- Hired Machines subsection -->
-    <div class="px-3 py-2 bg-light border-top border-bottom d-flex justify-content-between align-items-center mt-0">
-      <span class="fw-semibold small text-secondary">
-        <i class="bi bi-building me-1"></i>Hired Machines
-      </span>
-      <a href="{{ url_for('hire_list') }}?project_id={{ project.id }}" class="small text-primary">Manage</a>
-    </div>
-    {% if hired_machines_list %}
-    <table class="table table-sm table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Machine</th>
-          <th>Type</th>
-          <th>Hire Company</th>
-          <th class="text-end">Daily Cost</th>
-          <th class="text-end">Weekly Cost</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for hm in hired_machines_list %}
-        <tr>
-          <td class="fw-semibold small">{{ hm.machine_name }}</td>
-          <td class="text-muted small">{{ hm.machine_type or '—' }}</td>
-          <td class="small">{{ hm.hire_company or '—' }}</td>
-          <td class="text-end small">
-            {% if hm.cost_per_week %}
-              {% set days_pw = 6 if hm.count_saturdays != False else 5 %}
-              ${{ '{:,.2f}'.format(hm.cost_per_week / days_pw) }}
-            {% else %}—{% endif %}
-          </td>
-          <td class="text-end small">
-            {% if hm.cost_per_week %}${{ '{:,.2f}'.format(hm.cost_per_week) }}{% else %}—{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="text-center py-3 text-muted small">
-      No hired machines active on this project.
-      <a href="{{ url_for('hire_new') }}" class="d-block mt-1">Add a hired machine</a>
-    </div>
-    {% endif %}
-
-    <!-- Assign Own Equipment (collapsible, inline) -->
-    <div class="collapse" id="assignEquipCard">
-      <div class="border-top bg-light px-3 py-3">
-        <div class="fw-semibold small text-secondary mb-2">
-          <i class="bi bi-wrench me-1"></i>Assign Own Equipment to this Project
+    <!-- ── Summary Cards ──────────────────────────────────────────── -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-4 fw-bold text-primary">{{ progress.total_planned | round(0) | int }} m²</div>
+          <div class="small text-muted">Total Planned</div>
         </div>
-        <form method="POST" action="{{ url_for('own_equipment_add', project_id=project.id) }}"
-              class="row g-2 align-items-end">
-          <div class="col-sm-5">
-            <label class="form-label fw-semibold small mb-1">Machine</label>
-            <select name="machine_id" class="form-select form-select-sm" required>
-              <option value="">— Select machine —</option>
-              {% for m in all_machines %}
-              {% if m.id not in assigned_machine_ids %}
-              <option value="{{ m.id }}">{{ m.name }}{% if m.machine_type %} ({{ m.machine_type }}){% endif %}{% if m.delay_rate %} — ${{ m.delay_rate }}/hr{% endif %}</option>
-              {% endif %}
-              {% endfor %}
-            </select>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-4 fw-bold text-success">{{ progress.total_actual | round(0) | int }} m²</div>
+          <div class="small text-muted">Installed</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-4 fw-bold text-warning">{{ progress.total_remaining | round(0) | int }} m²</div>
+          <div class="small text-muted">Remaining</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+          <div class="fs-4 fw-bold {% if progress.overall_pct >= 100 %}text-success{% elif progress.overall_pct >= 50 %}text-primary{% else %}text-danger{% endif %}">
+            {{ progress.overall_pct }}%
           </div>
-          <div class="col-sm-3">
-            <label class="form-label fw-semibold small mb-1">On-site Date (optional)</label>
-            <input type="date" name="assigned_date" class="form-control form-control-sm">
+          <div class="small text-muted">Complete</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Overall Progress Bar ───────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-semibold">Overall Progress</span>
+          <span class="badge bg-primary-subtle text-primary fs-6">{{ progress.overall_pct }}%</span>
+        </div>
+        <div class="progress mb-3" style="height:20px;">
+          <div class="progress-bar bg-success" style="width:{{ progress.overall_pct }}%">
+            {% if progress.overall_pct > 8 %}{{ progress.overall_pct }}%{% endif %}
           </div>
+        </div>
+        <div class="row g-3 text-center small">
+          {% if progress.install_rate %}
           <div class="col-auto">
-            <button type="submit" class="btn btn-secondary btn-sm">
-              <i class="bi bi-plus me-1"></i>Assign
+            <div class="fw-semibold">{{ progress.install_rate }} m²/hr</div>
+            <div class="text-muted">Install Rate</div>
+          </div>
+          {% endif %}
+          {% if progress.current_crew %}
+          <div class="col-auto">
+            <div class="fw-semibold">{{ progress.current_crew }}</div>
+            <div class="text-muted">Current Crew</div>
+          </div>
+          {% endif %}
+          {% if project.planned_crew %}
+          <div class="col-auto">
+            <div class="fw-semibold">{{ project.planned_crew }}</div>
+            <div class="text-muted">Budgeted Crew</div>
+          </div>
+          {% endif %}
+          {% if project.hours_per_day %}
+          <div class="col-auto">
+            <div class="fw-semibold">{{ project.hours_per_day }}h</div>
+            <div class="text-muted">Hrs / Day</div>
+          </div>
+          {% endif %}
+          {% if project.quoted_days %}
+          <div class="col-auto">
+            <div class="fw-semibold">{{ project.quoted_days }}</div>
+            <div class="text-muted">Quoted Days</div>
+          </div>
+          {% endif %}
+          {% if gantt_data and gantt_data.variance_days is not none %}
+          <div class="col-auto">
+            <div class="fw-semibold {% if gantt_data.variance_days > 0 %}text-danger{% elif gantt_data.variance_days < 0 %}text-success{% endif %}">
+              {% if gantt_data.variance_days > 0 %}+{% endif %}{{ gantt_data.variance_days }}d
+            </div>
+            <div class="text-muted">Schedule</div>
+          </div>
+          {% endif %}
+          {% if gantt_data and gantt_data.est_finish %}
+          <div class="col-auto">
+            <div class="fw-semibold">{{ gantt_data.est_finish }}</div>
+            <div class="text-muted">Forecast Finish</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Gantt Chart ────────────────────────────────────────────── -->
+    {% if gantt_data %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-bar-chart-steps me-2 text-primary"></i>Schedule Gantt</h5>
+        <div class="d-flex flex-wrap gap-3 small text-muted align-items-center">
+          <span><span style="display:inline-block;width:14px;height:10px;background:deeppink;opacity:0.4;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Planned</span>
+          <span><span style="display:inline-block;width:14px;height:10px;background:#00c060;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Actual</span>
+          <span><span style="display:inline-block;width:14px;height:10px;background:gold;border:1px dashed #aaa;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Forecast</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,105,180,0.4);vertical-align:middle;margin-right:3px;"></span>Weekend</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(100,180,255,0.45);vertical-align:middle;margin-right:3px;"></span>Non-work</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(0,160,210,0.45);vertical-align:middle;margin-right:3px;"></span>Wet Weather</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,140,0,0.4);vertical-align:middle;margin-right:3px;"></span>Client Delay</span>
+          <span><span style="display:inline-block;width:2px;height:12px;background:#dc3545;vertical-align:middle;margin-right:3px;"></span>Today</span>
+          <span><span style="display:inline-block;width:2px;height:12px;background:#0d6efd;vertical-align:middle;margin-right:3px;"></span>Target</span>
+        </div>
+      </div>
+      <div class="card-body pb-2">
+        <div class="gantt-wrap">
+          <div class="gantt-container">
+
+            <!-- Month / week header -->
+            <div style="display:flex;">
+              <div style="min-width:160px;max-width:160px;"></div>
+              <div style="flex:1;position:relative;" class="gantt-header-row">
+                {% for m in gantt_data.month_markers %}
+                <div class="gantt-month-label" style="left:{{ m.left_pct }}%;">{{ m.label }}</div>
+                {% endfor %}
+                {% for w in gantt_data.week_markers %}
+                <div class="gantt-week-tick" style="left:{{ w.left_pct }}%;"></div>
+                <div class="gantt-week-label" style="left:{{ w.left_pct }}%;">{{ w.date }}</div>
+                {% endfor %}
+              </div>
+              <div style="min-width:72px;"></div>
+            </div>
+
+            <!-- Task rows -->
+            {% for row in gantt_data.rows %}
+            <div style="display:flex;margin-bottom:4px;">
+
+              <!-- Label -->
+              <div style="min-width:160px;max-width:160px;padding-right:8px;display:flex;align-items:center;">
+                <div style="font-size:0.74rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                     title="{{ row.label }}">{{ row.label }}</div>
+              </div>
+
+              <!-- Bar area -->
+              <div style="flex:1;position:relative;height:52px;overflow:hidden;">
+
+                <!-- Shade stripes (Sunday=pink, non-work=blue) -->
+                {% for s in gantt_data.shade_stripes %}
+                <div class="gantt-stripe gantt-stripe-{{ s.type }}"
+                     style="left:{{ s.left }}%;width:{{ s.w }}%;"></div>
+                {% endfor %}
+
+                <!-- Today line -->
+                {% if gantt_data.today_pct is not none and gantt_data.today_pct >= 0 and gantt_data.today_pct <= 100 %}
+                <div class="gantt-today-line" style="left:{{ gantt_data.today_pct }}%;"></div>
+                {% endif %}
+
+                <!-- Target finish line -->
+                {% if gantt_data.target_finish_pct is not none %}
+                <div class="gantt-target-line" style="left:{{ gantt_data.target_finish_pct }}%;"></div>
+                {% endif %}
+
+                <!-- Planned days (top row, deeppink) -->
+                {% for lft in row.planned_days %}
+                <div class="gantt-day gantt-planned"
+                     style="left:{{ lft }}%;width:{{ gantt_data.day_width_pct }}%;"></div>
+                {% endfor %}
+
+                <!-- Actual days (bottom row, green) -->
+                {% for lft in row.actual_days %}
+                <div class="gantt-day gantt-actual"
+                     style="left:{{ lft }}%;width:{{ gantt_data.day_width_pct }}%;"></div>
+                {% endfor %}
+
+                <!-- Forecast days (bottom row, gold) -->
+                {% for lft in row.forecast_days %}
+                <div class="gantt-day gantt-forecast"
+                     style="left:{{ lft }}%;width:{{ gantt_data.day_width_pct }}%;"></div>
+                {% endfor %}
+
+              </div>
+
+              <!-- Variance label -->
+              <div class="gantt-var {% if row.variance_days is not none %}{% if row.variance_days > 0 %}gantt-var-late{% elif row.variance_days < 0 %}gantt-var-early{% else %}gantt-var-ontime{% endif %}{% endif %}">
+                {% if row.variance_days is not none %}
+                  {% if row.variance_days > 0 %}+{{ row.variance_days }}d
+                  {% elif row.variance_days < 0 %}{{ row.variance_days }}d
+                  {% else %}On time
+                  {% endif %}
+                {% endif %}
+              </div>
+
+            </div>
+            {% endfor %}
+
+            <!-- Footer axis labels -->
+            <div style="display:flex;margin-top:4px;">
+              <div style="min-width:160px;max-width:160px;"></div>
+              <div style="flex:1;position:relative;height:18px;">
+                {% if gantt_data.today_pct is not none and gantt_data.today_pct >= 0 and gantt_data.today_pct <= 100 %}
+                <div style="position:absolute;left:{{ gantt_data.today_pct }}%;transform:translateX(-50%);
+                            font-size:0.6rem;font-weight:700;color:#dc3545;white-space:nowrap;">Today</div>
+                {% endif %}
+                {% if gantt_data.target_finish_pct is not none %}
+                <div style="position:absolute;left:{{ gantt_data.target_finish_pct }}%;transform:translateX(-50%);
+                            font-size:0.6rem;font-weight:700;color:#0d6efd;white-space:nowrap;">Target</div>
+                {% endif %}
+              </div>
+              <div style="min-width:72px;"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Summary box -->
+        <div class="mt-3 p-3 rounded small" style="background:#f8f9fa;font-family:monospace;border:1px solid #dee2e6;">
+          <div><strong>TARGET FINISH: </strong>{{ gantt_data.target_finish or '—' }}</div>
+          <div><strong>EST. FINISH:   </strong>{{ gantt_data.est_finish or '—' }}</div>
+          {% if gantt_data.variance_days is not none %}
+          <div class="{% if gantt_data.variance_days > 0 %}text-danger{% elif gantt_data.variance_days < 0 %}text-success{% else %}text-muted{% endif %} fw-bold">
+            VARIANCE:      {% if gantt_data.variance_days > 0 %}+{% endif %}{{ gantt_data.variance_days }} DAYS
+            {% if gantt_data.variance_days > 0 %} (BEHIND){% elif gantt_data.variance_days < 0 %} (AHEAD){% else %} (ON SCHEDULE){% endif %}
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+    {% endif %}{# end if gantt_data #}
+
+    <!-- ── Delay Summary ──────────────────────────────────────────── -->
+    {% if delay_summary %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-clock-history me-2 text-danger"></i>Delay Summary</h5>
+        <button class="btn btn-sm btn-outline-secondary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#delaySummaryBody">
+          <i class="bi bi-chevron-down me-1"></i>Toggle
+        </button>
+      </div>
+      <div class="collapse show" id="delaySummaryBody">
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Reason</th>
+              <th>Type</th>
+              <th class="text-end">Events</th>
+              <th class="text-end">Hours</th>
+              <th class="text-end">Schedule Impact</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cat in delay_summary %}
+            {% set hrs_per_day = project.hours_per_day or 8 %}
+            {% set impact_days = (cat.hours / hrs_per_day) | round(1) %}
+            <tr>
+              <td class="fw-semibold small">{{ cat.reason }}</td>
+              <td>
+                {% if cat.billable %}
+                  <span class="badge bg-danger-subtle text-danger">Client (Billable)</span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary">Own (Non-billable)</span>
+                {% endif %}
+              </td>
+              <td class="text-end small">{{ cat.events }}</td>
+              <td class="text-end small">{{ cat.hours }}h</td>
+              <td class="text-end small text-muted">
+                ~{{ impact_days }} day{{ 's' if impact_days != 1.0 }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot class="table-light">
+            <tr>
+              <td colspan="2" class="fw-semibold small">Total</td>
+              <td class="text-end fw-semibold small">{{ delay_summary | sum(attribute='events') }}</td>
+              <td class="text-end fw-semibold small">{{ delay_summary | sum(attribute='hours') | round(1) }}h</td>
+              <td class="text-end small text-muted">
+                ~{{ (delay_summary | sum(attribute='hours') / (project.hours_per_day or 8)) | round(1) }} days
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="card-footer bg-white small text-muted">
+        <i class="bi bi-info-circle me-1"></i>
+        Schedule impact = delay hours ÷ {{ project.hours_per_day or 8 }}h/day.
+        <strong>Client delays</strong> extend the project end date and should be billed back.
+        <strong>Own delays</strong> (wet weather, breakdowns) are absorbed internally.
+      </div>
+      </div>{# end collapse #}
+    </div>
+    {% endif %}
+
+    <!-- ── Progress Table ─────────────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-table me-2 text-primary"></i>Progress by Lot / Material</h5>
+        <button class="btn btn-sm btn-outline-secondary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#progressTableBody">
+          <i class="bi bi-chevron-down me-1"></i>Toggle
+        </button>
+      </div>
+      <div class="collapse show" id="progressTableBody">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Lot</th>
+                <th>Material</th>
+                <th class="text-end">Planned m²</th>
+                <th class="text-end">Actual m²</th>
+                <th class="text-end">Remaining</th>
+                <th style="min-width:120px;">Progress</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for task in progress.tasks %}
+              <tr>
+                <td class="fw-semibold small">{{ task.lot or '—' }}</td>
+                <td class="small">{{ task.material or '—' }}</td>
+                <td class="text-end small">{{ task.planned_sqm }}</td>
+                <td class="text-end small">{{ task.actual_sqm }}</td>
+                <td class="text-end small {% if task.remaining == 0 %}text-success fw-semibold{% endif %}">
+                  {{ task.remaining }}
+                </td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="progress flex-grow-1" style="height:10px;">
+                      <div class="progress-bar {% if task.pct_complete >= 100 %}bg-success{% elif task.pct_complete >= 50 %}bg-primary{% else %}bg-warning{% endif %}"
+                           style="width:{{ task.pct_complete }}%"></div>
+                    </div>
+                    <span class="small text-muted" style="min-width:36px;">{{ task.pct_complete }}%</span>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot class="table-light fw-semibold">
+              <tr>
+                <td colspan="2">Total</td>
+                <td class="text-end">{{ progress.total_planned }}</td>
+                <td class="text-end text-success">{{ progress.total_actual }}</td>
+                <td class="text-end">{{ progress.total_remaining }}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="progress flex-grow-1" style="height:10px;">
+                      <div class="progress-bar bg-success" style="width:{{ progress.overall_pct }}%"></div>
+                    </div>
+                    <span class="small" style="min-width:36px;">{{ progress.overall_pct }}%</span>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+      </div>{# end collapse #}
+    </div>
+
+    {% endif %}{# end if progress #}
+
+    <!-- ── Cost Estimation (admin only) ──────────────────────────── -->
+    {% if current_user.is_admin %}
+    {% if cost_estimate.has_rates or hired_machines_list or owned_machines_list %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-currency-dollar me-2 text-success"></i>Cost Estimation</h5>
+      </div>
+      <div class="card-body">
+        {% if not cost_estimate.has_rates %}
+        <div class="alert alert-info small py-2 mb-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Set hourly rates on roles and/or budgeted crew to see labour cost estimates.
+        </div>
+        {% endif %}
+        <div class="row g-3">
+          <div class="col-sm-4">
+            <div class="border rounded p-3 h-100">
+              <div class="small text-muted fw-semibold mb-1">Daily Cost Breakdown</div>
+              <div class="small">Labour: <strong>${{ '{:,.2f}'.format(cost_estimate.labour_daily) }}</strong></div>
+              {% if cost_estimate.owned_machine_daily > 0 %}
+              <div class="small">Own Equipment: <strong>${{ '{:,.2f}'.format(cost_estimate.owned_machine_daily) }}</strong>
+                <span class="text-muted">(always charged)</span></div>
+              {% endif %}
+              {% if cost_estimate.hired_machine_daily > 0 %}
+              <div class="small">Hired Machines: <strong>${{ '{:,.2f}'.format(cost_estimate.hired_machine_daily) }}</strong>
+                <span class="text-muted">(excl. standdowns)</span></div>
+              {% elif cost_estimate.machine_daily > 0 %}
+              <div class="small">Machines: <strong>${{ '{:,.2f}'.format(cost_estimate.machine_daily) }}</strong></div>
+              {% endif %}
+              <div class="border-top mt-2 pt-2 fw-bold">Total: ${{ '{:,.2f}'.format(cost_estimate.daily_total) }} / day</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="border rounded p-3 h-100">
+              <div class="small text-muted fw-semibold mb-1">Target ({{ project.quoted_days or '—' }} days)</div>
+              {% if cost_estimate.target_cost is not none %}
+              <div class="fs-5 fw-bold text-primary">${{ '{:,.0f}'.format(cost_estimate.target_cost) }}</div>
+              <div class="small text-muted">assuming {{ project.quoted_days }} working days at target rate</div>
+              {% else %}
+              <div class="text-muted small">Set Quoted Days in project settings</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="border rounded p-3 h-100">
+              <div class="small text-muted fw-semibold mb-1">Forecast ({{ cost_estimate.forecast_working_days or '—' }} days)</div>
+              {% if cost_estimate.forecast_cost is not none %}
+              <div class="fs-5 fw-bold {% if cost_estimate.cost_variance and cost_estimate.cost_variance > 0 %}text-danger{% elif cost_estimate.cost_variance and cost_estimate.cost_variance < 0 %}text-success{% else %}text-primary{% endif %}">
+                ${{ '{:,.0f}'.format(cost_estimate.forecast_cost) }}
+              </div>
+              {% if cost_estimate.cost_variance is not none %}
+              <div class="small fw-semibold {% if cost_estimate.cost_variance > 0 %}text-danger{% elif cost_estimate.cost_variance < 0 %}text-success{% else %}text-muted{% endif %}">
+                {% if cost_estimate.cost_variance > 0 %}
+                  +${{ '{:,.0f}'.format(cost_estimate.cost_variance) }} overrun
+                {% elif cost_estimate.cost_variance < 0 %}
+                  -${{ '{:,.0f}'.format(cost_estimate.cost_variance | abs) }} saving
+                {% else %}
+                  On budget
+                {% endif %}
+              </div>
+              {% endif %}
+              {% else %}
+              <div class="text-muted small">No forecast data yet</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}{# end if current_user.is_admin #}
+
+  </div>{# end tab-progress #}
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB 2: SCHEDULING                                             -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade" id="tab-scheduling" role="tabpanel">
+
+    <!-- ── Crew Requirements (batch form) ────────────────────────── -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-people me-2"></i>Crew Requirements by Role Group</span>
+        <a href="{{ url_for('scheduling_project', project_id=project.id) }}" class="btn btn-sm btn-outline-info">
+          <i class="bi bi-zoom-in me-1"></i>View Scheduling Grid
+        </a>
+      </div>
+      <div class="card-body">
+        {% if role_groups_all %}
+        <form method="POST" action="{{ url_for('budgeted_crew_save_all', project_id=project.id) }}">
+          <div class="row g-3 mb-3">
+            {% for group in role_groups_all %}
+            <div class="col-sm-4 col-md-3">
+              <label class="form-label fw-semibold small mb-1">{{ group }}</label>
+              <div class="input-group input-group-sm">
+                <input type="number" class="form-control" name="group_{{ group }}"
+                       min="0" value="{{ budgeted_by_group.get(group, 0) }}" placeholder="0">
+                <span class="input-group-text">people</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <p class="text-muted small mb-3">Set to 0 to remove a role from the budget. Only role groups configured in <a href="{{ url_for('admin_roles') }}">Admin &rarr; Roles &amp; Rates</a> appear here.</p>
+          <button type="submit" class="btn btn-primary">Save Crew Requirements</button>
+        </form>
+        {% else %}
+        <div class="alert alert-info mb-0">
+          <i class="bi bi-info-circle me-2"></i>
+          No scheduling groups configured. Go to <a href="{{ url_for('admin_roles') }}">Admin &rarr; Roles &amp; Rates</a> and set a <strong>Scheduling Group</strong> on each role first.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ── Budgeted Crew Table ────────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Budgeted Crew by Role</h5>
+        <button class="btn btn-sm btn-outline-primary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#addCrewForm">
+          <i class="bi bi-plus me-1"></i>Add Role
+        </button>
+      </div>
+      <div class="collapse" id="addCrewForm">
+        <div class="card-body border-bottom bg-light py-3">
+          <form method="POST" action="{{ url_for('budgeted_crew_add', project_id=project.id) }}"
+                class="row g-2 align-items-end">
+            <div class="col-sm-5">
+              <label class="form-label fw-semibold small mb-1">Role / Type</label>
+              {% if all_roles %}
+              <select name="role_name" class="form-select form-select-sm">
+                {% for r in all_roles %}
+                <option value="{{ r.name }}">{{ r.name }}</option>
+                {% endfor %}
+                <option value="Other">Other</option>
+              </select>
+              {% else %}
+              <input type="text" name="role_name" class="form-control form-control-sm"
+                     placeholder="e.g. Labourer" required>
+              {% endif %}
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label fw-semibold small mb-1">Budgeted Count</label>
+              <input type="number" name="budgeted_count" class="form-control form-control-sm"
+                     min="1" value="1" required>
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        {% if budgeted_roles %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Role</th>
+              <th class="text-center">Budgeted</th>
+              <th class="text-center">
+                Avg / Entry
+                <i class="bi bi-info-circle text-muted" title="Average employees of this role per daily entry"></i>
+              </th>
+              <th class="text-center">Variance</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for br in budgeted_roles %}
+            {% set actual_avg = actual_role_avg.get(br.role_name, 0) %}
+            {% set diff = actual_avg - br.budgeted_count %}
+            <tr>
+              <td class="fw-semibold small">{{ br.role_name }}</td>
+              <td class="text-center">{{ br.budgeted_count }}</td>
+              <td class="text-center small">
+                {% if actual_avg > 0 %}{{ actual_avg }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-center small">
+                {% if actual_avg > 0 %}
+                  {% if diff > 0.2 %}
+                    <span class="badge bg-success-subtle text-success">+{{ diff | round(1) }} extra</span>
+                  {% elif diff < -0.2 %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis">{{ diff | round(1) }} short</span>
+                  {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary">On target</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">No data</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <form method="POST"
+                      action="{{ url_for('budgeted_crew_delete', project_id=project.id, br_id=br.id) }}"
+                      onsubmit="return confirm('Remove this budgeted role?')" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-people fs-2 d-block mb-2"></i>
+          No budgeted crew roles set. Click <strong>Add Role</strong> above.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ── Equipment Requirements ─────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-clipboard-check me-2 text-primary"></i>Equipment Requirements</h5>
+        <button class="btn btn-sm btn-outline-primary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#addEquipReqForm">
+          <i class="bi bi-plus me-1"></i>Add Requirement
+        </button>
+      </div>
+
+      <!-- Add requirement form (collapsible) -->
+      <div class="collapse" id="addEquipReqForm">
+        <div class="card-body border-bottom bg-light py-3">
+          <form method="POST" action="{{ url_for('equipment_req_add', project_id=project.id) }}"
+                class="row g-2 align-items-end">
+            <div class="col-sm-5">
+              <label class="form-label small fw-semibold mb-1">Equipment Name <span class="text-danger">*</span></label>
+              <input type="text" name="label" class="form-control form-control-sm" required
+                     placeholder="e.g. Excavator, 20T Roller, PE Welder">
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small fw-semibold mb-1">Qty Required</label>
+              <input type="number" name="required_count" class="form-control form-control-sm"
+                     min="1" value="1" required>
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus me-1"></i>Add
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Requirements list -->
+      <div class="card-body p-0">
+        {% if equip_coverage %}
+        {% for row in equip_coverage %}
+        <div class="border-bottom">
+          <!-- Requirement header row -->
+          <div class="px-3 py-2 d-flex justify-content-between align-items-center bg-light">
+            <div class="d-flex align-items-center gap-3">
+              <!-- Inline edit form -->
+              <form method="POST" action="{{ url_for('equipment_req_update', project_id=project.id, req_id=row.req.id) }}"
+                    class="d-flex align-items-center gap-2">
+                <input type="text" name="label" value="{{ row.label }}"
+                       class="form-control form-control-sm fw-semibold" style="width:180px;" required>
+                <span class="small text-muted">×</span>
+                <input type="number" name="required_count" value="{{ row.required }}"
+                       class="form-control form-control-sm" style="width:65px;" min="1" required>
+                <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Save changes">
+                  <i class="bi bi-check"></i>
+                </button>
+              </form>
+              <!-- Status badge -->
+              {% if row.gap > 0 %}
+                <span class="badge bg-danger-subtle text-danger">
+                  <i class="bi bi-exclamation-triangle me-1"></i>Missing {{ row.gap }}
+                </span>
+              {% elif row.total > row.required %}
+                <span class="badge bg-warning-subtle text-warning">{{ row.total }}/{{ row.required }} — {{ row.total - row.required }} extra</span>
+              {% else %}
+                <span class="badge bg-success-subtle text-success">
+                  <i class="bi bi-check-circle me-1"></i>{{ row.total }}/{{ row.required }} Met
+                </span>
+              {% endif %}
+            </div>
+            <form method="POST" action="{{ url_for('equipment_req_delete', project_id=project.id, req_id=row.req.id) }}"
+                  class="d-inline" onsubmit="return confirm('Remove this requirement and all its assignments?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove requirement">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+
+          <!-- Assigned machines list -->
+          <div class="px-3 py-2">
+            {% if row.assignments %}
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              {% for a in row.assignments %}
+              <span class="badge bg-primary-subtle text-primary d-flex align-items-center gap-1 px-2 py-1">
+                <i class="bi bi-{{ 'wrench' if a.machine_id else 'building' }} me-1"></i>
+                {{ a.display_name }}
+                <span class="text-muted small">({{ a.source }})</span>
+                <form method="POST" action="{{ url_for('equipment_req_unassign', project_id=project.id, assign_id=a.id) }}"
+                      class="d-inline ms-1">
+                  <button type="submit" class="btn btn-link p-0 text-danger" style="font-size:.7rem;" title="Remove">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </form>
+              </span>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-muted small fst-italic mb-2">No machines assigned yet.</div>
+            {% endif %}
+
+            <!-- Assign machine form -->
+            <form method="POST" action="{{ url_for('equipment_req_assign', project_id=project.id, req_id=row.req.id) }}"
+                  class="d-flex flex-wrap gap-2 align-items-center">
+              <select name="machine_id" class="form-select form-select-sm" style="max-width:220px;"
+                      onchange="this.nextElementSibling.value=''">
+                <option value="">— Own fleet —</option>
+                {% for m in assignable_own %}
+                <option value="{{ m.id }}">{{ m.name }}{% if m.machine_type %} ({{ m.machine_type }}){% endif %}</option>
+                {% endfor %}
+              </select>
+              <select name="hired_machine_id" class="form-select form-select-sm" style="max-width:220px;"
+                      onchange="this.previousElementSibling.value=''">
+                <option value="">— Hired machines —</option>
+                {% for hm in assignable_hired %}
+                <option value="{{ hm.id }}">{{ hm.machine_name }}{% if hm.hire_company %} ({{ hm.hire_company }}){% endif %}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-plus me-1"></i>Assign
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-clipboard fs-1 d-block mb-2"></i>
+          No equipment requirements set yet.<br>
+          <span class="small">Click <strong>Add Requirement</strong> above to define what this project needs.</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ── Machines on Site ───────────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-truck me-2 text-secondary"></i>Machines on Site</h5>
+        <button class="btn btn-sm btn-outline-secondary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#assignEquipCard">
+          <i class="bi bi-wrench me-1"></i>Assign Own Equipment
+        </button>
+      </div>
+      <div class="card-body p-0">
+
+        <!-- Own Equipment subsection -->
+        <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center">
+          <span class="fw-semibold small text-secondary">
+            <i class="bi bi-wrench me-1"></i>Own Equipment
+          </span>
+          <span class="badge bg-secondary-subtle text-secondary">{{ owned_machines_list | length }} assigned</span>
+        </div>
+        {% if owned_machines_list %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Machine</th>
+              <th>Type</th>
+              <th class="text-end">Hourly Rate</th>
+              <th class="text-end">Est. Daily Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for pm in owned_machines_list %}
+            <tr>
+              <td class="fw-semibold small">{{ pm.machine.name }}</td>
+              <td class="text-muted small">{{ pm.machine.machine_type or '—' }}</td>
+              <td class="text-end small">
+                {% if pm.machine.delay_rate %}${{ '{:,.2f}'.format(pm.machine.delay_rate) }}/hr{% else %}—{% endif %}
+              </td>
+              <td class="text-end small">
+                {% if pm.machine.delay_rate and project.hours_per_day %}
+                  ${{ '{:,.2f}'.format(pm.machine.delay_rate * project.hours_per_day) }}
+                {% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-3 text-muted small">
+          No own equipment assigned to this project yet.
+        </div>
+        {% endif %}
+
+        <!-- Hired Machines subsection -->
+        <div class="px-3 py-2 bg-light border-top border-bottom d-flex justify-content-between align-items-center mt-0">
+          <span class="fw-semibold small text-secondary">
+            <i class="bi bi-building me-1"></i>Hired Machines
+          </span>
+          <a href="{{ url_for('hire_list') }}?project_id={{ project.id }}" class="small text-primary">Manage</a>
+        </div>
+        {% if hired_machines_list %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Machine</th>
+              <th>Type</th>
+              <th>Hire Company</th>
+              <th class="text-end">Daily Cost</th>
+              <th class="text-end">Weekly Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for hm in hired_machines_list %}
+            <tr>
+              <td class="fw-semibold small">{{ hm.machine_name }}</td>
+              <td class="text-muted small">{{ hm.machine_type or '—' }}</td>
+              <td class="small">{{ hm.hire_company or '—' }}</td>
+              <td class="text-end small">
+                {% if hm.cost_per_week %}
+                  {% set days_pw = 6 if hm.count_saturdays != False else 5 %}
+                  ${{ '{:,.2f}'.format(hm.cost_per_week / days_pw) }}
+                {% else %}—{% endif %}
+              </td>
+              <td class="text-end small">
+                {% if hm.cost_per_week %}${{ '{:,.2f}'.format(hm.cost_per_week) }}{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-3 text-muted small">
+          No hired machines active on this project.
+          <a href="{{ url_for('hire_new') }}" class="d-block mt-1">Add a hired machine</a>
+        </div>
+        {% endif %}
+
+        <!-- Assign Own Equipment (collapsible, inline) -->
+        <div class="collapse" id="assignEquipCard">
+          <div class="border-top bg-light px-3 py-3">
+            <div class="fw-semibold small text-secondary mb-2">
+              <i class="bi bi-wrench me-1"></i>Assign Own Equipment to this Project
+            </div>
+            <form method="POST" action="{{ url_for('own_equipment_add', project_id=project.id) }}"
+                  class="row g-2 align-items-end">
+              <div class="col-sm-5">
+                <label class="form-label fw-semibold small mb-1">Machine</label>
+                <select name="machine_id" class="form-select form-select-sm" required>
+                  <option value="">— Select machine —</option>
+                  {% for m in all_machines %}
+                  {% if m.id not in assigned_machine_ids %}
+                  <option value="{{ m.id }}">{{ m.name }}{% if m.machine_type %} ({{ m.machine_type }}){% endif %}{% if m.delay_rate %} — ${{ m.delay_rate }}/hr{% endif %}</option>
+                  {% endif %}
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label fw-semibold small mb-1">On-site Date (optional)</label>
+                <input type="date" name="assigned_date" class="form-control form-control-sm">
+              </div>
+              <div class="col-auto">
+                <button type="submit" class="btn btn-secondary btn-sm">
+                  <i class="bi bi-plus me-1"></i>Assign
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Own Equipment Assignment (full management) ─────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-wrench me-2 text-secondary"></i>Own Equipment on Project</h5>
+        <button class="btn btn-sm btn-outline-secondary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#addOwnEquipForm">
+          <i class="bi bi-plus me-1"></i>Assign Equipment
+        </button>
+      </div>
+      <div class="collapse" id="addOwnEquipForm">
+        <div class="card-body border-bottom bg-light py-3">
+          <form method="POST" action="{{ url_for('own_equipment_add', project_id=project.id) }}"
+                class="row g-2 align-items-end">
+            <div class="col-sm-5">
+              <label class="form-label fw-semibold small mb-1">Machine</label>
+              <select name="machine_id" class="form-select form-select-sm" required>
+                <option value="">— Select machine —</option>
+                {% for m in all_machines %}
+                {% if m.id not in assigned_machine_ids %}
+                <option value="{{ m.id }}">{{ m.name }}{% if m.machine_type %} ({{ m.machine_type }}){% endif %}{% if m.delay_rate %} — ${{ m.delay_rate }}/hr{% endif %}</option>
+                {% endif %}
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label fw-semibold small mb-1">On-site Date (optional)</label>
+              <input type="date" name="assigned_date" class="form-control form-control-sm">
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-secondary btn-sm">Assign</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        {% if owned_machines_list %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Machine</th>
+              <th>Type</th>
+              <th class="text-end">Hourly Rate</th>
+              <th class="text-end">Est. Daily Cost</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for pm in owned_machines_list %}
+            <tr>
+              <td class="fw-semibold small">{{ pm.machine.name }}</td>
+              <td class="text-muted small">{{ pm.machine.machine_type or '—' }}</td>
+              <td class="text-end small">
+                {% if pm.machine.delay_rate %}${{ '{:,.2f}'.format(pm.machine.delay_rate) }}/hr{% else %}—{% endif %}
+              </td>
+              <td class="text-end small">
+                {% if pm.machine.delay_rate and project.hours_per_day %}
+                  ${{ '{:,.2f}'.format(pm.machine.delay_rate * project.hours_per_day) }}
+                {% else %}—{% endif %}
+              </td>
+              <td class="text-end">
+                <form method="POST"
+                      action="{{ url_for('own_equipment_remove', project_id=project.id, pm_id=pm.id) }}"
+                      onsubmit="return confirm('Remove this equipment from project?')" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-wrench fs-2 d-block mb-2"></i>
+          No own equipment assigned. Click <strong>Assign Equipment</strong> above.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>{# end tab-scheduling #}
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB 3: SETTINGS                                               -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade" id="tab-settings" role="tabpanel">
+
+    <!-- ── Project Basic Details ─────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-pencil-square me-2 text-primary"></i>Project Details</h5>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('project_settings_save', project_id=project.id) }}"
+              class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold small mb-1">Project Name <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control form-control-sm"
+                   value="{{ project.name }}" required>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold small mb-1">Start Date</label>
+            <input type="date" name="start_date" class="form-control form-control-sm"
+                   value="{{ project.start_date.strftime('%Y-%m-%d') if project.start_date else '' }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold small mb-1">Description</label>
+            <textarea name="description" class="form-control form-control-sm" rows="2">{{ project.description or '' }}</textarea>
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold small mb-1">Planned Crew</label>
+            <input type="number" name="planned_crew" class="form-control form-control-sm"
+                   min="0" value="{{ project.planned_crew or '' }}" placeholder="e.g. 6">
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold small mb-1">Hours / Day</label>
+            <input type="number" name="hours_per_day" class="form-control form-control-sm"
+                   min="0" step="0.5" value="{{ project.hours_per_day or '' }}" placeholder="e.g. 8">
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold small mb-1">Quoted Days</label>
+            <input type="number" name="quoted_days" class="form-control form-control-sm"
+                   min="0" value="{{ project.quoted_days or '' }}" placeholder="e.g. 30">
+          </div>
+          <div class="col-12">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">State</label>
+              <select name="state" class="form-select">
+                <option value="">— Select state —</option>
+                {% for s in ['ACT','NSW','NT','QLD','SA','TAS','VIC','WA'] %}
+                <option value="{{ s }}" {{ 'selected' if project.state == s }}>{{ s }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Used to apply public holidays and CFMEU dates.</div>
+            </div>
+            <div class="mb-3">
+              <div class="form-check">
+                <input type="checkbox" name="is_cfmeu" id="isCfmeu" class="form-check-input"
+                       value="1" {{ 'checked' if project.is_cfmeu }}>
+                <label class="form-check-label" for="isCfmeu">CFMEU project</label>
+              </div>
+              <div class="form-text">If checked, CFMEU shutdown dates for the selected state will be treated as non-work days.</div>
+            </div>
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="bi bi-check-lg me-1"></i>Save Settings
             </button>
           </div>
         </form>
       </div>
     </div>
 
-  </div>
-</div>
-
-<!-- ── Cost Estimation ────────────────────────────────────────────── -->
-{% if cost_estimate.has_rates or hired_machines_list or owned_machines_list %}
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-currency-dollar me-2 text-success"></i>Cost Estimation</h5>
-  </div>
-  <div class="card-body">
-    {% if not cost_estimate.has_rates %}
-    <div class="alert alert-info small py-2 mb-3">
-      <i class="bi bi-info-circle me-1"></i>
-      Set hourly rates on roles and/or budgeted crew to see labour cost estimates.
-    </div>
-    {% endif %}
-    <div class="row g-3">
-      <div class="col-sm-4">
-        <div class="border rounded p-3 h-100">
-          <div class="small text-muted fw-semibold mb-1">Daily Cost Breakdown</div>
-          <div class="small">Labour: <strong>${{ '{:,.2f}'.format(cost_estimate.labour_daily) }}</strong></div>
-          {% if cost_estimate.owned_machine_daily > 0 %}
-          <div class="small">Own Equipment: <strong>${{ '{:,.2f}'.format(cost_estimate.owned_machine_daily) }}</strong>
-            <span class="text-muted">(always charged)</span></div>
-          {% endif %}
-          {% if cost_estimate.hired_machine_daily > 0 %}
-          <div class="small">Hired Machines: <strong>${{ '{:,.2f}'.format(cost_estimate.hired_machine_daily) }}</strong>
-            <span class="text-muted">(excl. standdowns)</span></div>
-          {% elif cost_estimate.machine_daily > 0 %}
-          <div class="small">Machines: <strong>${{ '{:,.2f}'.format(cost_estimate.machine_daily) }}</strong></div>
-          {% endif %}
-          <div class="border-top mt-2 pt-2 fw-bold">Total: ${{ '{:,.2f}'.format(cost_estimate.daily_total) }} / day</div>
+    <!-- ── Non-Working Days ───────────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-calendar-x me-2 text-danger"></i>Non-Working Days</h5>
+        <button class="btn btn-sm btn-outline-danger" type="button"
+                data-bs-toggle="collapse" data-bs-target="#addNwdForm">
+          <i class="bi bi-plus me-1"></i>Add One-Off Date
+        </button>
+      </div>
+      <div class="collapse" id="addNwdForm">
+        <div class="card-body border-bottom bg-light py-3">
+          <form method="POST" action="{{ url_for('non_work_date_add', project_id=project.id) }}"
+                class="row g-2 align-items-end">
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold small mb-1">Date</label>
+              <input type="date" name="date" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-sm-5">
+              <label class="form-label fw-semibold small mb-1">Reason</label>
+              <input type="text" name="reason" class="form-control form-control-sm"
+                     placeholder="e.g. Wet weather, site shutdown">
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-danger btn-sm">Add</button>
+            </div>
+          </form>
+          <div class="form-text mt-1">Public holidays and CFMEU dates for {{ project.state or 'the selected state' }} are applied automatically via the State setting above.</div>
         </div>
       </div>
-      <div class="col-sm-4">
-        <div class="border rounded p-3 h-100">
-          <div class="small text-muted fw-semibold mb-1">Target ({{ project.quoted_days or '—' }} days)</div>
-          {% if cost_estimate.target_cost is not none %}
-          <div class="fs-5 fw-bold text-primary">${{ '{:,.0f}'.format(cost_estimate.target_cost) }}</div>
-          <div class="small text-muted">assuming {{ project.quoted_days }} working days at target rate</div>
-          {% else %}
-          <div class="text-muted small">Set Quoted Days in project settings</div>
-          {% endif %}
-        </div>
-      </div>
-      <div class="col-sm-4">
-        <div class="border rounded p-3 h-100">
-          <div class="small text-muted fw-semibold mb-1">Forecast ({{ cost_estimate.forecast_working_days or '—' }} days)</div>
-          {% if cost_estimate.forecast_cost is not none %}
-          <div class="fs-5 fw-bold {% if cost_estimate.cost_variance and cost_estimate.cost_variance > 0 %}text-danger{% elif cost_estimate.cost_variance and cost_estimate.cost_variance < 0 %}text-success{% else %}text-primary{% endif %}">
-            ${{ '{:,.0f}'.format(cost_estimate.forecast_cost) }}
-          </div>
-          {% if cost_estimate.cost_variance is not none %}
-          <div class="small fw-semibold {% if cost_estimate.cost_variance > 0 %}text-danger{% elif cost_estimate.cost_variance < 0 %}text-success{% else %}text-muted{% endif %}">
-            {% if cost_estimate.cost_variance > 0 %}
-              +${{ '{:,.0f}'.format(cost_estimate.cost_variance) }} overrun
-            {% elif cost_estimate.cost_variance < 0 %}
-              -${{ '{:,.0f}'.format(cost_estimate.cost_variance | abs) }} saving
-            {% else %}
-              On budget
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr><th>Date</th><th>Day</th><th>Description</th><th>Source</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% if state_holidays %}
+              {% for h in state_holidays %}
+              <tr class="text-muted">
+                <td class="small">{{ h.date.strftime('%d/%m/%Y') }}</td>
+                <td class="small">{{ h.date.strftime('%A') }}</td>
+                <td class="small">{{ h.name }}</td>
+                <td class="small">
+                  <span class="badge bg-info-subtle text-info">
+                    {{ project.state }}
+                    {% if h.__class__.__name__ == 'CFMEUDate' %} CFMEU{% else %} Public Holiday{% endif %}
+                  </span>
+                </td>
+                <td></td>
+              </tr>
+              {% endfor %}
             {% endif %}
-          </div>
-          {% endif %}
-          {% else %}
-          <div class="text-muted small">No forecast data yet</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
-
-<!-- ── Project Settings (collapsed) ──────────────────────────────── -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center"
-       style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#projectSettingsBody">
-    <h5 class="mb-0 fw-semibold text-muted">
-      <i class="bi bi-gear me-2"></i>Project Settings
-      <small class="fw-normal text-muted ms-2" style="font-size:0.75rem;">Budgeted crew, non-working dates, planned data</small>
-    </h5>
-    <i class="bi bi-chevron-down text-muted"></i>
-  </div>
-  <div class="collapse" id="projectSettingsBody">
-
-<!-- ── Budgeted Crew ──────────────────────────────────────────────── -->
-<div class="card border-0 border-top mb-0 rounded-0">
-  <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-primary"></i>Budgeted Crew by Role</h5>
-    <button class="btn btn-sm btn-outline-primary" type="button"
-            data-bs-toggle="collapse" data-bs-target="#addCrewForm">
-      <i class="bi bi-plus me-1"></i>Add Role
-    </button>
-  </div>
-  <div class="collapse" id="addCrewForm">
-    <div class="card-body border-bottom bg-light py-3">
-      <form method="POST" action="{{ url_for('budgeted_crew_add', project_id=project.id) }}"
-            class="row g-2 align-items-end">
-        <div class="col-sm-5">
-          <label class="form-label fw-semibold small mb-1">Role / Type</label>
-          {% if all_roles %}
-          <select name="role_name" class="form-select form-select-sm">
-            {% for r in all_roles %}
-            <option value="{{ r.name }}">{{ r.name }}</option>
+            {% for nwd in non_work_dates %}
+            <tr>
+              <td class="fw-semibold small">{{ nwd.date.strftime('%d/%m/%Y') }}</td>
+              <td class="text-muted small">{{ nwd.date.strftime('%A') }}</td>
+              <td class="small">{{ nwd.reason or '—' }}</td>
+              <td class="small"><span class="badge bg-secondary-subtle text-secondary">Manual</span></td>
+              <td class="text-end">
+                <form method="POST"
+                      action="{{ url_for('non_work_date_delete', project_id=project.id, nwd_id=nwd.id) }}"
+                      onsubmit="return confirm('Remove this date?')" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
             {% endfor %}
-            <option value="Other">Other</option>
-          </select>
-          {% else %}
-          <input type="text" name="role_name" class="form-control form-control-sm"
-                 placeholder="e.g. Labourer" required>
-          {% endif %}
-        </div>
-        <div class="col-sm-3">
-          <label class="form-label fw-semibold small mb-1">Budgeted Count</label>
-          <input type="number" name="budgeted_count" class="form-control form-control-sm"
-                 min="1" value="1" required>
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-primary btn-sm">Save</button>
-        </div>
-      </form>
-    </div>
-  </div>
-  <div class="card-body p-0">
-    {% if budgeted_roles %}
-    <table class="table table-sm table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Role</th>
-          <th class="text-center">Budgeted</th>
-          <th class="text-center">
-            Avg / Entry
-            <i class="bi bi-info-circle text-muted" title="Average employees of this role per daily entry"></i>
-          </th>
-          <th class="text-center">Variance</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for br in budgeted_roles %}
-        {% set actual_avg = actual_role_avg.get(br.role_name, 0) %}
-        {% set diff = actual_avg - br.budgeted_count %}
-        <tr>
-          <td class="fw-semibold small">{{ br.role_name }}</td>
-          <td class="text-center">{{ br.budgeted_count }}</td>
-          <td class="text-center small">
-            {% if actual_avg > 0 %}{{ actual_avg }}{% else %}<span class="text-muted">—</span>{% endif %}
-          </td>
-          <td class="text-center small">
-            {% if actual_avg > 0 %}
-              {% if diff > 0.2 %}
-                <span class="badge bg-success-subtle text-success">+{{ diff | round(1) }} extra</span>
-              {% elif diff < -0.2 %}
-                <span class="badge bg-warning-subtle text-warning-emphasis">{{ diff | round(1) }} short</span>
-              {% else %}
-                <span class="badge bg-secondary-subtle text-secondary">On target</span>
-              {% endif %}
-            {% else %}
-              <span class="text-muted">No data</span>
+            {% if not state_holidays and not non_work_dates %}
+            <tr>
+              <td colspan="5" class="text-center text-muted py-3 small">
+                No non-working days. Set a State above to auto-apply public holidays, or add one-off dates manually.
+              </td>
+            </tr>
             {% endif %}
-          </td>
-          <td class="text-end">
-            <form method="POST"
-                  action="{{ url_for('budgeted_crew_delete', project_id=project.id, br_id=br.id) }}"
-                  onsubmit="return confirm('Remove this budgeted role?')" class="d-inline">
-              <button type="submit" class="btn btn-sm btn-outline-danger">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="text-center py-4 text-muted small">
-      <i class="bi bi-people fs-2 d-block mb-2"></i>
-      No budgeted crew roles set. Click <strong>Add Role</strong> above.
-    </div>
-    {% endif %}
-  </div>
-</div>
-
-<!-- ── Non-Work Dates ─────────────────────────────────────────────── -->
-<div class="card border-0 border-top mb-0 rounded-0">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-calendar-x me-2 text-danger"></i>Non-Working Dates</h5>
-    <button class="btn btn-sm btn-outline-danger" type="button"
-            data-bs-toggle="collapse" data-bs-target="#addNwdForm">
-      <i class="bi bi-plus me-1"></i>Add Date
-    </button>
-  </div>
-  <div class="collapse" id="addNwdForm">
-    <div class="card-body border-bottom bg-light py-3">
-      <form method="POST" action="{{ url_for('non_work_date_add', project_id=project.id) }}"
-            class="row g-2 align-items-end">
-        <div class="col-sm-4">
-          <label class="form-label fw-semibold small mb-1">Date</label>
-          <input type="date" name="date" class="form-control form-control-sm" required>
-        </div>
-        <div class="col-sm-5">
-          <label class="form-label fw-semibold small mb-1">Reason</label>
-          <input type="text" name="reason" class="form-control form-control-sm"
-                 placeholder="e.g. Public holiday, shutdown">
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-danger btn-sm">Add</button>
-        </div>
-      </form>
-    </div>
-  </div>
-  <div class="card-body p-0">
-    {% if non_work_dates %}
-    <table class="table table-sm table-hover mb-0">
-      <thead class="table-light">
-        <tr><th>Date</th><th>Day</th><th>Reason</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% for nwd in non_work_dates %}
-        <tr>
-          <td class="fw-semibold small">{{ nwd.date.strftime('%d/%m/%Y') }}</td>
-          <td class="text-muted small">{{ nwd.date.strftime('%A') }}</td>
-          <td class="small">{{ nwd.reason or '—' }}</td>
-          <td class="text-end">
-            <form method="POST"
-                  action="{{ url_for('non_work_date_delete', project_id=project.id, nwd_id=nwd.id) }}"
-                  onsubmit="return confirm('Remove this non-work date?')" class="d-inline">
-              <button type="submit" class="btn btn-sm btn-outline-danger">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="text-center py-4 text-muted small">No non-working dates added.</div>
-    {% endif %}
-  </div>
-</div>
-
-<!-- ── Own Equipment Assignment ───────────────────────────────────── -->
-<div class="card border-0 border-top mb-0 rounded-0">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-wrench me-2 text-secondary"></i>Own Equipment on Project</h5>
-    <button class="btn btn-sm btn-outline-secondary" type="button"
-            data-bs-toggle="collapse" data-bs-target="#addOwnEquipForm">
-      <i class="bi bi-plus me-1"></i>Assign Equipment
-    </button>
-  </div>
-  <div class="collapse" id="addOwnEquipForm">
-    <div class="card-body border-bottom bg-light py-3">
-      <form method="POST" action="{{ url_for('own_equipment_add', project_id=project.id) }}"
-            class="row g-2 align-items-end">
-        <div class="col-sm-5">
-          <label class="form-label fw-semibold small mb-1">Machine</label>
-          <select name="machine_id" class="form-select form-select-sm" required>
-            <option value="">— Select machine —</option>
-            {% for m in all_machines %}
-            {% if m.id not in assigned_machine_ids %}
-            <option value="{{ m.id }}">{{ m.name }}{% if m.machine_type %} ({{ m.machine_type }}){% endif %}{% if m.delay_rate %} — ${{ m.delay_rate }}/hr{% endif %}</option>
-            {% endif %}
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-sm-3">
-          <label class="form-label fw-semibold small mb-1">On-site Date (optional)</label>
-          <input type="date" name="assigned_date" class="form-control form-control-sm">
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-secondary btn-sm">Assign</button>
-        </div>
-      </form>
-    </div>
-  </div>
-  <div class="card-body p-0">
-    {% if owned_machines_list %}
-    <table class="table table-sm table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Machine</th>
-          <th>Type</th>
-          <th class="text-end">Hourly Rate</th>
-          <th class="text-end">Est. Daily Cost</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for pm in owned_machines_list %}
-        <tr>
-          <td class="fw-semibold small">{{ pm.machine.name }}</td>
-          <td class="text-muted small">{{ pm.machine.machine_type or '—' }}</td>
-          <td class="text-end small">
-            {% if pm.machine.delay_rate %}${{ '{:,.2f}'.format(pm.machine.delay_rate) }}/hr{% else %}—{% endif %}
-          </td>
-          <td class="text-end small">
-            {% if pm.machine.delay_rate and project.hours_per_day %}
-              ${{ '{:,.2f}'.format(pm.machine.delay_rate * project.hours_per_day) }}
-            {% else %}—{% endif %}
-          </td>
-          <td class="text-end">
-            <form method="POST"
-                  action="{{ url_for('own_equipment_remove', project_id=project.id, pm_id=pm.id) }}"
-                  onsubmit="return confirm('Remove this equipment from project?')" class="d-inline">
-              <button type="submit" class="btn btn-sm btn-outline-danger">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="text-center py-4 text-muted small">
-      <i class="bi bi-wrench fs-2 d-block mb-2"></i>
-      No own equipment assigned. Click <strong>Assign Equipment</strong> above.
-    </div>
-    {% endif %}
-  </div>
-</div>
-
-<!-- ── Sunday Work Exceptions ─────────────────────────────────────── -->
-<div class="card border-0 border-top mb-0 rounded-0">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-sun me-2 text-warning"></i>Sunday Work Exceptions</h5>
-    <button class="btn btn-sm btn-outline-warning" type="button"
-            data-bs-toggle="collapse" data-bs-target="#addWorkedSundayForm">
-      <i class="bi bi-plus me-1"></i>Add Worked Sunday
-    </button>
-  </div>
-  <div class="collapse" id="addWorkedSundayForm">
-    <div class="card-body border-bottom bg-light py-3">
-      <form method="POST" action="{{ url_for('worked_sunday_add', project_id=project.id) }}"
-            class="row g-2 align-items-end">
-        <div class="col-sm-4">
-          <label class="form-label fw-semibold small mb-1">Sunday Date</label>
-          <input type="date" name="date" class="form-control form-control-sm" required>
-        </div>
-        <div class="col-sm-5">
-          <label class="form-label fw-semibold small mb-1">Reason</label>
-          <input type="text" name="reason" class="form-control form-control-sm"
-                 placeholder="e.g. Weather make-up day">
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-warning btn-sm">Add</button>
-        </div>
-      </form>
-      <div class="form-text mt-1">
-        <i class="bi bi-info-circle me-1"></i>
-        Only Sundays are accepted. Worked Sundays count as working days in the Gantt and are not shaded pink.
+          </tbody>
+        </table>
       </div>
     </div>
-  </div>
-  <div class="card-body p-0">
-    {% if worked_sundays_list %}
-    <table class="table table-sm table-hover mb-0">
-      <thead class="table-light">
-        <tr><th>Date</th><th>Reason</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% for ws in worked_sundays_list %}
-        <tr>
-          <td class="fw-semibold small">{{ ws.date.strftime('%d/%m/%Y') }}</td>
-          <td class="small">{{ ws.reason or '—' }}</td>
-          <td class="text-end">
-            <form method="POST"
-                  action="{{ url_for('worked_sunday_delete', project_id=project.id, ws_id=ws.id) }}"
-                  onsubmit="return confirm('Remove this worked Sunday?')" class="d-inline">
-              <button type="submit" class="btn btn-sm btn-outline-danger">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="text-center py-3 text-muted small">No worked Sundays recorded.</div>
-    {% endif %}
-  </div>
-</div>
 
-<!-- ── Project Documents ───────────────────────────────────────────── -->
-<div class="card border-0 border-top mb-0 rounded-0">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-folder2-open me-2 text-primary"></i>Project Documents</h5>
-    <button class="btn btn-sm btn-outline-primary" type="button"
-            data-bs-toggle="collapse" data-bs-target="#addDocumentForm">
-      <i class="bi bi-upload me-1"></i>Upload Document
-    </button>
-  </div>
-  <div class="collapse" id="addDocumentForm">
-    <div class="card-body border-bottom bg-light py-3">
-      <form method="POST" action="{{ url_for('project_document_upload', project_id=project.id) }}"
-            enctype="multipart/form-data" class="row g-2 align-items-end">
-        <div class="col-sm-5">
-          <label class="form-label fw-semibold small mb-1">File</label>
-          <input type="file" name="document" class="form-control form-control-sm"
-                 accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf,.doc,.docx,.xls,.xlsx" required>
-          <div class="form-text">PDF, image, DWG, DXF, Word, Excel accepted.</div>
-        </div>
-        <div class="col-sm-3">
-          <label class="form-label fw-semibold small mb-1">Type</label>
-          <select name="doc_type" class="form-select form-select-sm">
-            <option value="drawing">Drawing</option>
-            <option value="specification">Specification</option>
-            <option value="other" selected>Other</option>
-          </select>
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-primary btn-sm">Upload</button>
-        </div>
-      </form>
-    </div>
-  </div>
-  <div class="card-body p-0">
-    {% if project_documents %}
-    <table class="table table-sm table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th>Document</th>
-          <th>Type</th>
-          <th>Uploaded</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for doc in project_documents %}
-        <tr>
-          <td class="small">
-            <a href="{{ url_for('project_document_download', project_id=project.id, doc_id=doc.id) }}"
-               class="text-decoration-none">
-              <i class="bi bi-file-earmark me-1"></i>{{ doc.original_name or doc.filename }}
-            </a>
-          </td>
-          <td class="small">
-            {% if doc.doc_type == 'drawing' %}
-              <span class="badge bg-info-subtle text-info">Drawing</span>
-            {% elif doc.doc_type == 'specification' %}
-              <span class="badge bg-warning-subtle text-warning-emphasis">Specification</span>
-            {% else %}
-              <span class="badge bg-secondary-subtle text-secondary">Other</span>
-            {% endif %}
-          </td>
-          <td class="small text-muted">{{ doc.uploaded_at.strftime('%d/%m/%Y') if doc.uploaded_at else '—' }}</td>
-          <td class="text-end">
-            <form method="POST"
-                  action="{{ url_for('project_document_delete', project_id=project.id, doc_id=doc.id) }}"
-                  onsubmit="return confirm('Delete this document?')" class="d-inline">
-              <button type="submit" class="btn btn-sm btn-outline-danger">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="text-center py-4 text-muted small">
-      <i class="bi bi-folder2 fs-2 d-block mb-2"></i>
-      No documents uploaded. Click <strong>Upload Document</strong> above.
-    </div>
-    {% endif %}
-  </div>
-</div>
-
-<!-- ── Upload / Manage Planned Data ──────────────────────────────── -->
-<div class="card border-0 border-top mb-0 rounded-0">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-file-spreadsheet me-2 text-success"></i>Planned Data</h5>
-    <button class="btn btn-sm btn-outline-success" type="button"
-            data-bs-toggle="collapse" data-bs-target="#uploadForm">
-      <i class="bi bi-upload me-1"></i>Upload / Replace
-    </button>
-  </div>
-  <div class="collapse" id="uploadForm">
-    <div class="card-body border-bottom bg-light">
-      {% if not has_openpyxl %}
-      <div class="alert alert-warning small py-2">
-        <i class="bi bi-exclamation-triangle me-1"></i>
-        <code>openpyxl</code> is not installed. Run <code>pip install openpyxl</code> then restart.
+    <!-- ── Sunday Work Exceptions ─────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-sun me-2 text-warning"></i>Sunday Work Exceptions</h5>
+        <button class="btn btn-sm btn-outline-warning" type="button"
+                data-bs-toggle="collapse" data-bs-target="#addWorkedSundayForm">
+          <i class="bi bi-plus me-1"></i>Add Worked Sunday
+        </button>
       </div>
-      {% endif %}
-      <form method="POST" action="{{ url_for('planned_upload', project_id=project.id) }}"
-            enctype="multipart/form-data" class="row g-3 align-items-end">
-        <div class="col-sm-6">
-          <label class="form-label fw-semibold small mb-1">File (Excel or CSV)</label>
-          <input type="file" name="planned_file" class="form-control form-control-sm"
-                 accept=".xlsx,.xls,.csv" required>
-          <div class="form-text">Columns: Day, Lot, Location, Material, Planned Sqm</div>
-        </div>
-        <div class="col-sm-3">
-          <div class="form-check mt-4">
-            <input type="checkbox" name="replace_existing" value="yes"
-                   class="form-check-input" id="replaceCheck">
-            <label class="form-check-label small fw-semibold" for="replaceCheck">Replace existing</label>
+      <div class="collapse" id="addWorkedSundayForm">
+        <div class="card-body border-bottom bg-light py-3">
+          <form method="POST" action="{{ url_for('worked_sunday_add', project_id=project.id) }}"
+                class="row g-2 align-items-end">
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold small mb-1">Sunday Date</label>
+              <input type="date" name="date" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-sm-5">
+              <label class="form-label fw-semibold small mb-1">Reason</label>
+              <input type="text" name="reason" class="form-control form-control-sm"
+                     placeholder="e.g. Weather make-up day">
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-warning btn-sm">Add</button>
+            </div>
+          </form>
+          <div class="form-text mt-1">
+            <i class="bi bi-info-circle me-1"></i>
+            Only Sundays are accepted. Worked Sundays count as working days in the Gantt and are not shaded pink.
           </div>
         </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-success btn-sm"
-                  {% if not has_openpyxl %}disabled{% endif %}>Upload</button>
-        </div>
-      </form>
+      </div>
+      <div class="card-body p-0">
+        {% if worked_sundays_list %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr><th>Date</th><th>Reason</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for ws in worked_sundays_list %}
+            <tr>
+              <td class="fw-semibold small">{{ ws.date.strftime('%d/%m/%Y') }}</td>
+              <td class="small">{{ ws.reason or '—' }}</td>
+              <td class="text-end">
+                <form method="POST"
+                      action="{{ url_for('worked_sunday_delete', project_id=project.id, ws_id=ws.id) }}"
+                      onsubmit="return confirm('Remove this worked Sunday?')" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-3 text-muted small">No worked Sundays recorded.</div>
+        {% endif %}
+      </div>
     </div>
-  </div>
-  <div class="card-footer bg-white d-flex justify-content-between align-items-center small text-muted">
-    {% if progress %}
-    <span>{{ progress.tasks | length }} task{{ 's' if progress.tasks | length != 1 }} loaded</span>
-    {% else %}
-    <span>No planned data loaded</span>
-    {% endif %}
-    <form method="POST" action="{{ url_for('planned_clear', project_id=project.id) }}"
-          onsubmit="return confirm('Clear all planned data for this project?')">
-      <button type="submit" class="btn btn-sm btn-outline-danger">
-        <i class="bi bi-trash me-1"></i>Clear All
-      </button>
-    </form>
-  </div>
-</div>
 
-  </div>{# end #projectSettingsBody collapse #}
-</div>{# end Project Settings card #}
+    <!-- ── Upload / Manage Planned Data ──────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-file-spreadsheet me-2 text-success"></i>Planned Data</h5>
+        <button class="btn btn-sm btn-outline-success" type="button"
+                data-bs-toggle="collapse" data-bs-target="#uploadForm">
+          <i class="bi bi-upload me-1"></i>Upload / Replace
+        </button>
+      </div>
+      <div class="collapse" id="uploadForm">
+        <div class="card-body border-bottom bg-light">
+          {% if not has_openpyxl %}
+          <div class="alert alert-warning small py-2">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <code>openpyxl</code> is not installed. Run <code>pip install openpyxl</code> then restart.
+          </div>
+          {% endif %}
+          <form method="POST" action="{{ url_for('planned_upload', project_id=project.id) }}"
+                enctype="multipart/form-data" class="row g-3 align-items-end">
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold small mb-1">File (Excel or CSV)</label>
+              <input type="file" name="planned_file" class="form-control form-control-sm"
+                     accept=".xlsx,.xls,.csv" required>
+              <div class="form-text">Columns: Day, Lot, Location, Material, Planned Sqm</div>
+            </div>
+            <div class="col-sm-3">
+              <div class="form-check mt-4">
+                <input type="checkbox" name="replace_existing" value="yes"
+                       class="form-check-input" id="replaceCheck">
+                <label class="form-check-label small fw-semibold" for="replaceCheck">Replace existing</label>
+              </div>
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-success btn-sm"
+                      {% if not has_openpyxl %}disabled{% endif %}>Upload</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-between align-items-center small text-muted">
+        {% if progress %}
+        <span>{{ progress.tasks | length }} task{{ 's' if progress.tasks | length != 1 }} loaded</span>
+        {% else %}
+        <span>No planned data loaded</span>
+        {% endif %}
+        <form method="POST" action="{{ url_for('planned_clear', project_id=project.id) }}"
+              onsubmit="return confirm('Clear all planned data for this project?')">
+          <button type="submit" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-trash me-1"></i>Clear All
+          </button>
+        </form>
+      </div>
+    </div>
 
-<!-- Report Date Range Modal -->
+  </div>{# end tab-settings #}
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB 4: DOCUMENTS                                              -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade" id="tab-documents" role="tabpanel">
+
+    <!-- ── Project Documents ─────────────────────────────────────── -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-folder2-open me-2 text-primary"></i>Project Documents</h5>
+        <button class="btn btn-sm btn-outline-primary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#addDocumentForm">
+          <i class="bi bi-upload me-1"></i>Upload Document
+        </button>
+      </div>
+      <div class="collapse" id="addDocumentForm">
+        <div class="card-body border-bottom bg-light py-3">
+          <form method="POST" action="{{ url_for('project_document_upload', project_id=project.id) }}"
+                enctype="multipart/form-data" class="row g-2 align-items-end">
+            <div class="col-sm-5">
+              <label class="form-label fw-semibold small mb-1">File</label>
+              <input type="file" name="document" class="form-control form-control-sm"
+                     accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf,.doc,.docx,.xls,.xlsx" required>
+              <div class="form-text">PDF, image, DWG, DXF, Word, Excel accepted.</div>
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label fw-semibold small mb-1">Type</label>
+              <select name="doc_type" class="form-select form-select-sm">
+                <option value="drawing">Drawing</option>
+                <option value="specification">Specification</option>
+                <option value="other" selected>Other</option>
+              </select>
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        {% if project_documents %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Document</th>
+              <th>Type</th>
+              <th>Uploaded</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for doc in project_documents %}
+            <tr>
+              <td class="small">
+                <a href="{{ url_for('project_document_download', project_id=project.id, doc_id=doc.id) }}"
+                   class="text-decoration-none">
+                  <i class="bi bi-file-earmark me-1"></i>{{ doc.original_name or doc.filename }}
+                </a>
+              </td>
+              <td class="small">
+                {% if doc.doc_type == 'drawing' %}
+                  <span class="badge bg-info-subtle text-info">Drawing</span>
+                {% elif doc.doc_type == 'specification' %}
+                  <span class="badge bg-warning-subtle text-warning-emphasis">Specification</span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary">Other</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted">{{ doc.uploaded_at.strftime('%d/%m/%Y') if doc.uploaded_at else '—' }}</td>
+              <td class="text-end">
+                <form method="POST"
+                      action="{{ url_for('project_document_delete', project_id=project.id, doc_id=doc.id) }}"
+                      onsubmit="return confirm('Delete this document?')" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-folder2 fs-2 d-block mb-2"></i>
+          No documents uploaded. Click <strong>Upload Document</strong> above.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>{# end tab-documents #}
+
+</div>{# end tab-content #}
+
+<!-- ── Report Date Range Modal ──────────────────────────────────── -->
 <div class="modal fade" id="reportModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -1140,7 +1438,7 @@
   </div>
 </div>
 
-<!-- Weekly Report Modal -->
+<!-- ── Weekly Report Modal ───────────────────────────────────────── -->
 <div class="modal fade" id="weeklyReportModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -1170,4 +1468,24 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Restore active tab from URL hash
+(function() {
+  var hash = window.location.hash;
+  if (hash) {
+    var tab = document.querySelector('[data-bs-target="' + hash + '"]');
+    if (tab) { bootstrap.Tab.getOrCreateInstance(tab).show(); }
+  }
+})();
+
+// Update hash when a tab is clicked
+document.querySelectorAll('#projectTabs button[data-bs-toggle="tab"]').forEach(function(btn) {
+  btn.addEventListener('shown.bs.tab', function(e) {
+    history.replaceState(null, null, e.target.getAttribute('data-bs-target'));
+  });
+});
+</script>
 {% endblock %}

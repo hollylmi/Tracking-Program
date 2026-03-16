@@ -1,0 +1,533 @@
+{% extends 'base.html' %}
+{% block title %}Equipment — Project Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-truck me-2"></i>Equipment</h2>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-4" id="equipTabs">
+  <li class="nav-item">
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-own">
+      <i class="bi bi-wrench me-1"></i>Own Fleet
+      <span class="badge bg-secondary ms-1">{{ own_machines | selectattr('active') | list | length }}</span>
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hired">
+      <i class="bi bi-building me-1"></i>Hired Machines
+      <span class="badge bg-secondary ms-1">{{ hired_machines | length }}</span>
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- ===== OWN FLEET TAB ===== -->
+  <div class="tab-pane fade show active" id="tab-own">
+
+    <!-- Add Machine form -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold small"><i class="bi bi-plus-circle me-2 text-primary"></i>Add / Manage Own Fleet</span>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#addMachineForm">
+          <i class="bi bi-plus me-1"></i>Add Machine
+        </button>
+      </div>
+      <div class="collapse" id="addMachineForm">
+        <div class="card-body bg-light border-bottom">
+          <form method="POST" action="{{ url_for('equipment_machine_save') }}">
+            <input type="hidden" name="action" value="add">
+            <div class="row g-2">
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Name <span class="text-danger">*</span></label>
+                <input type="text" name="name" class="form-control form-control-sm" required placeholder="e.g. Excavator #1">
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Plant ID</label>
+                <input type="text" name="plant_id" class="form-control form-control-sm" placeholder="e.g. EX-042">
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Type</label>
+                <input type="text" name="machine_type" class="form-control form-control-sm" placeholder="e.g. Excavator">
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Delay Rate ($/hr)</label>
+                <input type="number" name="delay_rate" class="form-control form-control-sm" min="0" step="0.01" placeholder="0.00">
+              </div>
+              <div class="col-sm-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm w-100">Add</button>
+              </div>
+              <div class="col-12">
+                <label class="form-label small fw-semibold mb-1">Description</label>
+                <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. 8t excavator with tilt hitch">
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Record Breakdown form -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold small"><i class="bi bi-tools me-2 text-danger"></i>Record Breakdown</span>
+        <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#ownBreakdownForm">
+          <i class="bi bi-plus me-1"></i>New Incident
+        </button>
+      </div>
+      <div class="collapse" id="ownBreakdownForm">
+        <div class="card-body bg-light border-bottom">
+          <form method="POST" action="{{ url_for('breakdown_add') }}" enctype="multipart/form-data">
+            <div class="row g-2">
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Machine <span class="text-danger">*</span></label>
+                <select name="machine_id" class="form-select form-select-sm" required>
+                  <option value="">— Select —</option>
+                  {% for m in own_machines if m.active %}
+                  <option value="{{ m.id }}">{{ m.name }}{% if m.machine_type %} ({{ m.machine_type }}){% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Date <span class="text-danger">*</span></label>
+                <input type="date" name="incident_date" class="form-control form-control-sm" required value="{{ today.isoformat() }}">
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Time</label>
+                <input type="time" name="incident_time" class="form-control form-control-sm">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Repairing By</label>
+                <input type="text" name="repairing_by" class="form-control form-control-sm" placeholder="Name / workshop">
+              </div>
+              <div class="col-12">
+                <label class="form-label small fw-semibold mb-1">Description</label>
+                <textarea name="description" class="form-control form-control-sm" rows="2" placeholder="What happened?"></textarea>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Status</label>
+                <select name="repair_status" class="form-select form-select-sm">
+                  <option value="pending">Pending repair</option>
+                  <option value="in_progress">Repair in progress</option>
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Anticipated Return</label>
+                <input type="date" name="anticipated_return" class="form-control form-control-sm">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-semibold mb-1">Photos</label>
+                <input type="file" name="photos" class="form-control form-control-sm" multiple accept="image/*">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-danger btn-sm mt-2">Record Breakdown</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Own fleet table -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if own_machines %}
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Name / Description</th>
+              <th>Plant ID</th>
+              <th>Type</th>
+              <th>Delay Rate</th>
+              <th>Assigned To</th>
+              <th>Status</th>
+              <th>Breakdown</th>
+              <th>History</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in own_machines %}
+            {% set bd = own_breakdowns.get(m.id) %}
+            {% set history = own_bd_history.get(m.id, []) %}
+            <tr class="{{ 'table-danger' if bd else ('table-secondary opacity-75' if not m.active else '') }}">
+              <td class="fw-semibold small">
+                {{ m.name }}
+                {% if m.description %}<br><small class="text-muted fw-normal">{{ m.description }}</small>{% endif %}
+              </td>
+              <td class="text-muted small">{{ m.plant_id or '—' }}</td>
+              <td class="text-muted small">{{ m.machine_type or '—' }}</td>
+              <td class="small">
+                {% if m.delay_rate %}<span class="text-success">${{ '%.2f'|format(m.delay_rate) }}/hr</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="small">
+                {% set projs = own_machine_projects.get(m.id, []) %}
+                {% if projs %}
+                  {% for p, lbl in projs %}
+                    <a href="{{ url_for('project_dashboard', project_id=p.id) }}#tab-scheduling"
+                       class="badge bg-primary-subtle text-primary text-decoration-none me-1">{{ p.name }}</a>
+                  {% endfor %}
+                {% else %}<span class="text-muted fst-italic">Unassigned</span>{% endif %}
+              </td>
+              <td>
+                {% if bd %}
+                  <span class="badge bg-danger"><i class="bi bi-tools me-1"></i>Broken Down</span>
+                {% elif m.active %}
+                  <span class="badge bg-success">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% if bd %}
+                <div>
+                  <strong>{{ bd.incident_date.strftime('%d/%m/%Y') }}{% if bd.incident_time %} {{ bd.incident_time }}{% endif %}</strong>
+                  {% if bd.description %}<br><span class="text-muted">{{ bd.description }}</span>{% endif %}
+                  {% if bd.repairing_by %}<br><i class="bi bi-person me-1"></i>{{ bd.repairing_by }}{% endif %}
+                  {% if bd.anticipated_return %}<br><i class="bi bi-calendar me-1"></i>Est. return: {{ bd.anticipated_return.strftime('%d/%m/%Y') }}{% endif %}
+                  <br>
+                  <form method="POST" action="{{ url_for('breakdown_update', bd_id=bd.id) }}"
+                        class="d-flex flex-wrap gap-1 mt-1 align-items-center">
+                    <select name="repair_status" class="form-select form-select-sm" style="width:150px;">
+                      <option value="pending" {{ 'selected' if bd.repair_status == 'pending' }}>Pending</option>
+                      <option value="in_progress" {{ 'selected' if bd.repair_status == 'in_progress' }}>In Progress</option>
+                      <option value="completed" {{ 'selected' if bd.repair_status == 'completed' }}>Completed</option>
+                    </select>
+                    <input type="text" name="repairing_by" value="{{ bd.repairing_by or '' }}"
+                           class="form-control form-control-sm" style="width:140px;" placeholder="Repairing by">
+                    <input type="date" name="anticipated_return" value="{{ bd.anticipated_return.isoformat() if bd.anticipated_return else '' }}"
+                           class="form-control form-control-sm" style="width:140px;">
+                    <button type="submit" class="btn btn-sm btn-outline-warning">Update</button>
+                  </form>
+                  <form method="POST" action="{{ url_for('breakdown_delete', bd_id=bd.id) }}"
+                        class="d-inline mt-1" onsubmit="return confirm('Delete this breakdown record?')">
+                    <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete record</button>
+                  </form>
+                </div>
+                {% else %}
+                <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% set past = history | selectattr('repair_status', 'equalto', 'completed') | list %}
+                {% if past %}
+                <button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#own-hist-{{ m.id }}">
+                  <i class="bi bi-clock-history me-1"></i>{{ past | length }}
+                </button>
+                <div class="collapse mt-1" id="own-hist-{{ m.id }}">
+                  {% for h in past %}
+                  <div class="border-start border-2 ps-2 mb-1 {{ 'border-danger' if loop.first else 'border-secondary' }}">
+                    <div class="fw-semibold">{{ h.incident_date.strftime('%d/%m/%Y') }}{% if h.incident_time %} {{ h.incident_time }}{% endif %}</div>
+                    {% if h.description %}<div class="text-muted">{{ h.description }}</div>{% endif %}
+                    {% if h.repairing_by %}<div><i class="bi bi-person me-1"></i>{{ h.repairing_by }}</div>{% endif %}
+                    {% if h.resolved_date %}<div class="text-success"><i class="bi bi-check-circle me-1"></i>Resolved {{ h.resolved_date.strftime('%d/%m/%Y') }}</div>{% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="d-flex gap-1 justify-content-end">
+                  <!-- Edit button → triggers modal -->
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                          onclick="openMachineEdit({{ m.id }}, {{ m.name|tojson }}, {{ (m.plant_id or '')|tojson }}, {{ (m.machine_type or '')|tojson }}, {{ (m.description or '')|tojson }}, {{ m.delay_rate or '' }})"
+                          title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <!-- Toggle active -->
+                  <form method="POST" action="{{ url_for('equipment_machine_save') }}" class="d-inline">
+                    <input type="hidden" name="action" value="toggle">
+                    <input type="hidden" name="machine_id" value="{{ m.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-{{ 'warning' if m.active else 'success' }} py-0 px-1"
+                            title="{{ 'Deactivate' if m.active else 'Activate' }}">
+                      <i class="bi bi-{{ 'pause' if m.active else 'play' }}"></i>
+                    </button>
+                  </form>
+                  <!-- Delete (only if no entries) -->
+                  {% if not m.entries %}
+                  <form method="POST" action="{{ url_for('equipment_machine_save') }}" class="d-inline"
+                        onsubmit="return confirm('Delete {{ m.name }}?')">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="machine_id" value="{{ m.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-wrench fs-1 d-block mb-2"></i>
+          No machines yet. Use the "Add Machine" button above.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== HIRED MACHINES TAB ===== -->
+  <div class="tab-pane fade" id="tab-hired">
+
+    <!-- Add link + breakdown form header -->
+    <div class="d-flex gap-2 mb-3">
+      <a href="{{ url_for('hire_new') }}" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-plus me-1"></i>Add Hired Machine
+      </a>
+      <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#hiredBreakdownForm">
+        <i class="bi bi-tools me-1"></i>Record Breakdown
+      </button>
+    </div>
+
+    <!-- Record breakdown form for hired -->
+    <div class="collapse mb-3" id="hiredBreakdownForm">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body bg-light">
+          <form method="POST" action="{{ url_for('breakdown_add') }}" enctype="multipart/form-data">
+            <div class="row g-2">
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Hired Machine <span class="text-danger">*</span></label>
+                <select name="hired_machine_id" class="form-select form-select-sm" required>
+                  <option value="">— Select —</option>
+                  {% for hm in hired_machines %}
+                  <option value="{{ hm.id }}">{{ hm.machine_name }}{% if hm.project %} — {{ hm.project.name }}{% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Date <span class="text-danger">*</span></label>
+                <input type="date" name="incident_date" class="form-control form-control-sm" required value="{{ today.isoformat() }}">
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small fw-semibold mb-1">Time</label>
+                <input type="time" name="incident_time" class="form-control form-control-sm">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Repairing By</label>
+                <input type="text" name="repairing_by" class="form-control form-control-sm" placeholder="Name / hire company">
+              </div>
+              <div class="col-12">
+                <label class="form-label small fw-semibold mb-1">Description</label>
+                <textarea name="description" class="form-control form-control-sm" rows="2"></textarea>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Status</label>
+                <select name="repair_status" class="form-select form-select-sm">
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Anticipated Return</label>
+                <input type="date" name="anticipated_return" class="form-control form-control-sm">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-semibold mb-1">Photos</label>
+                <input type="file" name="photos" class="form-control form-control-sm" multiple accept="image/*">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-danger btn-sm mt-2">Record Breakdown</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hired machines table -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if hired_machines %}
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Name / Description</th>
+              <th>Plant ID</th>
+              <th>Type</th>
+              <th>Project</th>
+              <th>Company</th>
+              <th>Status</th>
+              <th>Breakdown</th>
+              <th>History</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for hm in hired_machines %}
+            {% set bd = hired_breakdowns.get(hm.id) %}
+            {% set history = hired_bd_history.get(hm.id, []) %}
+            <tr class="{{ 'table-danger' if bd else '' }}">
+              <td class="fw-semibold small">
+                {{ hm.machine_name }}
+                {% if hm.description %}<br><small class="text-muted fw-normal">{{ hm.description }}</small>{% endif %}
+              </td>
+              <td class="text-muted small">{{ hm.plant_id or '—' }}</td>
+              <td class="text-muted small">{{ hm.machine_type or '—' }}</td>
+              <td class="small">
+                {% if hm.project %}
+                  <a href="{{ url_for('project_dashboard', project_id=hm.project_id) }}" class="text-decoration-none">{{ hm.project.name }}</a>
+                {% else %}—{% endif %}
+              </td>
+              <td class="small">{{ hm.hire_company or '—' }}</td>
+              <td>
+                {% if bd %}
+                  <span class="badge bg-danger"><i class="bi bi-tools me-1"></i>Broken Down</span>
+                {% elif not hm.active %}
+                  <span class="badge bg-secondary">Returned</span>
+                {% else %}
+                  <span class="badge bg-success">Active</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% if bd %}
+                <div>
+                  <strong>{{ bd.incident_date.strftime('%d/%m/%Y') }}{% if bd.incident_time %} {{ bd.incident_time }}{% endif %}</strong>
+                  {% if bd.description %}<br><span class="text-muted">{{ bd.description }}</span>{% endif %}
+                  {% if bd.repairing_by %}<br><i class="bi bi-person me-1"></i>{{ bd.repairing_by }}{% endif %}
+                  {% if bd.anticipated_return %}<br><i class="bi bi-calendar me-1"></i>Est. return: {{ bd.anticipated_return.strftime('%d/%m/%Y') }}{% endif %}
+                  <br>
+                  <form method="POST" action="{{ url_for('breakdown_update', bd_id=bd.id) }}"
+                        class="d-flex flex-wrap gap-1 mt-1 align-items-center">
+                    <select name="repair_status" class="form-select form-select-sm" style="width:150px;">
+                      <option value="pending" {{ 'selected' if bd.repair_status == 'pending' }}>Pending</option>
+                      <option value="in_progress" {{ 'selected' if bd.repair_status == 'in_progress' }}>In Progress</option>
+                      <option value="completed" {{ 'selected' if bd.repair_status == 'completed' }}>Completed</option>
+                    </select>
+                    <input type="text" name="repairing_by" value="{{ bd.repairing_by or '' }}"
+                           class="form-control form-control-sm" style="width:140px;" placeholder="Repairing by">
+                    <input type="date" name="anticipated_return" value="{{ bd.anticipated_return.isoformat() if bd.anticipated_return else '' }}"
+                           class="form-control form-control-sm" style="width:140px;">
+                    <button type="submit" class="btn btn-sm btn-outline-warning">Update</button>
+                  </form>
+                  <form method="POST" action="{{ url_for('breakdown_delete', bd_id=bd.id) }}"
+                        class="d-inline mt-1" onsubmit="return confirm('Delete this breakdown record?')">
+                    <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete record</button>
+                  </form>
+                </div>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% set past = history | selectattr('repair_status', 'equalto', 'completed') | list %}
+                {% if past %}
+                <button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#hired-hist-{{ hm.id }}">
+                  <i class="bi bi-clock-history me-1"></i>{{ past | length }}
+                </button>
+                <div class="collapse mt-1" id="hired-hist-{{ hm.id }}">
+                  {% for h in past %}
+                  <div class="border-start border-2 ps-2 mb-1 {{ 'border-danger' if loop.first else 'border-secondary' }}">
+                    <div class="fw-semibold">{{ h.incident_date.strftime('%d/%m/%Y') }}{% if h.incident_time %} {{ h.incident_time }}{% endif %}</div>
+                    {% if h.description %}<div class="text-muted">{{ h.description }}</div>{% endif %}
+                    {% if h.repairing_by %}<div><i class="bi bi-person me-1"></i>{{ h.repairing_by }}</div>{% endif %}
+                    {% if h.resolved_date %}<div class="text-success"><i class="bi bi-check-circle me-1"></i>Resolved {{ h.resolved_date.strftime('%d/%m/%Y') }}</div>{% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{{ url_for('hire_edit', hm_id=hm.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-building fs-1 d-block mb-2"></i>
+          No hired machines. <a href="{{ url_for('hire_new') }}">Add a hired machine</a>.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Edit Machine Modal -->
+<div class="modal fade" id="editMachineModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold">Edit Machine</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('equipment_machine_save') }}">
+        <input type="hidden" name="action" value="edit">
+        <input type="hidden" name="machine_id" id="editMachineId">
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Name <span class="text-danger">*</span></label>
+            <input type="text" name="name" id="editMachineName" class="form-control form-control-sm" required>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-sm-6">
+              <label class="form-label small fw-semibold mb-1">Plant ID</label>
+              <input type="text" name="plant_id" id="editMachinePlantId" class="form-control form-control-sm" placeholder="e.g. EX-042">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small fw-semibold mb-1">Type</label>
+              <input type="text" name="machine_type" id="editMachineType" class="form-control form-control-sm" placeholder="e.g. Excavator">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Description</label>
+            <input type="text" name="description" id="editMachineDesc" class="form-control form-control-sm" placeholder="e.g. 8t excavator with tilt hitch">
+          </div>
+          <div class="mb-1">
+            <label class="form-label small fw-semibold mb-1">Delay Rate ($/hr)</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text">$</span>
+              <input type="number" name="delay_rate" id="editMachineRate" class="form-control form-control-sm" min="0" step="0.01" placeholder="0.00">
+              <span class="input-group-text">/hr</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Restore tab from URL hash
+  const hash = window.location.hash;
+  if (hash) {
+    const tab = document.querySelector(`[data-bs-target="${hash}"]`);
+    if (tab) new bootstrap.Tab(tab).show();
+  }
+  document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t => {
+    t.addEventListener('shown.bs.tab', e => {
+      history.replaceState(null, '', e.target.dataset.bsTarget);
+    });
+  });
+
+  function openMachineEdit(id, name, plantId, type, description, rate) {
+    document.getElementById('editMachineId').value = id;
+    document.getElementById('editMachineName').value = name;
+    document.getElementById('editMachinePlantId').value = plantId;
+    document.getElementById('editMachineType').value = type;
+    document.getElementById('editMachineDesc').value = description;
+    document.getElementById('editMachineRate').value = rate || '';
+    new bootstrap.Modal(document.getElementById('editMachineModal')).show();
+  }
+</script>
+{% endblock %}

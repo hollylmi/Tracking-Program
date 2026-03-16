@@ -17,6 +17,7 @@
             <tr>
               <th>Username</th>
               <th>Display Name</th>
+              <th>Email</th>
               <th>Role</th>
               <th>Status</th>
               <th>Joined</th>
@@ -28,6 +29,11 @@
             <tr class="{% if not user.active %}text-muted{% endif %}">
               <td class="fw-semibold">{{ user.username }}</td>
               <td>{{ user.display_name or '—' }}</td>
+              <td class="text-muted small">
+                {% if user.email %}
+                  <a href="mailto:{{ user.email }}" class="text-muted">{{ user.email }}</a>
+                {% else %}—{% endif %}
+              </td>
               <td>
                 {% if user.is_admin %}
                   <span class="badge bg-primary">Admin</span>
@@ -120,6 +126,11 @@
             <input type="text" class="form-control" name="display_name"
                    placeholder="e.g. John Smith">
             <div class="form-text">Shown on entries. Defaults to username if blank.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" name="email"
+                   placeholder="e.g. john.smith@company.com">
           </div>
           <div class="mb-3">
             <label class="form-label">Password <span class="text-danger">*</span></label>

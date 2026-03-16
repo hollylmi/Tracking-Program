@@ -5,7 +5,9 @@ from models import (db, User, Project, Employee, Machine, DailyEntry, HiredMachi
                     StandDown, Role, EntryPhoto, PlannedData, ProjectNonWorkDate,
                     ProjectBudgetedRole, ProjectMachine, ProjectWorkedSunday,
                     ProjectDocument, SwingPattern, EmployeeSwing, EmployeeLeave,
-                    ProjectAssignment)
+                    ProjectAssignment, ProjectEquipmentRequirement, ProjectEquipmentAssignment,
+                    MachineBreakdown, BreakdownPhoto, PublicHoliday, CFMEUDate, AUSTRALIAN_STATES,
+                    ScheduleDayOverride)
 from datetime import date, datetime, timedelta
 from fpdf import FPDF, XPos, YPos
 import os, json, uuid, smtplib, math, re
@@ -20,6 +22,18 @@ try:
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
+
+# Per-project colour palette (bg, text) — cycled by project.id order
+SCHED_PALETTE = [
+    ('#cfe2ff', '#084298'),  # blue
+    ('#d1e7dd', '#0a3622'),  # green
+    ('#f8d7da', '#842029'),  # red
+    ('#fff3cd', '#664d03'),  # yellow
+    ('#d2f4ea', '#0b4c34'),  # teal
+    ('#fde8d8', '#6c3a00'),  # orange
+    ('#e2d9f3', '#3d1a78'),  # purple
+    ('#dee2e6', '#343a40'),  # grey
+]
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
@@ -61,6 +75,31 @@ with app.app_context():
             conn.commit()
     except Exception:
         pass
+    # Add group_name column to role table if it doesn't exist yet
+    try:
+        from sqlalchemy import text
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE role ADD COLUMN group_name VARCHAR(100)"))
+            conn.commit()
+    except Exception:
+        pass  # Column already exists
+    for stmt in [
+        "ALTER TABLE project ADD COLUMN state VARCHAR(10)",
+        "ALTER TABLE project ADD COLUMN is_cfmeu BOOLEAN DEFAULT 0",
+        "ALTER TABLE swing_pattern RENAME COLUMN work_days TO work_weeks",
+        "ALTER TABLE employee_swing ADD COLUMN day_offset INTEGER DEFAULT 0",
+        "ALTER TABLE machine ADD COLUMN plant_id VARCHAR(100)",
+        "ALTER TABLE machine ADD COLUMN description TEXT",
+        "ALTER TABLE hired_machine ADD COLUMN plant_id VARCHAR(100)",
+        "ALTER TABLE hired_machine ADD COLUMN description TEXT",
+        "ALTER TABLE user ADD COLUMN email VARCHAR(200)",
+        "ALTER TABLE daily_entry ADD COLUMN weather VARCHAR(200)",
+    ]:
+        try:
+            db.session.execute(db.text(stmt))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
     # Seed default admin user if none exist
     if User.query.count() == 0:
         from werkzeug.security import generate_password_hash
@@ -950,6 +989,7 @@ def new_entry():
             delay_reason=(request.form.get('delay_reason', '').strip() or None) if delay_hours > 0 else None,
             delay_description=request.form.get('delay_description', '').strip() or None,
             machines_stood_down=machines_stood_down,
+            weather=request.form.get('weather', '').strip() or None,
             notes=request.form.get('notes', '').strip() or None,
             other_work_description=request.form.get('other_work_description', '').strip() or None,
             user_id=current_user.id,
@@ -1034,6 +1074,7 @@ def edit_entry(entry_id):
         entry.delay_reason = (request.form.get('delay_reason', '').strip() or None) if entry.delay_hours > 0 else None
         entry.delay_description = request.form.get('delay_description', '').strip() or None
         entry.machines_stood_down = bool(request.form.get('machines_stood_down'))
+        entry.weather = request.form.get('weather', '').strip() or None
         entry.notes = request.form.get('notes', '').strip() or None
         entry.other_work_description = request.form.get('other_work_description', '').strip() or None
         try:
@@ -1324,7 +1365,16 @@ def project_dashboard(project_id):
     daily_cost = labour_daily + machine_daily
     target_cost = (daily_cost * project.quoted_days
                    if project.quoted_days and daily_cost > 0 else None)
-    non_work_set_dates = {nwd.date for nwd in non_work_dates}
+    # Public holidays and CFMEU dates for this project's state
+    state_holidays = []
+    if project.state:
+        state_holidays = PublicHoliday.query.filter_by(state=project.state).order_by(PublicHoliday.date).all()
+        if project.is_cfmeu:
+            cfmeu = CFMEUDate.query.order_by(CFMEUDate.date).all()
+            state_holidays = sorted(state_holidays + list(cfmeu), key=lambda x: x.date)
+    # Build non-work date set including state holidays
+    holiday_dates = {h.date for h in state_holidays}
+    non_work_set_dates = {nwd.date for nwd in non_work_dates} | holiday_dates
     est_finish_date = None
     if gantt_data and gantt_data.get('est_finish'):
         try:
@@ -1356,6 +1406,50 @@ def project_dashboard(project_id):
         'has_rates': daily_cost > 0,
     }
 
+    # All distinct scheduling groups for the scheduling tab
+    _all_roles = Role.query.filter(Role.group_name.isnot(None)).all()
+    _seen = set()
+    role_groups_all = []
+    for r in _all_roles:
+        if r.group_name and r.group_name not in _seen:
+            _seen.add(r.group_name)
+            role_groups_all.append(r.group_name)
+    role_groups_all.sort()
+    # Build a dict of current budgeted counts by role_name for pre-filling
+    budgeted_by_group = {br.role_name: br.budgeted_count for br in budgeted_roles}
+
+    # Equipment requirements for scheduling tab
+    equip_reqs = (ProjectEquipmentRequirement.query
+                  .filter_by(project_id=project_id)
+                  .order_by(ProjectEquipmentRequirement.label)
+                  .all())
+    # Build coverage rows — assignments are explicit (not type-matched)
+    equip_coverage = []
+    # Track which machine/hired_machine ids are already assigned to any requirement on this project
+    assigned_own_ids = set()
+    assigned_hired_ids = set()
+    for er in equip_reqs:
+        for a in er.assignments:
+            if a.machine_id:
+                assigned_own_ids.add(a.machine_id)
+            if a.hired_machine_id:
+                assigned_hired_ids.add(a.hired_machine_id)
+    for er in equip_reqs:
+        total = len(er.assignments)
+        equip_coverage.append({
+            'req': er,
+            'label': er.label,
+            'required': er.required_count,
+            'assignments': er.assignments,
+            'total': total,
+            'gap': max(0, er.required_count - total),
+        })
+    # All own fleet machines available to assign (active, not yet assigned to any requirement on this project)
+    assignable_own = [m for m in Machine.query.filter_by(active=True).order_by(Machine.name).all()
+                      if m.id not in assigned_own_ids]
+    # All hired machines for this project not yet assigned to a requirement
+    assignable_hired = [hm for hm in hired_machines_list if hm.id not in assigned_hired_ids]
+
     return render_template('project_dashboard.html',
                            project=project, progress=progress,
                            gantt_data=gantt_data,
@@ -1372,6 +1466,13 @@ def project_dashboard(project_id):
                            worked_sundays_list=worked_sundays_list,
                            project_documents=project_documents,
                            cost_estimate=cost_estimate,
+                           role_groups_all=role_groups_all,
+                           budgeted_by_group=budgeted_by_group,
+                           equip_reqs=equip_reqs,
+                           equip_coverage=equip_coverage,
+                           assignable_own=assignable_own,
+                           assignable_hired=assignable_hired,
+                           state_holidays=state_holidays,
                            today=date.today())
 
 
@@ -2398,7 +2499,9 @@ def hire_new():
         hm = HiredMachine(
             project_id=int(project_id),
             machine_name=machine_name,
+            plant_id=request.form.get('plant_id', '').strip() or None,
             machine_type=request.form.get('machine_type', '').strip() or None,
+            description=request.form.get('description', '').strip() or None,
             hire_company=request.form.get('hire_company', '').strip() or None,
             hire_company_email=request.form.get('hire_company_email', '').strip() or None,
             hire_company_phone=request.form.get('hire_company_phone', '').strip() or None,
@@ -2449,7 +2552,9 @@ def hire_edit(hm_id):
     if request.method == 'POST':
         hm.project_id = int(request.form.get('project_id'))
         hm.machine_name = request.form.get('machine_name', '').strip()
+        hm.plant_id = request.form.get('plant_id', '').strip() or None
         hm.machine_type = request.form.get('machine_type', '').strip() or None
+        hm.description = request.form.get('description', '').strip() or None
         hm.hire_company = request.form.get('hire_company', '').strip() or None
         hm.hire_company_email = request.form.get('hire_company_email', '').strip() or None
         hm.hire_company_phone = request.form.get('hire_company_phone', '').strip() or None
@@ -2597,6 +2702,7 @@ def admin_users_add():
     from werkzeug.security import generate_password_hash
     username = request.form.get('username', '').strip().lower()
     display_name = request.form.get('display_name', '').strip()
+    email = request.form.get('email', '').strip()
     password = request.form.get('password', '')
     is_admin = request.form.get('is_admin') == 'on'
     if not username or not password:
@@ -2608,6 +2714,7 @@ def admin_users_add():
     user = User(
         username=username,
         display_name=display_name or username,
+        email=email or None,
         password_hash=generate_password_hash(password),
         is_admin=is_admin,
         active=True,
@@ -3123,9 +3230,13 @@ def admin_machines():
         if action == 'add':
             name = request.form.get('name', '').strip()
             machine_type = request.form.get('machine_type', '').strip()
+            plant_id = request.form.get('plant_id', '').strip()
+            description = request.form.get('description', '').strip()
             delay_rate = request.form.get('delay_rate', '').strip()
             if name:
-                db.session.add(Machine(name=name, machine_type=machine_type or None,
+                db.session.add(Machine(name=name, plant_id=plant_id or None,
+                                       machine_type=machine_type or None,
+                                       description=description or None,
                                        delay_rate=float(delay_rate) if delay_rate else None))
                 db.session.commit()
                 flash(f'Machine "{name}" added.', 'success')
@@ -3134,7 +3245,9 @@ def admin_machines():
         elif action == 'edit':
             machine = Machine.query.get_or_404(int(request.form.get('id')))
             machine.name = request.form.get('name', '').strip()
+            machine.plant_id = request.form.get('plant_id', '').strip() or None
             machine.machine_type = request.form.get('machine_type', '').strip() or None
+            machine.description = request.form.get('description', '').strip() or None
             delay_rate = request.form.get('delay_rate', '').strip()
             machine.delay_rate = float(delay_rate) if delay_rate else None
             db.session.commit()
@@ -3196,6 +3309,8 @@ def admin_roles():
             role.name = request.form.get('name', '').strip()
             delay_rate = request.form.get('delay_rate', '').strip()
             role.delay_rate = float(delay_rate) if delay_rate else None
+            group_name = request.form.get('group_name', '').strip()
+            role.group_name = group_name or None
             db.session.commit()
             flash('Role updated.', 'success')
         elif action == 'delete':
@@ -3210,6 +3325,61 @@ def admin_roles():
 
     roles = Role.query.order_by(Role.name).all()
     return render_template('admin/roles.html', roles=roles)
+
+
+@app.route('/admin/holidays', methods=['GET', 'POST'])
+@login_required
+def admin_holidays():
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            state = request.form.get('state', '').strip()
+            date_str = request.form.get('date', '').strip()
+            name = request.form.get('name', '').strip()
+            if state and date_str and name:
+                try:
+                    d = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    db.session.add(PublicHoliday(state=state, date=d, name=name))
+                    db.session.commit()
+                    flash(f'Added: {name} ({state} {d.strftime("%d/%m/%Y")}).', 'success')
+                except ValueError:
+                    flash('Invalid date.', 'danger')
+        elif action == 'delete':
+            h = PublicHoliday.query.get(int(request.form.get('id', 0)))
+            if h:
+                db.session.delete(h)
+                db.session.commit()
+                flash('Holiday deleted.', 'success')
+        return redirect(url_for('admin_holidays'))
+    holidays = PublicHoliday.query.order_by(PublicHoliday.state, PublicHoliday.date).all()
+    return render_template('admin/holidays.html', holidays=holidays, states=AUSTRALIAN_STATES)
+
+
+@app.route('/admin/cfmeu', methods=['GET', 'POST'])
+@login_required
+def admin_cfmeu():
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            date_str = request.form.get('date', '').strip()
+            name = request.form.get('name', '').strip()
+            if date_str and name:
+                try:
+                    d = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    db.session.add(CFMEUDate(state='ALL', date=d, name=name))
+                    db.session.commit()
+                    flash(f'Added: {name} ({d.strftime("%d/%m/%Y")}).', 'success')
+                except ValueError:
+                    flash('Invalid date.', 'danger')
+        elif action == 'delete':
+            c = CFMEUDate.query.get(int(request.form.get('id', 0)))
+            if c:
+                db.session.delete(c)
+                db.session.commit()
+                flash('CFMEU date deleted.', 'success')
+        return redirect(url_for('admin_cfmeu'))
+    cfmeu_dates = CFMEUDate.query.order_by(CFMEUDate.state, CFMEUDate.date).all()
+    return render_template('admin/cfmeu.html', cfmeu_dates=cfmeu_dates, states=AUSTRALIAN_STATES)
 
 
 @app.route('/admin/settings', methods=['GET', 'POST'])
@@ -3351,6 +3521,30 @@ def build_schedule_grid(employees, date_list):
     for s in swings:
         swing_by_emp[s.employee_id].append(s)
 
+    overrides = ScheduleDayOverride.query.filter(
+        ScheduleDayOverride.employee_id.in_(emp_ids),
+        ScheduleDayOverride.date >= min_date,
+        ScheduleDayOverride.date <= max_date
+    ).all()
+    override_by_emp = defaultdict(dict)
+    for o in overrides:
+        override_by_emp[o.employee_id][o.date] = o
+
+    # Load project info (state + CFMEU flag) for all assigned projects
+    proj_ids = {a.project_id for a in assignments}
+    project_info = {}
+    if proj_ids:
+        for p in Project.query.filter(Project.id.in_(proj_ids)).all():
+            project_info[p.id] = p
+
+    # Load public holidays and CFMEU dates within the view window
+    holidays_by_state = defaultdict(set)
+    for h in PublicHoliday.query.filter(
+            PublicHoliday.date >= min_date, PublicHoliday.date <= max_date).all():
+        holidays_by_state[h.state].add(h.date)
+    cfmeu_dates_set = {c.date for c in CFMEUDate.query.filter(
+        CFMEUDate.date >= min_date, CFMEUDate.date <= max_date).all()}
+
     grid = {}
     for emp in employees:
         grid[emp.id] = {}
@@ -3361,17 +3555,52 @@ def build_schedule_grid(employees, date_list):
         for d in date_list:
             date_str = d.isoformat()
 
-            # Priority 1: Leave
+            # Priority 1: Single-day override (explicit manual entry)
+            override = override_by_emp.get(emp.id, {}).get(d)
+            if override:
+                _OV_LABELS = {
+                    'available': 'Available', 'annual': 'Annual Leave', 'sick': 'Sick',
+                    'personal': 'Personal', 'r_and_r': 'R&R', 'travel': 'Travel',
+                    'rdo': 'RDO', 'other': 'Leave',
+                }
+                if override.status == 'project' and override.project:
+                    grid[emp.id][date_str] = {
+                        'status': 'assigned',
+                        'label': override.project.name[:16],
+                        'project_name': override.project.name,
+                        'override_id': override.id,
+                        'override_status': override.status,
+                        'override_project_id': override.project_id or '',
+                    }
+                else:
+                    css = override.status if override.status in (
+                        'r_and_r', 'travel', 'rdo', 'available') else 'leave'
+                    grid[emp.id][date_str] = {
+                        'status': css,
+                        'label': _OV_LABELS.get(override.status, override.status.replace('_', ' ').title()),
+                        'project_name': '',
+                        'override_id': override.id,
+                        'override_status': override.status,
+                        'override_project_id': '',
+                    }
+                continue
+
+            # Priority 2: Leave (r_and_r and travel get distinct visual status)
+            _LEAVE_LABELS = {
+                'annual': 'Annual Leave', 'sick': 'Sick', 'personal': 'Personal',
+                'r_and_r': 'R&R', 'travel': 'Travel', 'other': 'Leave'
+            }
             leave = next((lv for lv in emp_leaves if lv.date_from <= d <= lv.date_to), None)
             if leave:
+                lt = leave.leave_type
                 grid[emp.id][date_str] = {
-                    'status': 'leave',
-                    'label': leave.leave_type.title(),
+                    'status': lt if lt in ('r_and_r', 'travel') else 'leave',
+                    'label': _LEAVE_LABELS.get(lt, lt.title()),
                     'project_name': ''
                 }
                 continue
 
-            # Priority 2: RDO — find the most recent swing whose start_date <= d
+            # Priority 3: RDO — find the most recent swing whose start_date <= d
             applicable_swing = None
             for s in emp_swings:
                 if s.start_date <= d:
@@ -3379,32 +3608,55 @@ def build_schedule_grid(employees, date_list):
                 # swings are ordered ASC so keep going to find latest
             if applicable_swing and applicable_swing.is_rdo(d):
                 grid[emp.id][date_str] = {
-                    'status': 'rdo',
-                    'label': 'RDO',
+                    'status': 'r_and_r',
+                    'label': 'R&R',
                     'project_name': ''
                 }
                 continue
 
-            # Priority 3: Project assignment
-            assignment = next(
+            # Priority 4: Project-based non-work day (public holiday or CFMEU date)
+            active_assign = next(
                 (a for a in emp_assigns
                  if a.date_from <= d and (a.date_to is None or a.date_to >= d)),
                 None
             )
-            if assignment:
+            if active_assign:
+                proj = project_info.get(active_assign.project_id)
+                if proj:
+                    is_pub_holiday = bool(proj.state and d in holidays_by_state.get(proj.state, set()))
+                    is_cfmeu_day = bool(proj.is_cfmeu and d in cfmeu_dates_set)
+                    if is_pub_holiday or is_cfmeu_day:
+                        grid[emp.id][date_str] = {
+                            'status': 'rdo',
+                            'label': 'PH' if is_pub_holiday else 'CFMEU',
+                            'project_name': '',
+                            'nwd_reason': 'Public Holiday' if is_pub_holiday else 'CFMEU RDO',
+                        }
+                        continue
+
+            # Priority 5: Project assignment
+            if active_assign:
                 grid[emp.id][date_str] = {
                     'status': 'assigned',
-                    'label': assignment.project.name[:16],
-                    'project_name': assignment.project.name
+                    'label': active_assign.project.name[:16],
+                    'project_name': active_assign.project.name,
+                    'project_id': active_assign.project_id,
                 }
                 continue
 
-            # Default: available
-            grid[emp.id][date_str] = {
-                'status': 'available',
-                'label': 'Available',
-                'project_name': ''
-            }
+            # Default: sunday rest or available
+            if d.weekday() == 6:
+                grid[emp.id][date_str] = {
+                    'status': 'sunday',
+                    'label': 'Sun',
+                    'project_name': ''
+                }
+            else:
+                grid[emp.id][date_str] = {
+                    'status': 'available',
+                    'label': 'Available',
+                    'project_name': ''
+                }
 
     return grid
 
@@ -3413,46 +3665,233 @@ def build_schedule_grid(employees, date_list):
 # Scheduling routes — overview
 # ---------------------------------------------------------------------------
 
+@app.route('/equipment/machine/save', methods=['POST'])
+@login_required
+def equipment_machine_save():
+    action = request.form.get('action')
+    if action == 'add':
+        name = request.form.get('name', '').strip()
+        if not name:
+            flash('Machine name is required.', 'danger')
+            return redirect(url_for('equipment_overview') + '#tab-own')
+        m = Machine(
+            name=name,
+            plant_id=request.form.get('plant_id', '').strip() or None,
+            machine_type=request.form.get('machine_type', '').strip() or None,
+            description=request.form.get('description', '').strip() or None,
+            delay_rate=float(request.form.get('delay_rate')) if request.form.get('delay_rate') else None,
+        )
+        db.session.add(m)
+        db.session.commit()
+        flash(f'Machine "{name}" added.', 'success')
+    elif action == 'edit':
+        m = Machine.query.get_or_404(request.form.get('machine_id', type=int))
+        m.name = request.form.get('name', '').strip()
+        m.plant_id = request.form.get('plant_id', '').strip() or None
+        m.machine_type = request.form.get('machine_type', '').strip() or None
+        m.description = request.form.get('description', '').strip() or None
+        m.delay_rate = float(request.form.get('delay_rate')) if request.form.get('delay_rate') else None
+        db.session.commit()
+        flash('Machine updated.', 'success')
+    elif action == 'toggle':
+        m = Machine.query.get_or_404(request.form.get('machine_id', type=int))
+        m.active = not m.active
+        db.session.commit()
+        flash(f'"{m.name}" {"activated" if m.active else "deactivated"}.', 'info')
+    elif action == 'delete':
+        m = Machine.query.get_or_404(request.form.get('machine_id', type=int))
+        if m.entries:
+            flash('Cannot delete — machine has entries. Deactivate instead.', 'danger')
+        else:
+            db.session.delete(m)
+            db.session.commit()
+            flash('Machine deleted.', 'info')
+    return redirect(url_for('equipment_overview') + '#tab-own')
+
+
+@app.route('/equipment')
+@login_required
+def equipment_overview():
+    own_machines = Machine.query.order_by(Machine.name).all()
+    hired_machines = HiredMachine.query.order_by(HiredMachine.machine_name).all()
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    # Active breakdown lookup: machine_id → breakdown, hired_machine_id → breakdown
+    own_breakdowns = {b.machine_id: b for b in
+                      MachineBreakdown.query.filter(
+                          MachineBreakdown.machine_id.isnot(None),
+                          MachineBreakdown.repair_status != 'completed'
+                      ).all()}
+    hired_breakdowns = {b.hired_machine_id: b for b in
+                        MachineBreakdown.query.filter(
+                            MachineBreakdown.hired_machine_id.isnot(None),
+                            MachineBreakdown.repair_status != 'completed'
+                        ).all()}
+
+    # Current project assignment per machine (via ProjectEquipmentAssignment)
+    all_assignments = (ProjectEquipmentAssignment.query
+                       .join(ProjectEquipmentRequirement)
+                       .join(Project)
+                       .filter(Project.active == True)
+                       .all())
+    own_machine_projects = {}
+    hired_machine_projects = {}
+    for a in all_assignments:
+        entry = (a.requirement.project, a.requirement.label)
+        if a.machine_id:
+            own_machine_projects.setdefault(a.machine_id, []).append(entry)
+        if a.hired_machine_id:
+            hired_machine_projects.setdefault(a.hired_machine_id, []).append(entry)
+
+    # Full breakdown history (all statuses) per machine for history log
+    from collections import defaultdict as _dd
+    own_bd_history = _dd(list)
+    for b in MachineBreakdown.query.filter(
+            MachineBreakdown.machine_id.isnot(None)
+    ).order_by(MachineBreakdown.incident_date.desc()).all():
+        own_bd_history[b.machine_id].append(b)
+    hired_bd_history = _dd(list)
+    for b in MachineBreakdown.query.filter(
+            MachineBreakdown.hired_machine_id.isnot(None)
+    ).order_by(MachineBreakdown.incident_date.desc()).all():
+        hired_bd_history[b.hired_machine_id].append(b)
+
+    return render_template('equipment/index.html',
+                           own_machines=own_machines,
+                           hired_machines=hired_machines,
+                           projects=projects,
+                           own_breakdowns=own_breakdowns,
+                           hired_breakdowns=hired_breakdowns,
+                           own_machine_projects=own_machine_projects,
+                           hired_machine_projects=hired_machine_projects,
+                           own_bd_history=own_bd_history,
+                           hired_bd_history=hired_bd_history,
+                           today=date.today())
+
+
+@app.route('/equipment/breakdown/add', methods=['POST'])
+@login_required
+def breakdown_add():
+    machine_id = request.form.get('machine_id') or None
+    hired_machine_id = request.form.get('hired_machine_id') or None
+    incident_date_str = request.form.get('incident_date', '').strip()
+    try:
+        incident_date = datetime.strptime(incident_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid date.', 'danger')
+        return redirect(url_for('equipment_overview'))
+    bd = MachineBreakdown(
+        machine_id=int(machine_id) if machine_id else None,
+        hired_machine_id=int(hired_machine_id) if hired_machine_id else None,
+        incident_date=incident_date,
+        incident_time=request.form.get('incident_time', '').strip() or None,
+        description=request.form.get('description', '').strip() or None,
+        repairing_by=request.form.get('repairing_by', '').strip() or None,
+        repair_status=request.form.get('repair_status', 'pending'),
+        anticipated_return=datetime.strptime(request.form['anticipated_return'], '%Y-%m-%d').date()
+            if request.form.get('anticipated_return') else None,
+    )
+    db.session.add(bd)
+    db.session.flush()
+    # Handle photos
+    photos = request.files.getlist('photos')
+    upload_folder = os.path.join(app.config.get('UPLOAD_FOLDER', 'static/uploads'), 'breakdowns')
+    os.makedirs(upload_folder, exist_ok=True)
+    for photo in photos:
+        if photo and photo.filename:
+            ext = os.path.splitext(photo.filename)[1].lower()
+            stored = f"{uuid.uuid4()}{ext}"
+            photo.save(os.path.join(upload_folder, stored))
+            db.session.add(BreakdownPhoto(breakdown_id=bd.id, filename=stored, original_name=photo.filename))
+    db.session.commit()
+    flash('Breakdown recorded.', 'warning')
+    return redirect(url_for('equipment_overview') + '#tab-own' if not hired_machine_id else '#tab-hired')
+
+
+@app.route('/equipment/breakdown/<int:bd_id>/update', methods=['POST'])
+@login_required
+def breakdown_update(bd_id):
+    bd = MachineBreakdown.query.get_or_404(bd_id)
+    bd.repair_status = request.form.get('repair_status', bd.repair_status)
+    bd.repairing_by = request.form.get('repairing_by', '').strip() or bd.repairing_by
+    ret = request.form.get('anticipated_return', '').strip()
+    if ret:
+        try:
+            bd.anticipated_return = datetime.strptime(ret, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    if bd.repair_status == 'completed' and not bd.resolved_date:
+        bd.resolved_date = date.today()
+    db.session.commit()
+    flash('Breakdown updated.', 'success')
+    return redirect(url_for('equipment_overview'))
+
+
+@app.route('/equipment/breakdown/<int:bd_id>/delete', methods=['POST'])
+@login_required
+def breakdown_delete(bd_id):
+    bd = MachineBreakdown.query.get_or_404(bd_id)
+    db.session.delete(bd)
+    db.session.commit()
+    flash('Breakdown record deleted.', 'success')
+    return redirect(url_for('equipment_overview'))
+
+
 @app.route('/scheduling')
 def scheduling_overview():
-    # Week navigation: ?week=YYYY-MM-DD  (Monday of the target week)
+    # Navigation: ?week=YYYY-MM-DD (Monday of start week), jumps in 4-week increments
     week_str = request.args.get('week')
     try:
         week_start = datetime.strptime(week_str, '%Y-%m-%d').date()
-        # Snap to Monday
         week_start = week_start - timedelta(days=week_start.weekday())
     except (ValueError, TypeError):
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
 
-    # Show 14 days (2 weeks)
-    date_list = [week_start + timedelta(days=i) for i in range(14)]
+    # Show 12 weeks (84 days) — one full scroll covers 3 swing cycles
+    date_list = [week_start + timedelta(days=i) for i in range(84)]
     week_end = date_list[-1]
-    prev_week = (week_start - timedelta(days=7)).isoformat()
-    next_week = (week_start + timedelta(days=7)).isoformat()
+    prev_period = (week_start - timedelta(weeks=4)).isoformat()
+    next_period = (week_start + timedelta(weeks=4)).isoformat()
 
     employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
     grid = build_schedule_grid(employees, date_list)
 
-    # Group employees by role for display
+    # Group employees by role group (if set) then by role name
     from itertools import groupby
+    roles_db = Role.query.all()
+    role_group_map = {r.name: (r.group_name or r.name) for r in roles_db}
+
+    # Sort employees so they group by their display group name, then role, then name
+    def emp_sort_key(e):
+        grp = role_group_map.get(e.role, e.role or 'ZZZ')
+        return (grp, e.role or '', e.name)
+    employees_sorted = sorted(employees, key=emp_sort_key)
+
     roles_grouped = []
-    for role_name, emp_iter in groupby(employees, key=lambda e: e.role or 'No Role'):
+    for role_name, emp_iter in groupby(employees_sorted, key=lambda e: e.role or 'No Role'):
         roles_grouped.append((role_name, list(emp_iter)))
 
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    all_proj_ordered = Project.query.order_by(Project.id).all()
+    project_colour_map = {
+        p.id: SCHED_PALETTE[i % len(SCHED_PALETTE)]
+        for i, p in enumerate(all_proj_ordered)
+    }
 
     return render_template(
         'scheduling/overview.html',
         date_list=date_list,
         week_start=week_start,
         week_end=week_end,
-        prev_week=prev_week,
-        next_week=next_week,
-        employees=employees,
+        prev_period=prev_period,
+        next_period=next_period,
+        employees=employees_sorted,
         roles_grouped=roles_grouped,
         grid=grid,
         projects=projects,
+        project_colour_map=project_colour_map,
         today=date.today()
     )
 
@@ -3469,12 +3908,13 @@ def scheduling_project(project_id):
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
 
-    date_list = [week_start + timedelta(days=i) for i in range(14)]
+    # Show 12 weeks, navigate in 4-week increments
+    date_list = [week_start + timedelta(days=i) for i in range(84)]
     week_end = date_list[-1]
-    prev_week = (week_start - timedelta(days=7)).isoformat()
-    next_week = (week_start + timedelta(days=7)).isoformat()
+    prev_period = (week_start - timedelta(weeks=4)).isoformat()
+    next_period = (week_start + timedelta(weeks=4)).isoformat()
 
-    # Employees currently assigned to this project (date range overlaps view window)
+    # Employees assigned to this project whose assignment overlaps the view window
     assignments = ProjectAssignment.query.filter(
         ProjectAssignment.project_id == project_id,
         ProjectAssignment.date_from <= week_end,
@@ -3486,22 +3926,76 @@ def scheduling_project(project_id):
 
     grid = build_schedule_grid(assigned_employees, date_list)
 
-    # Build role count per date vs budgeted
+    # Build role group mapping for coverage (roles in the same group count together)
+    roles_db = Role.query.all()
+    role_group_map = {r.name: (r.group_name or r.name) for r in roles_db}
+
+    # Budgeted by role group name (ProjectBudgetedRole.role_name should match group names)
     budgeted = {br.role_name: br.budgeted_count for br in project.budgeted_roles}
 
-    # Count assigned+present employees by role per date
-    role_coverage = {}   # role_name -> {date_str -> count}
+    # Count employees on site (status='assigned') grouped by their role group per date
+    role_coverage = {}   # group_name -> {date_str -> count}
     for emp in assigned_employees:
-        role = emp.role or 'No Role'
-        if role not in role_coverage:
-            role_coverage[role] = {d.isoformat(): 0 for d in date_list}
+        group = role_group_map.get(emp.role or '', emp.role or 'No Role')
+        if group not in role_coverage:
+            role_coverage[group] = {d.isoformat(): 0 for d in date_list}
         for d in date_list:
             ds = d.isoformat()
             cell = grid.get(emp.id, {}).get(ds, {})
             if cell.get('status') == 'assigned':
-                role_coverage[role][ds] += 1
+                role_coverage[group][ds] += 1
 
     all_employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
+
+    # Non-work dates including public holidays
+    project_nwd = {nwd.date for nwd in ProjectNonWorkDate.query.filter_by(project_id=project_id).all()}
+    if project.state:
+        for h in PublicHoliday.query.filter_by(state=project.state).all():
+            project_nwd.add(h.date)
+        if project.is_cfmeu:
+            for c in CFMEUDate.query.all():
+                project_nwd.add(c.date)
+
+    # Equipment requirements with coverage
+    equip_reqs = (ProjectEquipmentRequirement.query
+                  .filter_by(project_id=project_id)
+                  .order_by(ProjectEquipmentRequirement.label)
+                  .all())
+    # Active breakdowns by machine id
+    own_breakdowns = {b.machine_id: b for b in
+                      MachineBreakdown.query.filter(
+                          MachineBreakdown.machine_id.isnot(None),
+                          MachineBreakdown.repair_status != 'completed').all()}
+    hired_breakdowns = {b.hired_machine_id: b for b in
+                        MachineBreakdown.query.filter(
+                            MachineBreakdown.hired_machine_id.isnot(None),
+                            MachineBreakdown.repair_status != 'completed').all()}
+    equip_coverage = []
+    for er in equip_reqs:
+        assignments_for_req = er.assignments
+        assigned = len(assignments_for_req)
+        gap = max(0, er.required_count - assigned)
+        machines = []
+        for a in assignments_for_req:
+            broken = (own_breakdowns.get(a.machine_id) if a.machine_id else
+                      hired_breakdowns.get(a.hired_machine_id))
+            machines.append({'assignment': a, 'broken': broken})
+        equip_coverage.append({
+            'req': er,
+            'label': er.label,
+            'required': er.required_count,
+            'machines': machines,
+            'assigned': assigned,
+            'gap': gap,
+        })
+
+    all_projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    all_proj_ordered = Project.query.order_by(Project.id).all()
+    project_colour_map = {
+        p.id: SCHED_PALETTE[i % len(SCHED_PALETTE)]
+        for i, p in enumerate(all_proj_ordered)
+    }
 
     return render_template(
         'scheduling/project.html',
@@ -3509,14 +4003,18 @@ def scheduling_project(project_id):
         date_list=date_list,
         week_start=week_start,
         week_end=week_end,
-        prev_week=prev_week,
-        next_week=next_week,
+        prev_period=prev_period,
+        next_period=next_period,
         assignments=assignments,
         assigned_employees=assigned_employees,
         grid=grid,
         budgeted=budgeted,
         role_coverage=role_coverage,
         all_employees=all_employees,
+        all_projects=all_projects,
+        project_nwd=project_nwd,
+        equip_coverage=equip_coverage,
+        project_colour_map=project_colour_map,
         today=date.today()
     )
 
@@ -3628,6 +4126,58 @@ def scheduling_leave_delete(leave_id):
 
 
 # ---------------------------------------------------------------------------
+# Scheduling — single-day override
+# ---------------------------------------------------------------------------
+
+@app.route('/scheduling/override', methods=['POST'])
+@login_required
+def schedule_override():
+    employee_id = request.form.get('employee_id', type=int)
+    date_str = request.form.get('date', '').strip()
+    action = request.form.get('action', 'set')
+    week = request.form.get('week', '')
+    redirect_project = request.form.get('redirect_project_id', type=int)
+
+    try:
+        override_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid date.', 'danger')
+        if redirect_project:
+            return redirect(url_for('scheduling_project', project_id=redirect_project, week=week))
+        return redirect(url_for('scheduling_overview', week=week))
+
+    existing = ScheduleDayOverride.query.filter_by(
+        employee_id=employee_id, date=override_date
+    ).first()
+
+    if action == 'clear':
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+    else:
+        status = request.form.get('status', 'available')
+        project_id = request.form.get('project_id', type=int)
+        notes = request.form.get('notes', '').strip() or None
+        if existing:
+            existing.status = status
+            existing.project_id = project_id if status == 'project' else None
+            existing.notes = notes
+        else:
+            db.session.add(ScheduleDayOverride(
+                employee_id=employee_id,
+                date=override_date,
+                status=status,
+                project_id=project_id if status == 'project' else None,
+                notes=notes,
+            ))
+        db.session.commit()
+
+    if redirect_project:
+        return redirect(url_for('scheduling_project', project_id=redirect_project, week=week))
+    return redirect(url_for('scheduling_overview', week=week))
+
+
+# ---------------------------------------------------------------------------
 # Admin — swing patterns
 # ---------------------------------------------------------------------------
 
@@ -3642,13 +4192,13 @@ def admin_swings():
 
         if action == 'add_pattern':
             name = request.form.get('name', '').strip()
-            work_days = request.form.get('work_days', type=int)
+            work_weeks = request.form.get('work_weeks', type=int)
             off_days = request.form.get('off_days', type=int)
             description = request.form.get('description', '').strip()
-            if not name or not work_days or not off_days:
-                flash('Name, work days, and off days are required.', 'danger')
+            if not name or not work_weeks or not off_days:
+                flash('Name, work weeks, and off days are required.', 'danger')
             else:
-                sp = SwingPattern(name=name, work_days=work_days, off_days=off_days,
+                sp = SwingPattern(name=name, work_weeks=work_weeks, off_days=off_days,
                                   description=description or None)
                 db.session.add(sp)
                 db.session.commit()
@@ -3666,6 +4216,7 @@ def admin_swings():
             employee_id = request.form.get('employee_id', type=int)
             pattern_id = request.form.get('pattern_id', type=int)
             start_date_str = request.form.get('start_date', '').strip()
+            day_offset = request.form.get('day_offset', 0, type=int)
             notes = request.form.get('notes', '').strip()
             try:
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
@@ -3676,7 +4227,8 @@ def admin_swings():
                 flash('Employee and pattern are required.', 'danger')
             else:
                 es = EmployeeSwing(employee_id=employee_id, pattern_id=pattern_id,
-                                   start_date=start_date, notes=notes or None)
+                                   start_date=start_date, day_offset=day_offset,
+                                   notes=notes or None)
                 db.session.add(es)
                 db.session.commit()
                 flash('Swing pattern assigned.', 'success')
@@ -3700,6 +4252,126 @@ def admin_swings():
                            patterns=patterns,
                            employees=employees,
                            swing_assignments=swing_assignments)
+
+
+@app.route('/project/<int:project_id>/budgeted-crew/save-all', methods=['POST'])
+def budgeted_crew_save_all(project_id):
+    project = Project.query.get_or_404(project_id)
+    # Delete all existing budgeted roles for this project
+    ProjectBudgetedRole.query.filter_by(project_id=project_id).delete()
+    # Re-add from form (group_name -> count)
+    for key, val in request.form.items():
+        if key.startswith('group_'):
+            group_name = key[6:]  # strip 'group_' prefix
+            try:
+                count = int(val)
+            except (ValueError, TypeError):
+                count = 0
+            if count > 0:
+                db.session.add(ProjectBudgetedRole(
+                    project_id=project_id,
+                    role_name=group_name,
+                    budgeted_count=count
+                ))
+    db.session.commit()
+    flash('Crew requirements saved.', 'success')
+    return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-scheduling')
+
+
+@app.route('/project/<int:project_id>/equipment-requirements/add', methods=['POST'])
+def equipment_req_add(project_id):
+    Project.query.get_or_404(project_id)
+    label = request.form.get('label', '').strip()
+    try:
+        required_count = max(1, int(request.form.get('required_count', 1)))
+    except (ValueError, TypeError):
+        required_count = 1
+    if not label:
+        flash('Equipment name is required.', 'danger')
+        return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-scheduling')
+    db.session.add(ProjectEquipmentRequirement(
+        project_id=project_id, label=label, required_count=required_count))
+    db.session.commit()
+    flash(f'Added requirement: {label}.', 'success')
+    return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-scheduling')
+
+
+@app.route('/project/<int:project_id>/equipment-requirements/<int:req_id>/update', methods=['POST'])
+def equipment_req_update(project_id, req_id):
+    req = ProjectEquipmentRequirement.query.filter_by(id=req_id, project_id=project_id).first_or_404()
+    label = request.form.get('label', '').strip()
+    try:
+        required_count = max(1, int(request.form.get('required_count', 1)))
+    except (ValueError, TypeError):
+        required_count = 1
+    if label:
+        req.label = label
+    req.required_count = required_count
+    db.session.commit()
+    flash('Requirement updated.', 'success')
+    return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-scheduling')
+
+
+@app.route('/project/<int:project_id>/equipment-requirements/<int:req_id>/delete', methods=['POST'])
+def equipment_req_delete(project_id, req_id):
+    req = ProjectEquipmentRequirement.query.filter_by(id=req_id, project_id=project_id).first_or_404()
+    # cascade delete assignments
+    ProjectEquipmentAssignment.query.filter_by(requirement_id=req_id).delete()
+    db.session.delete(req)
+    db.session.commit()
+    flash('Requirement removed.', 'success')
+    return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-scheduling')
+
+
+@app.route('/project/<int:project_id>/equipment-requirements/<int:req_id>/assign', methods=['POST'])
+def equipment_req_assign(project_id, req_id):
+    req = ProjectEquipmentRequirement.query.filter_by(id=req_id, project_id=project_id).first_or_404()
+    machine_id = request.form.get('machine_id', '').strip()
+    hired_machine_id = request.form.get('hired_machine_id', '').strip()
+    if not machine_id and not hired_machine_id:
+        flash('Select a machine to assign.', 'danger')
+        return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-scheduling')
+    assignment = ProjectEquipmentAssignment(requirement_id=req.id)
+    if machine_id:
+        assignment.machine_id = int(machine_id)
+    else:
+        assignment.hired_machine_id = int(hired_machine_id)
+    db.session.add(assignment)
+    db.session.commit()
+    flash('Machine assigned.', 'success')
+    return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-scheduling')
+
+
+@app.route('/project/<int:project_id>/equipment-assignments/<int:assign_id>/remove', methods=['POST'])
+def equipment_req_unassign(project_id, assign_id):
+    a = ProjectEquipmentAssignment.query.filter_by(id=assign_id).first_or_404()
+    # verify it belongs to this project
+    if a.requirement.project_id != project_id:
+        return 'Forbidden', 403
+    db.session.delete(a)
+    db.session.commit()
+    flash('Machine removed from requirement.', 'success')
+    return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-scheduling')
+
+
+@app.route('/project/<int:project_id>/settings/save', methods=['POST'])
+def project_settings_save(project_id):
+    project = Project.query.get_or_404(project_id)
+    project.name = request.form.get('name', '').strip() or project.name
+    project.description = request.form.get('description', '').strip() or None
+    start_date_str = request.form.get('start_date', '').strip()
+    project.start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else None
+    planned_crew = request.form.get('planned_crew', '').strip()
+    project.planned_crew = int(planned_crew) if planned_crew else None
+    hours_per_day = request.form.get('hours_per_day', '').strip()
+    project.hours_per_day = float(hours_per_day) if hours_per_day else None
+    quoted_days = request.form.get('quoted_days', '').strip()
+    project.quoted_days = int(quoted_days) if quoted_days else None
+    project.state = request.form.get('state', '').strip() or None
+    project.is_cfmeu = bool(request.form.get('is_cfmeu'))
+    db.session.commit()
+    flash('Project settings saved.', 'success')
+    return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-settings')
 
 
 if __name__ == '__main__':

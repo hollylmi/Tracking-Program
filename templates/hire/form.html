@@ -45,10 +45,22 @@
                      placeholder="e.g. Excavator #1, CAT 308">
             </div>
             <div class="col-sm-4">
+              <label class="form-label fw-semibold">Plant ID</label>
+              <input type="text" name="plant_id" class="form-control"
+                     value="{{ hm.plant_id if hm and hm.plant_id else '' }}"
+                     placeholder="e.g. HX-021">
+            </div>
+            <div class="col-sm-4">
               <label class="form-label fw-semibold">Type</label>
               <input type="text" name="machine_type" class="form-control"
                      value="{{ hm.machine_type if hm and hm.machine_type else '' }}"
                      placeholder="e.g. Excavator">
+            </div>
+            <div class="col-sm-8">
+              <label class="form-label fw-semibold">Description</label>
+              <input type="text" name="description" class="form-control"
+                     value="{{ hm.description if hm and hm.description else '' }}"
+                     placeholder="e.g. 20t excavator with rock breaker">
             </div>
             <div class="col-sm-6">
               <label class="form-label fw-semibold">Delivery to Site</label>

@@ -55,6 +55,14 @@
                      placeholder="Auto-filled from date">
             </div>
 
+            <!-- Weather Conditions -->
+            <div class="col-12">
+              <label class="form-label fw-semibold"><i class="bi bi-cloud-sun me-1"></i>Weather Conditions <span class="text-muted fw-normal">(optional)</span></label>
+              <input type="text" name="weather" class="form-control"
+                     value="{{ entry.weather if entry and entry.weather else '' }}"
+                     placeholder="e.g. Fine, Wet, Overcast, High winds — 32°C">
+            </div>
+
             <!-- Lot Number, Location, Material -->
             <div class="col-sm-4">
               <label class="form-label fw-semibold">Lot Number</label>
@@ -210,6 +218,16 @@
               <textarea name="notes" class="form-control" rows="2"
                         placeholder="Any additional notes...">{{ entry.notes if entry and entry.notes else '' }}</textarea>
             </div>
+
+            {% if entry and entry.submitted_by_user %}
+            <div class="col-12">
+              <small class="text-muted">
+                <i class="bi bi-person-check me-1"></i>
+                Logged by <strong>{{ entry.submitted_by_user.display_name or entry.submitted_by_user.username }}</strong>
+                on {{ entry.created_at.strftime('%d %b %Y %H:%M') if entry.created_at else '' }}
+              </small>
+            </div>
+            {% endif %}
 
             <!-- Other Work (Non-deployment) -->
             <div class="col-12">

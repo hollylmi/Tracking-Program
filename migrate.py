@@ -54,6 +54,8 @@ else:
     changes += add_column('project', 'planned_crew', 'INTEGER')
     changes += add_column('project', 'hours_per_day', 'REAL')
     changes += add_column('project', 'quoted_days', 'INTEGER')
+    changes += add_column('project', 'state', 'VARCHAR(10)')
+    changes += add_column('project', 'is_cfmeu', 'BOOLEAN', default=0)
 
     # ── daily_entry ───────────────────────────────────────────────────────────
     changes += add_column('daily_entry', 'location', 'TEXT')
@@ -76,8 +78,19 @@ else:
     # entry_photo, planned_data, project_non_work_date, project_budgeted_role,
     # project_machine, project_worked_sunday, project_document — created automatically.
     # We just confirm here if they already exist.
+    # Migrate project_equipment_requirement: old schema used machine_type, new uses label
+    if table_exists('project_equipment_requirement'):
+        if column_exists('project_equipment_requirement', 'machine_type') and \
+           not column_exists('project_equipment_requirement', 'label'):
+            cur.execute("ALTER TABLE project_equipment_requirement ADD COLUMN label TEXT")
+            cur.execute("UPDATE project_equipment_requirement SET label = machine_type WHERE label IS NULL")
+            changes += 1
+            print("Migrated: project_equipment_requirement.machine_type → label")
+
     for t in ('entry_photo', 'planned_data', 'project_non_work_date', 'project_budgeted_role',
-              'project_machine', 'project_worked_sunday', 'project_document'):
+              'project_machine', 'project_worked_sunday', 'project_document',
+              'project_equipment_requirement', 'project_equipment_assignment',
+              'machine_breakdown', 'breakdown_photo', 'public_holiday', 'cfmeu_date'):
         if table_exists(t):
             print(f"OK:     {t} table exists")
         else:

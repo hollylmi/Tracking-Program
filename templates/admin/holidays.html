@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Public Holidays — Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-calendar-event me-2"></i>Public Holidays</h2>
+</div>
+
+<div class="row g-4">
+  <!-- Left: List -->
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-2">
+        <span class="fw-semibold">All Public Holidays</span>
+        <span class="badge bg-secondary ms-2">{{ holidays | length }}</span>
+      </div>
+      <div class="card-body p-0">
+        {% if holidays %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>State</th>
+              <th>Date</th>
+              <th>Name</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in holidays %}
+            <tr>
+              <td><span class="badge bg-secondary">{{ h.state }}</span></td>
+              <td class="small">{{ h.date.strftime('%d/%m/%Y') }}</td>
+              <td class="small">{{ h.name }}</td>
+              <td class="text-end">
+                <form method="POST" class="d-inline" onsubmit="return confirm('Delete this holiday?')">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="id" value="{{ h.id }}">
+                  <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-calendar-event fs-1 d-block mb-2"></i>
+          No public holidays added yet.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Add form -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-2">
+        <span class="fw-semibold"><i class="bi bi-plus-circle me-2 text-success"></i>Add Holiday</span>
+      </div>
+      <div class="card-body">
+        <form method="POST">
+          <input type="hidden" name="action" value="add">
+          <div class="mb-3">
+            <label class="form-label fw-semibold small mb-1">State <span class="text-danger">*</span></label>
+            <select name="state" class="form-select form-select-sm" required>
+              <option value="">— Select state —</option>
+              {% for s in states %}
+              <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small mb-1">Date <span class="text-danger">*</span></label>
+            <input type="date" name="date" class="form-control form-control-sm" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small mb-1">Name <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control form-control-sm" required placeholder="e.g. Christmas Day">
+          </div>
+          <button type="submit" class="btn btn-success btn-sm w-100">
+            <i class="bi bi-plus-lg me-1"></i>Add Holiday
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

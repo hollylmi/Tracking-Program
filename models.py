@@ -9,6 +9,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), nullable=False, unique=True)
     display_name = db.Column(db.String(200))       # full name shown in entries
+    email = db.Column(db.String(200))              # contact email
     password_hash = db.Column(db.String(256), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     active = db.Column(db.Boolean, default=True)
@@ -46,6 +47,8 @@ class Project(db.Model):
     planned_crew = db.Column(db.Integer)      # Estimated crew size for efficiency calculations
     hours_per_day = db.Column(db.Float)       # Quoted hours per working day
     quoted_days = db.Column(db.Integer)       # Total quoted working days for the job
+    state = db.Column(db.String(10))              # Australian state code e.g. 'QLD'
+    is_cfmeu = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     entries = db.relationship('DailyEntry', backref='project', lazy=True)
     planned_data = db.relationship('PlannedData', backref='project',
@@ -64,6 +67,7 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     delay_rate = db.Column(db.Float)
+    group_name = db.Column(db.String(100))   # scheduling role group (e.g. "Supervisor", "Labourer")
     employees = db.relationship('Employee', backref='role_obj', lazy=True)
 
     def __repr__(self):
@@ -86,7 +90,9 @@ class Employee(db.Model):
 class Machine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
+    plant_id = db.Column(db.String(100))           # internal plant/fleet ID
     machine_type = db.Column(db.String(100))
+    description = db.Column(db.Text)               # what the item is / notes
     delay_rate = db.Column(db.Float)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -110,6 +116,7 @@ class DailyEntry(db.Model):
     delay_reason = db.Column(db.Text)                       # short category / type
     delay_description = db.Column(db.Text)                  # detailed description for standdown emails
     machines_stood_down = db.Column(db.Boolean, default=False)  # True = hired machines stood down (wet weather)
+    weather = db.Column(db.String(200))             # weather conditions for the day
     notes = db.Column(db.Text)
     other_work_description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -151,7 +158,9 @@ class HiredMachine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     machine_name = db.Column(db.String(200), nullable=False)
+    plant_id = db.Column(db.String(100))           # plant/fleet ID from hire company
     machine_type = db.Column(db.String(100))
+    description = db.Column(db.Text)               # description of the item
     hire_company = db.Column(db.String(200))
     hire_company_email = db.Column(db.String(200))
     hire_company_phone = db.Column(db.String(50))
@@ -243,6 +252,47 @@ class ProjectMachine(db.Model):
         return f'<ProjectMachine project={self.project_id} machine={self.machine_id}>'
 
 
+class ProjectEquipmentRequirement(db.Model):
+    """A named equipment requirement for a project (e.g. 'Excavator x2')."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    label = db.Column(db.String(200), nullable=False)       # free-text name, e.g. "Excavator"
+    required_count = db.Column(db.Integer, nullable=False, default=1)
+
+    project = db.relationship('Project', backref='equipment_requirements')
+
+    def __repr__(self):
+        return f'<ProjectEquipmentRequirement {self.label} x{self.required_count}>'
+
+
+class ProjectEquipmentAssignment(db.Model):
+    """Explicitly assigns a specific machine (owned or hired) to an equipment requirement."""
+    id = db.Column(db.Integer, primary_key=True)
+    requirement_id = db.Column(db.Integer, db.ForeignKey('project_equipment_requirement.id'), nullable=False)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=True)
+    hired_machine_id = db.Column(db.Integer, db.ForeignKey('hired_machine.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    requirement = db.relationship('ProjectEquipmentRequirement', backref='assignments')
+    machine = db.relationship('Machine')
+    hired_machine = db.relationship('HiredMachine')
+
+    @property
+    def display_name(self):
+        if self.machine:
+            return self.machine.name
+        if self.hired_machine:
+            return self.hired_machine.machine_name
+        return '—'
+
+    @property
+    def source(self):
+        return 'Own Fleet' if self.machine_id else 'Hired'
+
+    def __repr__(self):
+        return f'<ProjectEquipmentAssignment req={self.requirement_id}>'
+
+
 class ProjectWorkedSunday(db.Model):
     """Sundays that were actually worked on a project (exceptions to the Sunday skip rule)."""
     id = db.Column(db.Integer, primary_key=True)
@@ -276,16 +326,16 @@ class ProjectDocument(db.Model):
 # ---------------------------------------------------------------------------
 
 class SwingPattern(db.Model):
-    """RDO swing pattern definition, e.g. '4 on 1 off'."""
+    """RDO swing pattern definition, e.g. '2 weeks on, 7 days off'."""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    work_days = db.Column(db.Integer, nullable=False)   # consecutive work days per cycle
+    work_weeks = db.Column(db.Integer, nullable=False)  # weeks on site per cycle
     off_days = db.Column(db.Integer, nullable=False)    # consecutive RDO days per cycle
     description = db.Column(db.String(300))
 
     @property
     def cycle_length(self):
-        return self.work_days + self.off_days
+        return self.work_weeks * 7 + self.off_days
 
     def __repr__(self):
         return f'<SwingPattern {self.name}>'
@@ -297,6 +347,7 @@ class EmployeeSwing(db.Model):
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     pattern_id = db.Column(db.Integer, db.ForeignKey('swing_pattern.id'), nullable=False)
     start_date = db.Column(db.Date, nullable=False)
+    day_offset = db.Column(db.Integer, default=0)   # shift cycle start by N days
     notes = db.Column(db.String(300))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -304,20 +355,40 @@ class EmployeeSwing(db.Model):
     pattern = db.relationship('SwingPattern', backref='employee_swings')
 
     def is_rdo(self, check_date):
-        """Returns True if check_date falls on an RDO under this swing assignment."""
-        days_since = (check_date - self.start_date).days
+        """Returns True if check_date falls on an R&R/off period under this swing assignment."""
+        days_since = (check_date - self.start_date).days + (self.day_offset or 0)
         if days_since < 0:
             return False
         position = days_since % self.pattern.cycle_length
-        return position >= self.pattern.work_days
+        return position >= self.pattern.work_weeks * 7
 
     def __repr__(self):
         return f'<EmployeeSwing emp={self.employee_id} pattern={self.pattern_id}>'
 
 
+class ScheduleDayOverride(db.Model):
+    """Single-day schedule override for an employee — takes top priority in the grid."""
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    # status: available / project / annual / sick / personal / r_and_r / travel / rdo / other
+    status = db.Column(db.String(20), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    notes = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    employee = db.relationship('Employee', backref='day_overrides')
+    project = db.relationship('Project')
+
+    __table_args__ = (db.UniqueConstraint('employee_id', 'date', name='uq_override_emp_date'),)
+
+    def __repr__(self):
+        return f'<ScheduleDayOverride emp={self.employee_id} {self.date} {self.status}>'
+
+
 class EmployeeLeave(db.Model):
     """Leave period for an employee (annual, sick, etc.)."""
-    LEAVE_TYPES = ['annual', 'sick', 'personal', 'other']
+    LEAVE_TYPES = ['annual', 'sick', 'personal', 'r_and_r', 'travel', 'other']
 
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
@@ -348,3 +419,73 @@ class ProjectAssignment(db.Model):
 
     def __repr__(self):
         return f'<ProjectAssignment emp={self.employee_id} proj={self.project_id}>'
+
+
+# ---------------------------------------------------------------------------
+# Equipment / breakdown models
+# ---------------------------------------------------------------------------
+
+AUSTRALIAN_STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA']
+
+class MachineBreakdown(db.Model):
+    """Records a breakdown incident for an owned or hired machine."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=True)
+    hired_machine_id = db.Column(db.Integer, db.ForeignKey('hired_machine.id'), nullable=True)
+    incident_date = db.Column(db.Date, nullable=False)
+    incident_time = db.Column(db.String(10))        # HH:MM string
+    description = db.Column(db.Text)
+    repairing_by = db.Column(db.String(200))
+    repair_status = db.Column(db.String(20), default='pending')   # pending / in_progress / completed
+    anticipated_return = db.Column(db.Date)
+    resolved_date = db.Column(db.Date)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    machine = db.relationship('Machine', backref='breakdowns')
+    hired_machine = db.relationship('HiredMachine', backref='breakdowns')
+    photos = db.relationship('BreakdownPhoto', backref='breakdown',
+                             cascade='all, delete-orphan', lazy=True)
+
+    @property
+    def is_active(self):
+        return self.repair_status != 'completed'
+
+    def __repr__(self):
+        return f'<MachineBreakdown {self.incident_date} status={self.repair_status}>'
+
+
+class BreakdownPhoto(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    breakdown_id = db.Column(db.Integer, db.ForeignKey('machine_breakdown.id'), nullable=False)
+    filename = db.Column(db.String(500), nullable=False)
+    original_name = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<BreakdownPhoto {self.filename}>'
+
+
+# ---------------------------------------------------------------------------
+# Public holiday and CFMEU calendar models
+# ---------------------------------------------------------------------------
+
+class PublicHoliday(db.Model):
+    """Public holiday by Australian state."""
+    id = db.Column(db.Integer, primary_key=True)
+    state = db.Column(db.String(10), nullable=False)   # e.g. 'QLD', 'NSW'
+    date = db.Column(db.Date, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+
+    def __repr__(self):
+        return f'<PublicHoliday {self.state} {self.date} {self.name}>'
+
+
+class CFMEUDate(db.Model):
+    """CFMEU shutdown/RDO date by state."""
+    id = db.Column(db.Integer, primary_key=True)
+    state = db.Column(db.String(10), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+
+    def __repr__(self):
+        return f'<CFMEUDate {self.state} {self.date} {self.name}>'

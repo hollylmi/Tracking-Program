@@ -1,15 +1,225 @@
+/* ============================================================
+   Plytrack — Brand Colours
+   Sakura Pink  #FFB7C5   Slate Grey  #2F2F2F
+   White        #FFFFFF   Concrete    #D9D9D9
+   Sky Blue     #A6E6FC
+   ============================================================ */
+
+:root {
+  --ply-pink:      #FFB7C5;
+  --ply-pink-dark: #e8899a;
+  --ply-slate:     #2F2F2F;
+  --ply-slate-mid: #3f3f3f;
+  --ply-concrete:  #D9D9D9;
+  --ply-sky:       #A6E6FC;
+  --ply-bg:        #f4f4f6;
+
+  /* Override Bootstrap primary */
+  --bs-primary:          #FFB7C5;
+  --bs-primary-rgb:      255, 183, 197;
+  --bs-link-color:       #2F2F2F;
+  --bs-link-hover-color: #e8899a;
+}
+
+/* ---- Base ---- */
 body {
-  background-color: #f5f7fa;
+  background-color: var(--ply-bg);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  font-family: 'Montserrat', sans-serif;
 }
 
 .container-fluid {
   max-width: 1400px;
 }
 
-/* Stat icon boxes */
+/* ---- Navbar ---- */
+.navbar.ply-navbar {
+  background-color: var(--ply-slate) !important;
+  border-bottom: 3px solid var(--ply-pink);
+}
+
+.ply-navbar .navbar-brand {
+  color: var(--ply-pink) !important;
+  font-weight: 800;
+  font-size: 1.3rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ply-navbar .nav-link {
+  color: rgba(255,255,255,0.85) !important;
+  font-weight: 500;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+}
+
+.ply-navbar .nav-link:hover,
+.ply-navbar .nav-link:focus {
+  color: var(--ply-pink) !important;
+}
+
+.ply-navbar .nav-link.active {
+  color: var(--ply-pink) !important;
+  font-weight: 700;
+}
+
+.ply-navbar .dropdown-menu {
+  background-color: var(--ply-slate-mid);
+  border: 1px solid rgba(255,183,197,0.2);
+  border-radius: 0.5rem;
+}
+
+.ply-navbar .dropdown-menu .dropdown-item {
+  color: rgba(255,255,255,0.85);
+  font-size: 0.875rem;
+}
+
+.ply-navbar .dropdown-menu .dropdown-item:hover {
+  background-color: rgba(255,183,197,0.15);
+  color: var(--ply-pink);
+}
+
+.ply-navbar .dropdown-divider {
+  border-color: rgba(255,255,255,0.1);
+}
+
+/* ---- New Entry button ---- */
+.btn-ply-primary {
+  background-color: var(--ply-pink);
+  border-color: var(--ply-pink);
+  color: var(--ply-slate);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.btn-ply-primary:hover,
+.btn-ply-primary:focus {
+  background-color: var(--ply-pink-dark);
+  border-color: var(--ply-pink-dark);
+  color: #fff;
+}
+
+/* ---- Override Bootstrap btn-primary ---- */
+.btn-primary {
+  background-color: var(--ply-slate);
+  border-color: var(--ply-slate);
+  color: #fff;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: var(--ply-slate-mid);
+  border-color: var(--ply-slate-mid);
+  color: #fff;
+}
+
+.btn-primary:active, .btn-primary.active {
+  background-color: #222 !important;
+  border-color: #222 !important;
+}
+
+/* outline-primary */
+.btn-outline-primary {
+  color: var(--ply-slate);
+  border-color: var(--ply-slate);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--ply-slate);
+  border-color: var(--ply-slate);
+  color: #fff;
+}
+
+/* ---- Cards ---- */
+.card {
+  border-radius: 0.75rem;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+
+.card-header {
+  border-radius: 0.75rem 0.75rem 0 0 !important;
+  border-bottom: 1px solid var(--ply-concrete);
+  background-color: #fff;
+}
+
+/* Pink accent on card headers */
+.card-header.ply-header {
+  background-color: var(--ply-slate);
+  color: var(--ply-pink);
+  border-bottom: none;
+}
+
+/* ---- Table ---- */
+.table th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  white-space: nowrap;
+}
+
+.table td {
+  font-size: 0.9rem;
+}
+
+/* ---- Nav tabs — override active to pink ---- */
+.nav-tabs .nav-link.active {
+  border-color: var(--ply-concrete) var(--ply-concrete) #fff;
+  color: var(--ply-slate);
+  font-weight: 700;
+}
+
+.nav-tabs .nav-link {
+  color: #6c757d;
+}
+
+.nav-tabs .nav-link:hover {
+  color: var(--ply-slate);
+}
+
+/* ---- Badges ---- */
+.badge {
+  font-size: 0.72rem;
+}
+
+.badge.bg-primary {
+  background-color: var(--ply-slate) !important;
+}
+
+/* ---- Form labels ---- */
+.form-label.fw-semibold {
+  font-size: 0.875rem;
+}
+
+/* ---- Footer ---- */
+.footer {
+  margin-top: auto;
+  background-color: var(--ply-slate) !important;
+  border-top: none !important;
+  color: rgba(255,255,255,0.5);
+}
+
+.footer .ply-footer-brand {
+  color: var(--ply-pink);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ---- Navbar active underline ---- */
+.ply-navbar .nav-link.active::after {
+  content: '';
+  display: block;
+  height: 2px;
+  background: var(--ply-pink);
+  border-radius: 1px;
+  margin-top: 2px;
+}
+
+/* ---- Stat icon boxes ---- */
 .stat-icon {
   flex-shrink: 0;
   width: 56px;
@@ -19,7 +229,7 @@ body {
   justify-content: center;
 }
 
-/* Scrollable checkbox lists */
+/* ---- Scrollable checkbox lists ---- */
 .checkbox-scroll-list {
   max-height: 280px;
   overflow-y: auto;
@@ -37,54 +247,22 @@ body {
 }
 
 .checkbox-item:hover {
-  background-color: #f8f9ff;
+  background-color: rgba(255,183,197,0.08);
 }
 
 .checkbox-item input[type="checkbox"]:checked ~ span {
   font-weight: 600;
-  color: #0d6efd;
+  color: var(--ply-slate);
 }
 
-/* Card styling */
-.card {
-  border-radius: 0.75rem;
+/* ---- Page headings ---- */
+h2.fw-bold, h1.fw-bold {
+  color: var(--ply-slate);
 }
 
-.card-header {
-  border-radius: 0.75rem 0.75rem 0 0 !important;
-  border-bottom: 1px solid #eee;
-}
-
-/* Table tweaks */
-.table th {
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #6c757d;
-  white-space: nowrap;
-}
-
-.table td {
-  font-size: 0.9rem;
-}
-
-/* Navbar active state */
-.navbar-dark .nav-link.active {
-  font-weight: 600;
-}
-
-/* Footer */
-.footer {
-  margin-top: auto;
-}
-
-/* Form labels */
-.form-label.fw-semibold {
-  font-size: 0.875rem;
-}
-
-/* Badge tweaks */
-.badge {
-  font-size: 0.75rem;
+/* ---- Alert overrides ---- */
+.alert-info {
+  background-color: rgba(166,230,252,0.25);
+  border-color: var(--ply-sky);
+  color: #1a6a80;
 }

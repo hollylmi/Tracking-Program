@@ -27,7 +27,7 @@
             {% for p in patterns %}
             <tr>
               <td class="fw-medium">{{ p.name }}</td>
-              <td class="text-center">{{ p.work_days }}d</td>
+              <td class="text-center">{{ p.work_weeks }}wk</td>
               <td class="text-center">{{ p.off_days }}d</td>
               <td class="text-muted small">{{ p.description or '' }}</td>
               <td>
@@ -61,14 +61,14 @@
           </div>
           <div class="row g-2 mb-2">
             <div class="col">
-              <label class="form-label small mb-1">Work Days</label>
-              <input type="number" class="form-control form-control-sm" name="work_days"
-                     min="1" max="30" placeholder="4" required>
+              <label class="form-label small mb-1">Work Weeks (on site)</label>
+              <input type="number" class="form-control form-control-sm" name="work_weeks"
+                     min="1" max="12" placeholder="2" required>
             </div>
             <div class="col">
               <label class="form-label small mb-1">Off Days (RDO)</label>
               <input type="number" class="form-control form-control-sm" name="off_days"
-                     min="1" max="30" placeholder="1" required>
+                     min="1" max="30" placeholder="7" required>
             </div>
           </div>
           <div class="mb-3">
@@ -105,7 +105,7 @@
               <select class="form-select form-select-sm" name="pattern_id" required>
                 <option value="">— select —</option>
                 {% for p in patterns %}
-                <option value="{{ p.id }}">{{ p.name }} ({{ p.work_days }}on/{{ p.off_days }}off)</option>
+                <option value="{{ p.id }}">{{ p.name }} ({{ p.work_weeks }}wk on / {{ p.off_days }}d off)</option>
                 {% endfor %}
               </select>
             </div>
@@ -114,10 +114,18 @@
               <input type="date" class="form-control form-control-sm" name="start_date" required>
             </div>
           </div>
-          <div class="mb-3">
-            <label class="form-label small mb-1">Notes (optional)</label>
-            <input type="text" class="form-control form-control-sm" name="notes"
-                   placeholder="e.g. Starts after R&R">
+          <div class="row g-2 mb-2">
+            <div class="col-md-4">
+              <label class="form-label small mb-1">Day Offset</label>
+              <input type="number" class="form-control form-control-sm" name="day_offset"
+                     value="0" min="-30" max="30"
+                     title="Shift the cycle start by N days (positive = start later in cycle)">
+            </div>
+            <div class="col-md-8">
+              <label class="form-label small mb-1">Notes (optional)</label>
+              <input type="text" class="form-control form-control-sm" name="notes"
+                     placeholder="e.g. Starts after R&R">
+            </div>
           </div>
           <button type="submit" class="btn btn-primary btn-sm">Assign Pattern</button>
         </form>
@@ -137,6 +145,7 @@
               <th>Employee</th>
               <th>Pattern</th>
               <th>Start Date</th>
+              <th class="text-center">Offset</th>
               <th>Notes</th>
               <th></th>
             </tr>
@@ -146,9 +155,10 @@
             <tr>
               <td>{{ sa.employee.name }}<br><small class="text-muted">{{ sa.employee.role or '' }}</small></td>
               <td class="fw-medium">{{ sa.pattern.name }}<br>
-                <small class="text-muted">{{ sa.pattern.work_days }}on / {{ sa.pattern.off_days }}off</small>
+                <small class="text-muted">{{ sa.pattern.work_weeks }}wk on / {{ sa.pattern.off_days }}d off</small>
               </td>
               <td>{{ sa.start_date.strftime('%d/%m/%Y') }}</td>
+              <td class="text-center text-muted">{{ ('+' if sa.day_offset and sa.day_offset > 0 else '') }}{{ sa.day_offset or 0 }}d</td>
               <td class="text-muted">{{ sa.notes or '' }}</td>
               <td>
                 <form method="POST" onsubmit="return confirm('Remove this swing assignment?')">

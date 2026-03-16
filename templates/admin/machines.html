@@ -20,6 +20,7 @@
           <thead class="table-light">
             <tr>
               <th>Name</th>
+              <th>Plant ID</th>
               <th>Type</th>
               <th>Rate/hr</th>
               <th>Assigned To</th>
@@ -33,7 +34,11 @@
             {% set machine_assignments = assignments_by_machine.get(machine.id, []) %}
             {% set assigned_project_ids = machine_assignments | map(attribute='project_id') | list %}
             <tr>
-              <td class="fw-semibold">{{ machine.name }}</td>
+              <td class="fw-semibold">
+                {{ machine.name }}
+                {% if machine.description %}<br><small class="text-muted fw-normal">{{ machine.description }}</small>{% endif %}
+              </td>
+              <td class="text-muted">{{ machine.plant_id or '—' }}</td>
               <td class="text-muted">{{ machine.machine_type or '—' }}</td>
               <td>
                 {% if machine.delay_rate %}
@@ -83,7 +88,7 @@
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
                   <button class="btn btn-sm btn-outline-secondary" type="button"
-                          onclick="openEditMachine({{ machine.id }}, '{{ machine.name|replace("'", "\\'") }}', '{{ (machine.machine_type or '')|replace("'", "\\'") }}', '{{ machine.delay_rate or '' }}')"
+                          onclick="openEditMachine({{ machine.id }}, '{{ machine.name|replace("'", "\\'") }}', '{{ (machine.plant_id or '')|replace("'", "\\'") }}', '{{ (machine.machine_type or '')|replace("'", "\\'") }}', '{{ machine.delay_rate or '' }}', '{{ (machine.description or '')|replace("'", "\\'") }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -136,9 +141,19 @@
             <input type="text" name="name" id="machineName" class="form-control" required placeholder="e.g. Excavator #1">
           </div>
           <div class="mb-3">
+            <label class="form-label fw-semibold">Plant ID <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" name="plant_id" id="machinePlantId" class="form-control"
+                   placeholder="e.g. EX-042">
+          </div>
+          <div class="mb-3">
             <label class="form-label fw-semibold">Type <span class="text-muted fw-normal">(optional)</span></label>
             <input type="text" name="machine_type" id="machineType" class="form-control"
                    placeholder="e.g. Excavator, Roller, Paver...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Description <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" name="description" id="machineDescription" class="form-control"
+                   placeholder="e.g. 8t excavator with tilt hitch">
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">
@@ -166,12 +181,14 @@
 
 {% block scripts %}
 <script>
-  function openEditMachine(id, name, type, delayRate) {
+  function openEditMachine(id, name, plantId, type, delayRate, description) {
     document.getElementById('formTitle').textContent = 'Edit Equipment';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
     document.getElementById('machineName').value = name;
+    document.getElementById('machinePlantId').value = plantId;
     document.getElementById('machineType').value = type;
+    document.getElementById('machineDescription').value = description;
     document.getElementById('machineDelayRate').value = delayRate;
     document.getElementById('submitBtn').textContent = 'Save Changes';
     document.getElementById('cancelEditBtn').classList.remove('d-none');
@@ -184,7 +201,9 @@
     document.getElementById('formAction').value = 'add';
     document.getElementById('editId').value = '';
     document.getElementById('machineName').value = '';
+    document.getElementById('machinePlantId').value = '';
     document.getElementById('machineType').value = '';
+    document.getElementById('machineDescription').value = '';
     document.getElementById('machineDelayRate').value = '';
     document.getElementById('submitBtn').textContent = 'Add Equipment';
     document.getElementById('cancelEditBtn').classList.add('d-none');
