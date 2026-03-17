@@ -87,6 +87,27 @@ else:
             changes += 1
             print("Migrated: project_equipment_requirement.machine_type → label")
 
+    # ── diagram_layer ─────────────────────────────────────────────────────────
+    changes += add_column('diagram_layer', 'bg_filename', 'VARCHAR(500)')
+    changes += add_column('diagram_layer', 'bg_original_name', 'VARCHAR(500)')
+    changes += add_column('diagram_layer', 'canvas_bg_filename', 'VARCHAR(500)')
+    changes += add_column('diagram_layer', 'canvas_bg_original_name', 'VARCHAR(500)')
+
+    # ── panel_install_record ──────────────────────────────────────────────────
+    changes += add_column('panel_install_record', 'roll_number', 'VARCHAR(100)')
+    changes += add_column('panel_install_record', 'install_time', 'VARCHAR(10)')
+    changes += add_column('panel_install_record', 'width_m', 'REAL')
+    changes += add_column('panel_install_record', 'length_m', 'REAL')
+    changes += add_column('panel_install_record', 'area_sqm', 'REAL')
+    changes += add_column('panel_install_record', 'panel_type', 'VARCHAR(100)')
+    changes += add_column('panel_install_record', 'canvas_x', 'REAL')
+    changes += add_column('panel_install_record', 'canvas_y', 'REAL')
+    changes += add_column('panel_install_record', 'canvas_w', 'REAL')
+    changes += add_column('panel_install_record', 'canvas_h', 'REAL')
+    changes += add_column('diagram_layer', 'canvas_elements', 'TEXT')
+    changes += add_column('panel_install_record', 'canvas_points', 'TEXT')
+    changes += add_column('panel_install_record', 'source', 'VARCHAR(20)')
+
     for t in ('entry_photo', 'planned_data', 'project_non_work_date', 'project_budgeted_role',
               'project_machine', 'project_worked_sunday', 'project_document',
               'project_equipment_requirement', 'project_equipment_assignment',

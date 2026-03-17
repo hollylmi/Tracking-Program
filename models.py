@@ -489,3 +489,77 @@ class CFMEUDate(db.Model):
 
     def __repr__(self):
         return f'<CFMEUDate {self.state} {self.date} {self.name}>'
+
+
+# ---------------------------------------------------------------------------
+# Panel diagram models
+# ---------------------------------------------------------------------------
+
+class DiagramLayer(db.Model):
+    """A named material/installation layer for a project with an uploaded SVG diagram."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    layer_name = db.Column(db.String(200), nullable=False)   # e.g. "Layer 1 – HDPE"
+    svg_filename = db.Column(db.String(500))                 # UUID-based stored filename
+    svg_original_name = db.Column(db.String(500))            # original upload filename
+    bg_filename = db.Column(db.String(500))                  # background image filename (diagram view)
+    bg_original_name = db.Column(db.String(500))             # original background filename
+    canvas_bg_filename = db.Column(db.String(500))           # background image for as-built canvas
+    canvas_bg_original_name = db.Column(db.String(500))
+    description = db.Column(db.Text)
+    canvas_elements = db.Column(db.Text)   # JSON: {"seams": [...], "repairs": [...]}
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref='diagram_layers')
+    panels = db.relationship('PanelInstallRecord', backref='layer',
+                              cascade='all, delete-orphan', lazy=True)
+
+    @property
+    def total_panels(self):
+        return len(self.panels)
+
+    @property
+    def installed_panels(self):
+        return sum(1 for p in self.panels if p.status == 'installed')
+
+    def __repr__(self):
+        return f'<DiagramLayer {self.layer_name}>'
+
+
+class PanelInstallRecord(db.Model):
+    """Records the installation status of a single panel in a diagram layer."""
+    id = db.Column(db.Integer, primary_key=True)
+    layer_id = db.Column(db.Integer, db.ForeignKey('diagram_layer.id'), nullable=False)
+    panel_id = db.Column(db.String(200), nullable=False)   # SVG element id attribute
+    panel_label = db.Column(db.String(200))                # display label e.g. "P-001"
+    # status: planned / installed / issue
+    status = db.Column(db.String(20), default='planned', nullable=False)
+    installed_date = db.Column(db.Date)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True)
+    notes = db.Column(db.Text)
+    roll_number    = db.Column(db.String(100))
+    install_time   = db.Column(db.String(10))   # HH:MM
+    width_m        = db.Column(db.Float)
+    length_m       = db.Column(db.Float)
+    area_sqm       = db.Column(db.Float)
+    panel_type     = db.Column(db.String(100))
+    canvas_x      = db.Column(db.Float)
+    canvas_y      = db.Column(db.Float)
+    canvas_w      = db.Column(db.Float)
+    canvas_h      = db.Column(db.Float)
+    canvas_points = db.Column(db.Text)   # JSON: [[x1,y1],[x2,y2],...] for polygon panels
+    source        = db.Column(db.String(20))  # 'diagram' or 'canvas' — which view created this record
+    recorded_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    employee = db.relationship('Employee')
+    recorded_by = db.relationship('User')
+
+    __table_args__ = (
+        db.UniqueConstraint('layer_id', 'panel_id', name='uq_panel_layer_id'),
+    )
+
+    def __repr__(self):
+        return f'<PanelInstallRecord {self.panel_id} {self.status}>'

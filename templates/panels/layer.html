@@ -1,0 +1,943 @@
+{% extends "base.html" %}
+{% block title %}{{ layer.layer_name }} — {{ project.name }}{% endblock %}
+
+{% block head %}
+<style>
+/* ── Panel viewer ─────────────────────────────────────────────────── */
+#panel-viewer {
+  position: relative;
+  overflow: auto;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 0.5rem;
+  min-height: 300px;
+}
+/* Background image sits behind everything */
+#panel-bg-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  pointer-events: none;
+}
+/* SVG overlaid on top of background */
+#panel-svg-wrap {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  overflow: visible;
+}
+/* Without background, SVG is the layout element */
+#panel-viewer.no-bg #panel-svg-wrap {
+  position: relative;
+}
+#panel-svg-wrap svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* Clickable panels */
+#panel-svg-wrap svg [data-panel-clickable] { cursor: pointer; }
+#panel-svg-wrap svg [data-panel-clickable]:hover { opacity: 0.72; }
+/* Status colours */
+#panel-svg-wrap svg [data-ps="installed"] {
+  fill: #86efac !important; stroke: #16a34a !important; stroke-width: 2px;
+}
+#panel-svg-wrap svg [data-ps="issue"] {
+  fill: #fca5a5 !important; stroke: #dc2626 !important; stroke-width: 2px;
+}
+#panel-svg-wrap svg [data-ps="planned"] {
+  fill: #bfdbfe !important; stroke: #3b82f6 !important; stroke-width: 1.5px;
+}
+/* Semi-transparent fills when background is visible */
+#panel-viewer.show-bg #panel-svg-wrap svg [data-panel-clickable] {
+  fill-opacity: 0.55;
+}
+/* Panel number labels */
+.panel-label-text {
+  pointer-events: none;
+  font-family: sans-serif;
+  dominant-baseline: middle;
+  text-anchor: middle;
+  fill: #1e293b;
+  paint-order: stroke;
+  stroke: rgba(255,255,255,0.85);
+  stroke-linejoin: round;
+}
+/* Auto-detect preview */
+.autodetect-preview {
+  fill: rgba(250, 204, 21, 0.3);
+  stroke: #ca8a04;
+  stroke-width: 1.5px;
+  cursor: pointer;
+}
+.autodetect-preview:hover { fill: rgba(250, 204, 21, 0.55); }
+/* Floating tooltip */
+#panel-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  font-size: 0.78rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 9999;
+  display: none;
+}
+/* Legend */
+.panel-legend-dot {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+/* Stats chips */
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+/* Panel data table */
+#panel-table-wrap { overflow-x: auto; }
+#panel-data-table { font-size: 0.82rem; }
+#panel-data-table th { white-space: nowrap; }
+#panel-data-table td { vertical-align: middle; }
+/* Print styles */
+@media print {
+  nav, .btn, .form-check, .form-select, select,
+  #uploadDxfForm, #uploadSvgForm, #uploadBgForm,
+  #autodetectSettings, #autodetect-bar,
+  .d-flex.justify-content-between.align-items-start,
+  .d-flex.justify-content-between.align-items-center,
+  .d-flex.gap-3.mb-2,
+  #panel-tooltip,
+  .no-print { display: none !important; }
+  #panel-viewer { border: none; overflow: visible; height: auto !important; }
+  #panel-svg-wrap { position: relative; }
+  #panel-bg-img { display: none; }
+  .panel-table-section { page-break-before: auto; }
+  body { font-size: 11pt; }
+  #panel-data-table { font-size: 9pt; }
+  #print-header { display: block !important; }
+}
+#print-header { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- ── Header ──────────────────────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h2 class="fw-bold mb-0">
+      <i class="bi bi-grid-3x3-gap me-2 text-primary"></i>{{ layer.layer_name }}
+    </h2>
+    <div class="text-muted small mt-1">
+      <a href="{{ url_for('panel_overview', project_id=project.id) }}" class="text-muted">
+        <i class="bi bi-arrow-left me-1"></i>{{ project.name }} — Panel Diagrams
+      </a>
+      {% if layer.description %}&nbsp;&bull;&nbsp;{{ layer.description }}{% endif %}
+    </div>
+  </div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <span class="stat-chip"><i class="bi bi-grid text-secondary"></i><span id="stat-total-val">—</span> panels</span>
+    <span class="stat-chip text-success"><i class="bi bi-check-circle-fill text-success"></i><span id="stat-installed-val">0</span> installed</span>
+    <span class="stat-chip text-danger d-none" id="stat-issues"><i class="bi bi-exclamation-triangle-fill text-danger"></i><span id="stat-issues-val">0</span> issues</span>
+  </div>
+</div>
+
+<!-- ── Controls bar ────────────────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <label class="form-label mb-0 fw-semibold small">Layer:</label>
+    <select class="form-select form-select-sm" style="width:auto;"
+            onchange="window.location=this.value">
+      {% for l in all_layers %}
+      <option value="{{ url_for('panel_layer_view', project_id=project.id, layer_id=l.id) }}"
+              {% if l.id == layer.id %}selected{% endif %}>
+        {{ l.layer_name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    {% if bg_url %}
+    <div class="form-check form-switch mb-0">
+      <input class="form-check-input" type="checkbox" id="toggle-bg" checked>
+      <label class="form-check-label small" for="toggle-bg">Background</label>
+    </div>
+    {% endif %}
+    <div class="form-check form-switch mb-0">
+      <input class="form-check-input" type="checkbox" id="toggle-labels">
+      <label class="form-check-label small" for="toggle-labels">Labels</label>
+    </div>
+    <button class="btn btn-outline-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#uploadDxfForm">
+      <i class="bi bi-filetype-raw me-1"></i>Upload DXF
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#uploadSvgForm">
+      <i class="bi bi-upload me-1"></i>{{ 'Replace SVG' if layer.svg_filename else 'Upload SVG' }}
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#uploadBgForm">
+      <i class="bi bi-image me-1"></i>{{ 'Replace Background' if layer.bg_filename else 'Add Background' }}
+    </button>
+    {% if bg_url and cv2_available %}
+    <button class="btn btn-outline-warning btn-sm" data-bs-toggle="collapse"
+            data-bs-target="#autodetectSettings">
+      <i class="bi bi-magic me-1"></i>Auto-detect Panels
+    </button>
+    {% endif %}
+    <a href="{{ url_for('panel_data_json', project_id=project.id, layer_id=layer.id) }}"
+       class="btn btn-outline-secondary btn-sm"
+       download="{{ layer.layer_name|replace(' ','_') }}_data.json">
+      <i class="bi bi-download me-1"></i>Export
+    </a>
+    <button class="btn btn-outline-dark btn-sm no-print" id="print-report-btn">
+      <i class="bi bi-printer me-1"></i>Print Report
+    </button>
+  </div>
+</div>
+
+<!-- Upload DXF collapse -->
+<div class="collapse mb-3" id="uploadDxfForm">
+  <div class="card border-primary shadow-sm">
+    <div class="card-body py-2 px-3">
+      <p class="small mb-2 text-muted">
+        <i class="bi bi-magic me-1 text-primary"></i>
+        <strong>Auto-convert from AutoCAD:</strong> upload your <code>.dxf</code> — Plytrack rasterises
+        all line geometry and finds every enclosed region automatically, even when panels are formed
+        by overlapping or shared polylines. Text labels (if present) are matched to each panel.
+      </p>
+      <form method="POST"
+            action="{{ url_for('panel_layer_upload_dxf', project_id=project.id, layer_id=layer.id) }}"
+            enctype="multipart/form-data" class="d-flex gap-2 align-items-end flex-wrap">
+        <div>
+          <label class="form-label small fw-semibold mb-1">DXF file</label>
+          <input type="file" class="form-control form-control-sm" name="dxf_file" accept=".dxf" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Convert &amp; Upload</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                data-bs-toggle="collapse" data-bs-target="#uploadDxfForm">Cancel</button>
+      </form>
+      <div class="mt-2 small text-muted">
+        Export from AutoCAD: <strong>File → Save As → DXF</strong> (R2010 format recommended),
+        all layers included. Text labels inside panels are optional but enable auto-naming.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Replace SVG collapse -->
+<div class="collapse mb-3" id="uploadSvgForm">
+  <form method="POST"
+        action="{{ url_for('panel_layer_upload_svg', project_id=project.id, layer_id=layer.id) }}"
+        enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
+    <div>
+      <label class="form-label small fw-semibold mb-1">SVG file</label>
+      <input type="file" class="form-control form-control-sm" name="svg_file" accept=".svg" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm"
+            data-bs-toggle="collapse" data-bs-target="#uploadSvgForm">Cancel</button>
+  </form>
+</div>
+
+<!-- Background image collapse -->
+<div class="collapse mb-3" id="uploadBgForm">
+  <div class="card border-secondary shadow-sm">
+    <div class="card-body py-2 px-3">
+      <p class="small mb-2 text-muted">
+        <i class="bi bi-image me-1"></i>Upload a site scan as a visual reference behind the panel
+        diagram. Accepts <strong>JPG, PNG</strong>, or <strong>PDF</strong> (first page is used).
+      </p>
+      <form method="POST"
+            action="{{ url_for('panel_layer_upload_bg', project_id=project.id, layer_id=layer.id) }}"
+            enctype="multipart/form-data" class="d-flex gap-2 align-items-end flex-wrap">
+        <div>
+          <label class="form-label small fw-semibold mb-1">Background file</label>
+          <input type="file" class="form-control form-control-sm" name="bg_file"
+                 accept=".jpg,.jpeg,.png,.pdf" required>
+        </div>
+        <button type="submit" class="btn btn-secondary btn-sm">Upload Background</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                data-bs-toggle="collapse" data-bs-target="#uploadBgForm">Cancel</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Legend ──────────────────────────────────────────────────────── -->
+<div class="d-flex gap-3 mb-2 flex-wrap small">
+  <span><span class="panel-legend-dot" style="background:#86efac;border:1px solid #16a34a;"></span>Installed</span>
+  <span><span class="panel-legend-dot" style="background:#fca5a5;border:1px solid #dc2626;"></span>Issue</span>
+  <span><span class="panel-legend-dot" style="background:#bfdbfe;border:1px solid #3b82f6;"></span>Planned</span>
+  <span><span class="panel-legend-dot" style="background:#fff;border:1px solid #adb5bd;"></span>Not recorded</span>
+</div>
+
+<!-- Auto-detect settings panel -->
+{% if bg_url and cv2_available %}
+<div class="collapse mb-3" id="autodetectSettings">
+  <div class="card border-warning shadow-sm">
+    <div class="card-body py-2 px-3">
+      <div class="row g-3 align-items-end">
+        <div class="col-sm-4">
+          <label class="form-label small fw-semibold mb-1">
+            Line threshold: <span id="threshold-val">180</span>
+          </label>
+          <input type="range" class="form-range" id="threshold-slider"
+                 min="50" max="240" value="180" step="5">
+          <div class="form-text">Lower = detect lighter lines. Try 120–200.</div>
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small fw-semibold mb-1">
+            Gap close: <span id="dilate-val">3</span>px
+          </label>
+          <input type="range" class="form-range" id="dilate-slider"
+                 min="1" max="10" value="3" step="1">
+          <div class="form-text">Higher = closes larger gaps at line ends.</div>
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small fw-semibold mb-1">
+            Min panel size: <span id="minarea-val">0.1</span>%
+          </label>
+          <input type="range" class="form-range" id="minarea-slider"
+                 min="0.02" max="2" value="0.1" step="0.02">
+          <div class="form-text">Ignore shapes smaller than this % of image.</div>
+        </div>
+        <div class="col-sm-2">
+          <button class="btn btn-warning w-100" id="autodetect-btn">
+            <i class="bi bi-magic me-1"></i>Run
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Auto-detect status bar -->
+<div id="autodetect-bar" class="alert alert-warning py-2 px-3 d-none mb-2 d-flex align-items-center gap-3 flex-wrap">
+  <span id="autodetect-msg"></span>
+  <div class="d-flex gap-2 ms-auto">
+    <button class="btn btn-success btn-sm" id="autodetect-confirm">
+      <i class="bi bi-check2 me-1"></i>Save as Diagram
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" id="autodetect-cancel">Discard</button>
+  </div>
+</div>
+
+<!-- ── Diagram viewer ──────────────────────────────────────────────── -->
+<div id="panel-tooltip"></div>
+<div id="panel-viewer" class="{% if not bg_url %}no-bg{% else %}show-bg{% endif %}">
+  {% if bg_url %}
+  <img id="panel-bg-img" src="{{ bg_url }}" alt="Site background" draggable="false">
+  {% endif %}
+  <div id="panel-svg-wrap">
+    {% if svg_content %}
+      {{ svg_content | safe }}
+    {% elif bg_url %}
+    {# Background is uploaded but no diagram yet — show overlay prompt #}
+    <div id="autodetect-overlay" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10;text-align:center;">
+      <div class="card shadow border-warning" style="min-width:280px;">
+        <div class="card-body py-3 px-4">
+          <p class="fw-semibold mb-2">Background uploaded!</p>
+          <p class="small text-muted mb-3">Click the button below to automatically detect panel shapes from your image.</p>
+          {% if cv2_available %}
+          <button class="btn btn-warning w-100" id="autodetect-btn-overlay">
+            <i class="bi bi-magic me-1"></i>Auto-detect Panels
+          </button>
+          {% else %}
+          <p class="text-danger small">Auto-detect unavailable — opencv not installed.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-file-earmark-image fs-1 d-block mb-2"></i>
+      <p>No diagram yet. Upload a <strong>PNG/PDF</strong> background and then auto-detect panels,<br>or upload a <strong>DXF</strong> or <strong>SVG</strong> directly.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Print header (hidden on screen) ────────────────────────────── -->
+<div id="print-header" class="mb-3">
+  <h4 class="fw-bold mb-0">{{ project.name }} — {{ layer.layer_name }}</h4>
+  <div class="text-muted small">Panel Installation Report &bull; Printed {{ '' }}</div>
+</div>
+
+<!-- ── Panel data table ────────────────────────────────────────────── -->
+<div class="panel-table-section mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-semibold mb-0"><i class="bi bi-table me-2 text-primary"></i>Panel Records</h6>
+    <span class="text-muted small no-print" id="table-summary"></span>
+  </div>
+  <div id="panel-table-wrap">
+    <table class="table table-sm table-bordered table-hover" id="panel-data-table">
+      <thead class="table-light">
+        <tr>
+          <th>Panel No</th>
+          <th>Type</th>
+          <th>Roll No</th>
+          <th>Status</th>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Width (m)</th>
+          <th>Length (m)</th>
+          <th>Area (m²)</th>
+          <th>Installed By</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="panel-table-body">
+        <tr><td colspan="11" class="text-muted text-center">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Panel Record Modal ──────────────────────────────────────────── -->
+<div class="modal fade" id="panelModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-semibold">
+          <i class="bi bi-grid-3x3-gap me-2"></i>Panel: <span id="modal-panel-id-display"></span>
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="modal-panel-id">
+        <div class="row g-2 mb-2">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold mb-1">Panel Number</label>
+            <input type="text" class="form-control form-control-sm" id="modal-panel-label" placeholder="e.g. P-001">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold mb-1">Panel Type</label>
+            <input type="text" class="form-control form-control-sm" id="modal-panel-type" placeholder="e.g. Standard">
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold mb-1">Roll Number</label>
+          <input type="text" class="form-control form-control-sm" id="modal-roll-number" placeholder="e.g. R-045">
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold mb-1">Status</label>
+          <div class="d-flex gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="modal-status" id="status-planned" value="planned">
+              <label class="form-check-label" for="status-planned">Planned</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="modal-status" id="status-installed" value="installed" checked>
+              <label class="form-check-label text-success fw-semibold" for="status-installed">Installed</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="modal-status" id="status-issue" value="issue">
+              <label class="form-check-label text-danger" for="status-issue">Issue</label>
+            </div>
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold mb-1">Date Installed</label>
+            <input type="date" class="form-control form-control-sm" id="modal-installed-date">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold mb-1">Time Installed</label>
+            <input type="time" class="form-control form-control-sm" id="modal-install-time">
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold mb-1">Width (m)</label>
+            <input type="number" step="0.01" class="form-control form-control-sm" id="modal-width-m" placeholder="0.00">
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold mb-1">Length (m)</label>
+            <input type="number" step="0.01" class="form-control form-control-sm" id="modal-length-m" placeholder="0.00">
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold mb-1">Area (m²)</label>
+            <input type="number" step="0.01" class="form-control form-control-sm" id="modal-area-sqm" placeholder="0.00" readonly>
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold mb-1">Installed By</label>
+            <select class="form-select form-select-sm" id="modal-employee-id">
+              <option value="">— Select crew member —</option>
+              {% for emp in employees %}
+              <option value="{{ emp.id }}">{{ emp.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="mb-0">
+          <label class="form-label fw-semibold mb-1">Notes</label>
+          <textarea class="form-control form-control-sm" id="modal-notes" rows="2"
+                    placeholder="Optional notes…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-between">
+        <span id="modal-last-updated" class="text-muted small"></span>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="modal-save-btn">
+            <i class="bi bi-check2 me-1"></i>Save
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Global click handler for SVG panel polygons — called via onclick attribute
+window._plyClick = function(el) {
+  if (el && el.id && typeof openPanelModal === 'function') openPanelModal(el.id);
+};
+(function () {
+  'use strict';
+
+  const SAVE_URL       = "{{ url_for('panel_record_save', project_id=project.id, layer_id=layer.id) }}";
+  const AUTODETECT_URL = "{{ url_for('panel_layer_autodetect', project_id=project.id, layer_id=layer.id) }}";
+  const UPLOAD_SVG_URL = "{{ url_for('panel_layer_upload_svg', project_id=project.id, layer_id=layer.id) }}";
+  let   panelData = {{ panel_data_json | safe }};
+  const employeeMap = { {% for emp in employees %}"{{ emp.id }}": "{{ emp.name }}"{% if not loop.last %}, {% endif %}{% endfor %} };
+
+  const SKIP_TAGS = new Set([
+    'defs','lineargradient','radialgradient','pattern','clippath',
+    'mask','symbol','filter','marker','style','title','desc',
+  ]);
+
+  // ── Init SVG ──────────────────────────────────────────────────────
+  const viewer      = document.getElementById('panel-viewer');
+  const svgWrap     = document.getElementById('panel-svg-wrap');
+  const svgEl       = svgWrap && svgWrap.querySelector('svg');
+  const toggleBg    = document.getElementById('toggle-bg');
+  const toggleLabels = document.getElementById('toggle-labels');
+  let   labelsGroup = null;
+
+  const STATUS_BADGE = {
+    installed: '<span class="badge bg-success">Installed</span>',
+    planned:   '<span class="badge bg-primary">Planned</span>',
+    issue:     '<span class="badge bg-danger">Issue</span>',
+  };
+
+  console.log('[Plytrack] svgEl found:', !!svgEl);
+  if (svgEl) {
+    svgEl.removeAttribute('width');
+    svgEl.removeAttribute('height');
+    svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+    let clickableCount = 0;
+    svgEl.querySelectorAll('[id]').forEach(el => {
+      if (SKIP_TAGS.has(el.tagName.toLowerCase())) return;
+      el.setAttribute('data-panel-clickable', '');
+      el.style.cursor = 'pointer';
+      clickableCount++;
+      const saved = panelData[el.id];
+      if (saved && saved.status) el.setAttribute('data-ps', saved.status);
+    });
+    console.log('[Plytrack] clickable panels tagged:', clickableCount);
+
+    updateStats(svgEl);
+    buildLabels();
+    buildTable();
+
+    // ── Click: use elementsFromPoint so overlays never block panel clicks ──
+    viewer.addEventListener('click', e => {
+      const hits = document.elementsFromPoint(e.clientX, e.clientY);
+      console.log('[Plytrack] click at', e.clientX, e.clientY, '— hits:', hits.map(h => h.tagName + (h.id ? '#'+h.id : '') + (h.hasAttribute('data-panel-clickable') ? '[clickable]' : '')));
+      for (const el of hits) {
+        if (el.hasAttribute && el.hasAttribute('data-panel-clickable') && el.id) {
+          console.log('[Plytrack] opening modal for:', el.id);
+          openModal(el.id);
+          return;
+        }
+      }
+      console.log('[Plytrack] click found no clickable panel');
+    });
+
+    // Floating tooltip
+    const tooltip = document.getElementById('panel-tooltip');
+    viewer.addEventListener('mousemove', e => {
+      const hits = document.elementsFromPoint(e.clientX, e.clientY);
+      for (const el of hits) {
+        if (el.hasAttribute && el.hasAttribute('data-panel-clickable') && el.id) {
+          const rec = panelData[el.id];
+          tooltip.textContent = (rec && rec.panel_label) ? rec.panel_label : el.id;
+          tooltip.style.display = 'block';
+          tooltip.style.left = (e.clientX + 12) + 'px';
+          tooltip.style.top  = (e.clientY - 28) + 'px';
+          return;
+        }
+      }
+      tooltip.style.display = 'none';
+    });
+    viewer.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+  }
+
+  if (!svgEl) buildTable();   // still show table even without diagram
+
+  // ── Sync viewer height to background image ────────────────────────
+  const bgImg = document.getElementById('panel-bg-img');
+  if (bgImg) {
+    function syncHeight() { viewer.style.height = bgImg.offsetHeight + 'px'; }
+    bgImg.addEventListener('load', syncHeight);
+    if (bgImg.complete) syncHeight();
+    window.addEventListener('resize', syncHeight);
+  }
+
+  // ── Background toggle ─────────────────────────────────────────────
+  if (toggleBg) {
+    toggleBg.addEventListener('change', () => {
+      viewer.classList.toggle('show-bg', toggleBg.checked);
+    });
+  }
+
+  // ── Labels toggle ─────────────────────────────────────────────────
+  if (toggleLabels) {
+    toggleLabels.addEventListener('change', () => {
+      if (labelsGroup) labelsGroup.style.display = toggleLabels.checked ? '' : 'none';
+    });
+  }
+
+  // ── Build panel number labels ─────────────────────────────────────
+  function buildLabels() {
+    if (!svgEl) return;
+    if (labelsGroup) labelsGroup.remove();
+    labelsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    labelsGroup.id = 'panel-labels-layer';
+    labelsGroup.style.display = (toggleLabels && toggleLabels.checked) ? '' : 'none';
+
+    const vb = svgEl.viewBox.baseVal;
+    const baseFontSize = vb.width > 0 ? Math.max(vb.width, vb.height) / 80 : 12;
+
+    svgEl.querySelectorAll('[data-panel-clickable]').forEach(el => {
+      const rec = panelData[el.id];
+      if (!rec || rec.status !== 'installed') return;  // only label installed panels
+      const label = rec.panel_label || el.id;
+      let bb;
+      try { bb = el.getBBox(); } catch(e) { return; }
+      if (!bb || bb.width === 0) return;
+      const cx = bb.x + bb.width / 2;
+      const cy = bb.y + bb.height / 2;
+      const fit = Math.min(bb.width, bb.height) * 0.30;
+      const fontSize = Math.min(Math.max(fit, baseFontSize * 0.4), baseFontSize * 2.5);
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.setAttribute('x', cx);
+      txt.setAttribute('y', cy);
+      txt.setAttribute('font-size', fontSize);
+      txt.setAttribute('stroke-width', fontSize * 0.25);
+      txt.classList.add('panel-label-text');
+      txt.textContent = label;
+      labelsGroup.appendChild(txt);
+    });
+    svgEl.appendChild(labelsGroup);
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────
+  function updateStats(svg) {
+    const all = svg.querySelectorAll('[data-panel-clickable]');
+    let inst = 0, iss = 0;
+    all.forEach(el => {
+      const ps = el.getAttribute('data-ps');
+      if (ps === 'installed') inst++;
+      else if (ps === 'issue') iss++;
+    });
+    document.getElementById('stat-total-val').textContent    = all.length;
+    document.getElementById('stat-installed-val').textContent = inst;
+    document.getElementById('stat-issues-val').textContent    = iss;
+    document.getElementById('stat-issues').classList.toggle('d-none', iss === 0);
+  }
+
+  // ── Panel data table ──────────────────────────────────────────────
+  function buildTable() {
+    const tbody = document.getElementById('panel-table-body');
+    if (!tbody) return;
+
+    // Only show panels that have been recorded
+    const ids = new Set(Object.keys(panelData).filter(id => panelData[id] && panelData[id].status));
+
+    if (ids.size === 0) {
+      tbody.innerHTML = '<tr><td colspan="11" class="text-muted text-center">No panels recorded yet. Click a panel on the diagram to add a record.</td></tr>';
+      return;
+    }
+
+    // Sort by panel label, then by id
+    const sorted = [...ids].sort((a, b) => {
+      const la = (panelData[a] && panelData[a].panel_label) || a;
+      const lb = (panelData[b] && panelData[b].panel_label) || b;
+      return la.localeCompare(lb, undefined, { numeric: true });
+    });
+
+    let recorded = 0;
+    const rows = sorted.map(id => {
+      const r = panelData[id] || {};
+      if (r.status) recorded++;
+      const empName = r.employee_id ? (employeeMap[r.employee_id] || r.employee_id) : '—';
+      const badge   = r.status ? (STATUS_BADGE[r.status] || r.status) : '<span class="text-muted">—</span>';
+      return `<tr>
+        <td class="fw-semibold">${_esc(r.panel_label || id)}</td>
+        <td>${_esc(r.panel_type)}</td>
+        <td>${_esc(r.roll_number)}</td>
+        <td>${badge}</td>
+        <td>${_esc(r.installed_date)}</td>
+        <td>${_esc(r.install_time)}</td>
+        <td>${r.width_m  !== '' && r.width_m  != null ? Number(r.width_m).toFixed(2)  : '—'}</td>
+        <td>${r.length_m !== '' && r.length_m != null ? Number(r.length_m).toFixed(2) : '—'}</td>
+        <td>${r.area_sqm !== '' && r.area_sqm != null ? Number(r.area_sqm).toFixed(3) : '—'}</td>
+        <td>${_esc(empName)}</td>
+        <td>${_esc(r.notes)}</td>
+      </tr>`;
+    });
+
+    tbody.innerHTML = rows.join('');
+    const summary = document.getElementById('table-summary');
+    if (summary) summary.textContent = `${recorded} of ${ids.size} panels recorded`;
+  }
+
+  function _esc(v) {
+    if (v == null || v === '') return '—';
+    return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Print report
+  document.getElementById('print-report-btn')?.addEventListener('click', () => {
+    // Ensure labels are visible for print
+    if (labelsGroup) labelsGroup.style.display = '';
+    if (toggleLabels) toggleLabels.checked = true;
+    window.print();
+  });
+
+  // ── Modal ─────────────────────────────────────────────────────────
+  const panelModalEl = document.getElementById('panelModal');
+  console.log('[Plytrack] panelModalEl found:', !!panelModalEl);
+  console.log('[Plytrack] bootstrap available:', typeof bootstrap !== 'undefined');
+  const bsModal = new bootstrap.Modal(panelModalEl, { backdrop: true, keyboard: true });
+  console.log('[Plytrack] bsModal created:', !!bsModal);
+
+  function openModal(panelId) {
+    console.log('[Plytrack] openModal called with:', panelId);
+    if (!panelId) return;
+    const rec = panelData[panelId] || {};
+    document.getElementById('modal-panel-id').value               = panelId;
+    document.getElementById('modal-panel-id-display').textContent = rec.panel_label || panelId;
+    document.getElementById('modal-panel-label').value            = rec.panel_label || '';
+    document.getElementById('modal-panel-type').value             = rec.panel_type  || '';
+    document.getElementById('modal-roll-number').value            = rec.roll_number || '';
+    document.getElementById('modal-installed-date').value         = rec.installed_date || new Date().toISOString().slice(0,10);
+    document.getElementById('modal-install-time').value           = rec.install_time || '';
+    document.getElementById('modal-width-m').value                = rec.width_m  !== '' ? rec.width_m  : '';
+    document.getElementById('modal-length-m').value               = rec.length_m !== '' ? rec.length_m : '';
+    document.getElementById('modal-area-sqm').value               = rec.area_sqm !== '' ? rec.area_sqm : '';
+    document.getElementById('modal-employee-id').value            = rec.employee_id || '';
+    document.getElementById('modal-notes').value                  = rec.notes || '';
+    const status = rec.status || 'installed';
+    const radio  = document.querySelector(`input[name="modal-status"][value="${status}"]`);
+    if (radio) radio.checked = true;
+    document.getElementById('modal-last-updated').textContent = rec.status ? `Last saved: ${rec.status}` : '';
+    console.log('[Plytrack] calling bsModal.show()');
+    bsModal.show();
+  }
+  window.openPanelModal = openModal;
+
+  // Auto-calculate area when width or length changes
+  ['modal-width-m', 'modal-length-m'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => {
+      const w = parseFloat(document.getElementById('modal-width-m').value);
+      const l = parseFloat(document.getElementById('modal-length-m').value);
+      const areaEl = document.getElementById('modal-area-sqm');
+      if (!isNaN(w) && !isNaN(l)) {
+        areaEl.value = (w * l).toFixed(3);
+      }
+    });
+  });
+
+  document.getElementById('modal-save-btn').addEventListener('click', async () => {
+    const panelId = document.getElementById('modal-panel-id').value;
+    const status  = document.querySelector('input[name="modal-status"]:checked').value;
+    const payload = {
+      panel_id:       panelId,
+      panel_label:    document.getElementById('modal-panel-label').value.trim()   || panelId,
+      panel_type:     document.getElementById('modal-panel-type').value.trim()    || null,
+      roll_number:    document.getElementById('modal-roll-number').value.trim()   || null,
+      status,
+      installed_date: document.getElementById('modal-installed-date').value       || null,
+      install_time:   document.getElementById('modal-install-time').value         || null,
+      width_m:        document.getElementById('modal-width-m').value              || null,
+      length_m:       document.getElementById('modal-length-m').value             || null,
+      area_sqm:       document.getElementById('modal-area-sqm').value             || null,
+      employee_id:    document.getElementById('modal-employee-id').value          || null,
+      notes:          document.getElementById('modal-notes').value.trim()         || null,
+    };
+    const btn = document.getElementById('modal-save-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const resp   = await fetch(SAVE_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      const result = await resp.json();
+      if (result.ok) {
+        panelData[panelId] = Object.assign(panelData[panelId] || {}, {
+          panel_id: panelId, panel_label: payload.panel_label,
+          status, installed_date: payload.installed_date || '',
+          employee_id: payload.employee_id || '', notes: payload.notes || '',
+          roll_number:    result.roll_number  ?? '',
+          install_time:   result.install_time ?? '',
+          width_m:        result.width_m      ?? '',
+          length_m:       result.length_m     ?? '',
+          area_sqm:       result.area_sqm     ?? '',
+          panel_type:     result.panel_type   ?? '',
+        });
+        const el = svgEl && svgEl.querySelector(`[id="${CSS.escape(panelId)}"]`);
+        if (el) {
+          if (status) el.setAttribute('data-ps', status);
+          else        el.removeAttribute('data-ps');
+        }
+        if (svgEl) updateStats(svgEl);
+        buildLabels();
+        buildTable();
+        bsModal.hide();
+      } else {
+        alert('Save failed: ' + (result.error || 'unknown error'));
+      }
+    } catch(err) {
+      console.error('[Plytrack] save error:', err);
+      alert('Error: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Save';
+    }
+  });
+
+  // ── Auto-detect ───────────────────────────────────────────────────
+  // Slider live labels
+  ['threshold','dilate','minarea'].forEach(id => {
+    const slider = document.getElementById(id + '-slider');
+    const label  = document.getElementById(id + '-val');
+    if (slider && label) {
+      slider.addEventListener('input', () => { label.textContent = slider.value; });
+    }
+  });
+
+  // Both the settings panel button and the overlay card button trigger the same flow
+  const autodetectBtnOverlay = document.getElementById('autodetect-btn-overlay');
+  const autodetectBtn     = document.getElementById('autodetect-btn') || autodetectBtnOverlay;
+  const autodetectBar     = document.getElementById('autodetect-bar');
+  const autodetectMsg     = document.getElementById('autodetect-msg');
+  const autodetectConfirm = document.getElementById('autodetect-confirm');
+  const autodetectCancel  = document.getElementById('autodetect-cancel');
+  let   detectedSvgBlob   = null;
+
+  if (autodetectBtn) {
+    autodetectBtn.addEventListener('click', async () => {
+      autodetectBtn.disabled = true;
+      autodetectBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Detecting…';
+      const old = document.getElementById('autodetect-preview-svg');
+      if (old) old.remove();
+      autodetectBar.classList.add('d-none');
+
+      try {
+        const threshold = parseFloat(document.getElementById('threshold-slider')?.value || 180);
+        const dilate    = parseInt(document.getElementById('dilate-slider')?.value    || 3);
+        const minArea   = parseFloat(document.getElementById('minarea-slider')?.value  || 0.1) / 100;
+        const resp = await fetch(AUTODETECT_URL, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ threshold, dilate, min_area_pct: minArea }),
+        });
+        const data = await resp.json();
+        if (!data.ok) { alert('Auto-detect failed: ' + data.error); return; }
+
+        const { img_width, img_height, polygons } = data;
+
+        // Show yellow preview polygons overlaid on the viewer
+        const previewSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        previewSvg.setAttribute('viewBox', `0 0 ${img_width} ${img_height}`);
+        previewSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        previewSvg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;';
+        previewSvg.id = 'autodetect-preview-svg';
+        polygons.forEach((pts) => {
+          const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+          poly.setAttribute('points', pts.map(p => p.join(',')).join(' '));
+          poly.classList.add('autodetect-preview');
+          previewSvg.appendChild(poly);
+        });
+        viewer.appendChild(previewSvg);
+
+        // Build the SVG to save (panel_1, panel_2, … IDs in pixel coords)
+        const lines = [
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${img_width} ${img_height}" preserveAspectRatio="xMidYMid meet">`,
+          `  <!-- Auto-detected by Plytrack — ${polygons.length} panels -->`,
+        ];
+        polygons.forEach((pts, i) => {
+          lines.push(`  <polygon id="panel_${i+1}" points="${pts.map(p=>p.join(',')).join(' ')}" fill="#e2e8f0" stroke="#64748b" stroke-width="0.5"/>`);
+        });
+        lines.push('</svg>');
+        detectedSvgBlob = lines.join('\n');
+
+        // Hide the overlay card now that detection is done
+        const overlay = document.getElementById('autodetect-overlay');
+        if (overlay) overlay.style.display = 'none';
+
+        autodetectMsg.textContent =
+          `${polygons.length} panel shape${polygons.length !== 1 ? 's' : ''} detected (shown in yellow). ` +
+          `Review, then save or discard. You can rename each panel after saving by clicking it.`;
+        autodetectBar.classList.remove('d-none');
+        autodetectBar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch(err) {
+        alert('Network error during auto-detect.');
+        console.error(err);
+      } finally {
+        autodetectBtn.disabled = false;
+        autodetectBtn.innerHTML = '<i class="bi bi-magic me-1"></i>Auto-detect Panels';
+      }
+    });
+
+    autodetectCancel.addEventListener('click', () => {
+      const old = document.getElementById('autodetect-preview-svg');
+      if (old) old.remove();
+      autodetectBar.classList.add('d-none');
+      detectedSvgBlob = null;
+      // Show the overlay card again so user can re-run
+      const overlay = document.getElementById('autodetect-overlay');
+      if (overlay) overlay.style.display = '';
+    });
+
+    autodetectConfirm.addEventListener('click', async () => {
+      if (!detectedSvgBlob) return;
+      autodetectConfirm.disabled = true;
+      autodetectConfirm.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+      const formData = new FormData();
+      formData.append('svg_file', new File([detectedSvgBlob], 'autodetect.svg', {type: 'image/svg+xml'}));
+      try {
+        await fetch(UPLOAD_SVG_URL, { method: 'POST', body: formData });
+        window.location.reload();
+      } catch {
+        alert('Failed to save. Please try again.');
+        autodetectConfirm.disabled = false;
+        autodetectConfirm.innerHTML = '<i class="bi bi-check2 me-1"></i>Save as Diagram';
+      }
+    });
+  }
+
+})();
+</script>
+{% endblock %}

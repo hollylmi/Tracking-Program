@@ -102,6 +102,11 @@
       <i class="bi bi-folder2-open me-1"></i>Documents
     </button>
   </li>
+  <li class="nav-item" role="presentation">
+    <a class="nav-link" href="{{ url_for('panel_overview', project_id=project.id) }}">
+      <i class="bi bi-grid-3x3-gap me-1"></i>Panels
+    </a>
+  </li>
 </ul>
 
 <div class="tab-content border border-top-0 rounded-bottom p-3 bg-white shadow-sm mb-4">

@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Panels — {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h2 class="fw-bold mb-0">
+      <i class="bi bi-grid-3x3-gap me-2 text-primary"></i>Panel Diagrams
+    </h2>
+    <div class="text-muted small mt-1">
+      <a href="{{ url_for('project_dashboard', project_id=project.id) }}" class="text-muted">
+        <i class="bi bi-arrow-left me-1"></i>{{ project.name }}
+      </a>
+    </div>
+  </div>
+  <button class="btn btn-ply-primary" data-bs-toggle="collapse" data-bs-target="#addLayerForm">
+    <i class="bi bi-plus-circle me-1"></i>Add Layer
+  </button>
+</div>
+
+<!-- Add Layer Form -->
+<div class="collapse mb-4 {% if not layers %}show{% endif %}" id="addLayerForm">
+  <div class="card shadow-sm">
+    <div class="card-header fw-semibold"><i class="bi bi-stack me-2"></i>New Diagram Layer</div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('panel_layer_add', project_id=project.id) }}"
+            enctype="multipart/form-data">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Layer Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="layer_name" required
+                   placeholder="e.g. Layer 1 – HDPE Liner">
+          </div>
+          <div class="col-md-1">
+            <label class="form-label fw-semibold">Order</label>
+            <input type="number" class="form-control" name="sort_order" value="{{ layers|length + 1 }}" min="1">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Description</label>
+            <input type="text" class="form-control" name="description"
+                   placeholder="Optional notes about this layer">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Diagram <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="file" class="form-control" name="svg_file" accept=".svg,.dxf"
+                   id="layerFileInput" onchange="layerFileHint(this)">
+            <div class="form-text" id="layerFileHint">
+              SVG or DXF — DXF is auto-converted. Upload later if preferred.
+            </div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i>Add Layer
+          </button>
+          <button type="button" class="btn btn-outline-secondary ms-2"
+                  data-bs-toggle="collapse" data-bs-target="#addLayerForm">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- AutoCAD / SVG Guide (shown when no layers yet) -->
+{% if not layers %}
+<div class="card border-info shadow-sm mb-4">
+  <div class="card-header fw-semibold text-info-emphasis">
+    <i class="bi bi-info-circle me-2"></i>How to prepare your SVG from AutoCAD
+  </div>
+  <div class="card-body">
+    <p class="mb-3 text-muted small">
+      The easiest workflow is to upload your AutoCAD file directly as a <strong>DXF</strong>.
+      Plytrack automatically detects all enclosed panel regions and assigns IDs — no manual work needed.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h6 class="fw-bold"><i class="bi bi-1-circle-fill text-primary me-1"></i>Draw in AutoCAD (no special prep)</h6>
+        <ul class="small text-muted ps-3">
+          <li>Draw panel boundaries using any combination of lines, polylines, or arcs.
+              They can overlap and share edges — Plytrack finds the enclosed regions automatically.</li>
+          <li>Optionally add a <strong>TEXT</strong> label inside each panel (e.g. <em>P-001</em>)
+              so panels are named automatically. If omitted, panels get numbered <em>panel_1, panel_2…</em>
+              and you can rename them in the app.</li>
+        </ul>
+        <h6 class="fw-bold mt-3"><i class="bi bi-2-circle-fill text-primary me-1"></i>Export from AutoCAD</h6>
+        <ol class="small text-muted ps-3">
+          <li>Go to <strong>File → Save As</strong> (or <code>SAVEAS</code> command).</li>
+          <li>In the <em>Files of type</em> dropdown choose <strong>AutoCAD 2010 DXF (*.dxf)</strong>.</li>
+          <li>Save and upload the <code>.dxf</code> file into a layer below using the <em>Convert DXF</em> button.</li>
+        </ol>
+      </div>
+      <div class="col-md-6">
+        <h6 class="fw-bold"><i class="bi bi-3-circle-fill text-primary me-1"></i>Optional: add a background image</h6>
+        <p class="small text-muted">
+          If your drawing is based on a site scan or PDF, you can upload that as a background image
+          (JPG, PNG, or PDF) so the diagram shows the real site underneath the panel outlines.
+        </p>
+        <h6 class="fw-bold mt-3"><i class="bi bi-4-circle-fill text-primary me-1"></i>Manual SVG option</h6>
+        <p class="small text-muted mb-0">
+          Advanced users can also upload a hand-crafted <strong>Plain SVG</strong> where each panel is a
+          <code>&lt;polygon&gt;</code> or <code>&lt;path&gt;</code> with a unique <code>id</code> attribute.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Layer List -->
+{% if layers %}
+<div class="row g-3">
+  {% for layer in layers %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <h6 class="fw-bold mb-0">{{ layer.layer_name }}</h6>
+            {% if layer.description %}
+            <div class="text-muted small">{{ layer.description }}</div>
+            {% endif %}
+          </div>
+          <form method="POST"
+                action="{{ url_for('panel_layer_delete', project_id=project.id, layer_id=layer.id) }}"
+                onsubmit="return confirm('Delete layer \'{{ layer.layer_name }}\' and all panel records?')">
+            <button class="btn btn-outline-danger btn-sm" title="Delete layer">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+        </div>
+
+        <!-- Progress bar -->
+        {% set total = layer.panels | length %}
+        {% set installed = layer.panels | selectattr('status', 'eq', 'installed') | list | length %}
+        {% set issues = layer.panels | selectattr('status', 'eq', 'issue') | list | length %}
+        {% if total > 0 %}
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small text-muted mb-1">
+            <span>{{ installed }}/{{ total }} installed</span>
+            {% if issues > 0 %}<span class="text-danger">{{ issues }} issue{{ 's' if issues != 1 }}</span>{% endif %}
+          </div>
+          <div class="progress" style="height:8px;">
+            <div class="progress-bar bg-success" style="width:{{ (installed/total*100)|round|int }}%"></div>
+            {% if issues > 0 %}
+            <div class="progress-bar bg-danger" style="width:{{ (issues/total*100)|round|int }}%"></div>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted small mb-2">No panels recorded yet.</p>
+        {% endif %}
+
+        {% if layer.svg_filename %}
+        <a href="{{ url_for('panel_layer_view', project_id=project.id, layer_id=layer.id) }}"
+           class="btn btn-primary btn-sm w-100">
+          <i class="bi bi-grid-3x3-gap me-1"></i>Open Diagram
+        </a>
+        {% else %}
+        <a href="{{ url_for('panel_layer_view', project_id=project.id, layer_id=layer.id) }}"
+           class="btn btn-outline-primary btn-sm w-100 mb-2">
+          <i class="bi bi-arrow-right-circle me-1"></i>Open Layer (upload PNG / DXF / SVG inside)
+        </a>
+        <form method="POST"
+              action="{{ url_for('panel_layer_upload_bg', project_id=project.id, layer_id=layer.id) }}"
+              enctype="multipart/form-data" class="d-flex gap-2 mb-2">
+          <input type="file" class="form-control form-control-sm" name="bg_file" accept=".jpg,.jpeg,.png,.pdf" required>
+          <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">
+            <i class="bi bi-image me-1"></i>PNG/PDF
+          </button>
+        </form>
+        <form method="POST"
+              action="{{ url_for('panel_layer_upload_dxf', project_id=project.id, layer_id=layer.id) }}"
+              enctype="multipart/form-data" class="d-flex gap-2">
+          <input type="file" class="form-control form-control-sm" name="dxf_file" accept=".dxf" required>
+          <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">
+            <i class="bi bi-filetype-raw me-1"></i>DXF
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="card-footer text-muted small">
+        Added {{ layer.created_at.strftime('%d %b %Y') if layer.created_at else '—' }}
+        {% if layer.svg_original_name %}&nbsp;&bull;&nbsp;{{ layer.svg_original_name }}{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
