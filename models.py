@@ -37,6 +37,12 @@ entry_machines = db.Table(
     db.Column('machine_id', db.Integer, db.ForeignKey('machine.id'), primary_key=True)
 )
 
+employee_roles = db.Table(
+    'employee_roles',
+    db.Column('employee_id', db.Integer, db.ForeignKey('employee.id'), primary_key=True),
+    db.Column('role_id', db.Integer, db.ForeignKey('role.id'), primary_key=True)
+)
+
 
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -77,11 +83,14 @@ class Role(db.Model):
 class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(100))              # display string, synced from Role on save
-    role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=True)
-    delay_rate = db.Column(db.Float)              # overridable; defaults from Role on create
+    role = db.Column(db.String(100))              # display string, synced from roles on save
+    role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=True)  # legacy primary role
+    delay_rate = db.Column(db.Float)              # overridable; defaults to max of assigned roles
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    roles = db.relationship('Role', secondary='employee_roles', lazy='subquery',
+                            backref=db.backref('member_employees', lazy=True))
 
     def __repr__(self):
         return f'<Employee {self.name}>'
@@ -412,10 +421,12 @@ class ProjectAssignment(db.Model):
     date_from = db.Column(db.Date, nullable=False)
     date_to = db.Column(db.Date, nullable=True)    # None = ongoing / no end date
     notes = db.Column(db.String(300))
+    scheduled_role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     employee = db.relationship('Employee', backref='project_assignments')
     project = db.relationship('Project', backref='employee_assignments')
+    scheduled_role = db.relationship('Role', foreign_keys=[scheduled_role_id])
 
     def __repr__(self):
         return f'<ProjectAssignment emp={self.employee_id} proj={self.project_id}>'
@@ -470,25 +481,33 @@ class BreakdownPhoto(db.Model):
 # ---------------------------------------------------------------------------
 
 class PublicHoliday(db.Model):
-    """Public holiday by Australian state."""
+    """Public holiday — may apply to one or more Australian states."""
     id = db.Column(db.Integer, primary_key=True)
-    state = db.Column(db.String(10), nullable=False)   # e.g. 'QLD', 'NSW'
+    state = db.Column(db.String(10))                   # legacy (kept for compat)
+    states = db.Column(db.String(200))                 # comma-separated: "QLD,NSW" or "ALL"
     date = db.Column(db.Date, nullable=False)
     name = db.Column(db.String(200), nullable=False)
 
+    def states_list(self):
+        return [s.strip() for s in (self.states or self.state or '').split(',') if s.strip()]
+
     def __repr__(self):
-        return f'<PublicHoliday {self.state} {self.date} {self.name}>'
+        return f'<PublicHoliday {self.states} {self.date} {self.name}>'
 
 
 class CFMEUDate(db.Model):
-    """CFMEU shutdown/RDO date by state."""
+    """CFMEU shutdown/RDO date — may apply to one or more states, or ALL."""
     id = db.Column(db.Integer, primary_key=True)
-    state = db.Column(db.String(10), nullable=False)
+    state = db.Column(db.String(10))                   # legacy (kept for compat)
+    states = db.Column(db.String(200))                 # comma-separated: "QLD" or "ALL"
     date = db.Column(db.Date, nullable=False)
     name = db.Column(db.String(200), nullable=False)
 
+    def states_list(self):
+        return [s.strip() for s in (self.states or self.state or '').split(',') if s.strip()]
+
     def __repr__(self):
-        return f'<CFMEUDate {self.state} {self.date} {self.name}>'
+        return f'<CFMEUDate {self.states} {self.date} {self.name}>'
 
 
 # ---------------------------------------------------------------------------

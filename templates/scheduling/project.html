@@ -164,7 +164,8 @@
           {% for emp in assigned_employees %}
           <tr>
             <td class="emp-name">
-              {{ emp.name }}<br><small class="text-muted">{{ emp.role or '' }}</small>
+              {{ emp.name }}<br>
+              <small class="text-muted">{{ emp_scheduled_role_name.get(emp.id) or emp.role or '' }}</small>
             </td>
             {% for d in date_list %}
             {% set ds = d.isoformat() %}
@@ -302,7 +303,16 @@
         {% for a in assignments %}
         <tr>
           <td>{{ a.employee.name }}</td>
-          <td class="text-muted">{{ a.employee.role or '—' }}</td>
+          <td class="text-muted">
+            {% if a.scheduled_role %}
+              <span class="badge bg-primary-subtle text-primary">{{ a.scheduled_role.name }}</span>
+              {% if a.scheduled_role.delay_rate %}
+                <small class="text-success ms-1">${{ '%.2f'|format(a.scheduled_role.delay_rate) }}/hr</small>
+              {% endif %}
+            {% else %}
+              {{ a.employee.role or '—' }}
+            {% endif %}
+          </td>
           <td>{{ a.date_from.strftime('%d/%m/%Y') }}</td>
           <td>{{ a.date_to.strftime('%d/%m/%Y') if a.date_to else '<span class="text-success fw-medium">Ongoing</span>'|safe }}</td>
           <td class="text-muted">{{ a.notes or '' }}</td>
@@ -335,12 +345,20 @@
           <input type="hidden" name="project_id" value="{{ project.id }}">
           <div class="mb-2">
             <label class="form-label small mb-1">Employee</label>
-            <select class="form-select form-select-sm" name="employee_id" required>
+            <select class="form-select form-select-sm" name="employee_id" id="assignEmpSelect" required
+                    onchange="onAssignEmpChange(this)">
               <option value="">— select —</option>
               {% for emp in all_employees %}
               <option value="{{ emp.id }}">{{ emp.name }}{% if emp.role %} ({{ emp.role }}){% endif %}</option>
               {% endfor %}
             </select>
+          </div>
+          <div class="mb-2" id="assignRoleWrap" style="display:none">
+            <label class="form-label small mb-1">Scheduling as <span class="text-muted">(role for this assignment)</span></label>
+            <select class="form-select form-select-sm" name="scheduled_role_id" id="assignRoleSelect">
+              <option value="">— select role —</option>
+            </select>
+            <div class="form-text" id="assignRateHint"></div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col">
@@ -470,6 +488,60 @@
 
 {% block scripts %}
 <script>
+// Employee → roles data for dynamic role dropdown
+const empRolesData = {{ emp_roles_data | tojson }};
+
+function onAssignEmpChange(sel) {
+  const empId = parseInt(sel.value);
+  const roleWrap = document.getElementById('assignRoleWrap');
+  const roleSelect = document.getElementById('assignRoleSelect');
+  const rateHint = document.getElementById('assignRateHint');
+
+  roleSelect.innerHTML = '<option value="">— select role —</option>';
+  rateHint.textContent = '';
+
+  const roles = empRolesData[empId] || [];
+  if (roles.length === 0) {
+    roleWrap.style.display = 'none';
+    return;
+  }
+
+  // Sort by delay_rate descending so highest rate appears first
+  roles.sort((a, b) => (b.delay_rate || 0) - (a.delay_rate || 0));
+  roles.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.name + (r.delay_rate ? ` — $${r.delay_rate.toFixed(2)}/hr` : '');
+    roleSelect.appendChild(opt);
+  });
+
+  // Auto-select the highest rate role and show hint
+  if (roles.length > 0) {
+    roleSelect.value = roles[0].id;
+    updateRateHint(roles);
+  }
+  roleWrap.style.display = '';
+
+  roleSelect.onchange = () => updateRateHint(roles);
+}
+
+function updateRateHint(roles) {
+  const roleSelect = document.getElementById('assignRoleSelect');
+  const rateHint = document.getElementById('assignRateHint');
+  const selectedId = parseInt(roleSelect.value);
+  const selected = roles.find(r => r.id === selectedId);
+  if (!selected) { rateHint.textContent = ''; return; }
+
+  const maxRate = Math.max(...roles.map(r => r.delay_rate || 0));
+  if (roles.length > 1 && selected.delay_rate === maxRate && maxRate > 0) {
+    rateHint.innerHTML = `<span class="text-success">Highest delay rate for this employee ($${maxRate.toFixed(2)}/hr)</span>`;
+  } else if (roles.length > 1) {
+    rateHint.innerHTML = `<span class="text-warning">Note: higher rate available ($${maxRate.toFixed(2)}/hr)</span>`;
+  } else {
+    rateHint.textContent = selected.delay_rate ? `Delay rate: $${selected.delay_rate.toFixed(2)}/hr` : '';
+  }
+}
+
 function schedStatusChanged(sel) {
   document.getElementById('schedProjectDiv').style.display = sel.value === 'project' ? '' : 'none';
 }

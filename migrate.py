@@ -108,6 +108,35 @@ else:
     changes += add_column('panel_install_record', 'canvas_points', 'TEXT')
     changes += add_column('panel_install_record', 'source', 'VARCHAR(20)')
 
+    # ── employee_roles (many-to-many: employee ↔ role) ───────────────────────
+    if not table_exists('employee_roles'):
+        cur.execute('''
+            CREATE TABLE employee_roles (
+                employee_id INTEGER NOT NULL,
+                role_id INTEGER NOT NULL,
+                PRIMARY KEY (employee_id, role_id),
+                FOREIGN KEY (employee_id) REFERENCES employee(id),
+                FOREIGN KEY (role_id) REFERENCES role(id)
+            )
+        ''')
+        changes += 1
+        print("Created: employee_roles table")
+    else:
+        print("OK:     employee_roles table exists")
+
+    # ── project_assignment ────────────────────────────────────────────────────
+    changes += add_column('project_assignment', 'scheduled_role_id', 'INTEGER')
+
+    # ── public_holiday — multi-state support ─────────────────────────────────
+    if add_column('public_holiday', 'states', 'VARCHAR(200)'):
+        cur.execute("UPDATE public_holiday SET states = state WHERE states IS NULL AND state IS NOT NULL")
+        changes += 1
+
+    # ── cfmeu_date — multi-state support ─────────────────────────────────────
+    if add_column('cfmeu_date', 'states', 'VARCHAR(200)'):
+        cur.execute("UPDATE cfmeu_date SET states = state WHERE states IS NULL AND state IS NOT NULL")
+        changes += 1
+
     for t in ('entry_photo', 'planned_data', 'project_non_work_date', 'project_budgeted_role',
               'project_machine', 'project_worked_sunday', 'project_document',
               'project_equipment_requirement', 'project_equipment_assignment',

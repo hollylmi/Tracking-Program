@@ -1386,10 +1386,12 @@ def project_dashboard(project_id):
     # Public holidays and CFMEU dates for this project's state
     state_holidays = []
     if project.state:
-        state_holidays = PublicHoliday.query.filter_by(state=project.state).order_by(PublicHoliday.date).all()
+        state_holidays = [h for h in PublicHoliday.query.order_by(PublicHoliday.date).all()
+                          if project.state in h.states_list()]
         if project.is_cfmeu:
-            cfmeu = CFMEUDate.query.order_by(CFMEUDate.date).all()
-            state_holidays = sorted(state_holidays + list(cfmeu), key=lambda x: x.date)
+            cfmeu = [c for c in CFMEUDate.query.order_by(CFMEUDate.date).all()
+                     if 'ALL' in c.states_list() or project.state in c.states_list()]
+            state_holidays = sorted(state_holidays + cfmeu, key=lambda x: x.date)
     # Build non-work date set including state holidays
     holiday_dates = {h.date for h in state_holidays}
     non_work_set_dates = {nwd.date for nwd in non_work_dates} | holiday_dates
@@ -2003,6 +2005,7 @@ def panel_data_json(project_id, layer_id):
 
 
 @app.route('/project/<int:project_id>/non-work-dates/add', methods=['POST'])
+@login_required
 def non_work_date_add(project_id):
     project = Project.query.get_or_404(project_id)
     date_str = request.form.get('date', '').strip()
@@ -2027,6 +2030,7 @@ def non_work_date_add(project_id):
 
 
 @app.route('/project/<int:project_id>/non-work-dates/<int:nwd_id>/delete', methods=['POST'])
+@login_required
 def non_work_date_delete(project_id, nwd_id):
     nwd = ProjectNonWorkDate.query.get_or_404(nwd_id)
     db.session.delete(nwd)
@@ -3690,24 +3694,24 @@ def admin_employees():
         action = request.form.get('action')
         if action == 'add':
             name = request.form.get('name', '').strip()
-            role_id_raw = request.form.get('role_id', '').strip()
+            role_ids = request.form.getlist('role_ids')
             delay_rate_raw = request.form.get('delay_rate', '').strip()
             if name:
                 emp = Employee(name=name)
-                if role_id_raw:
-                    role_obj = Role.query.get(int(role_id_raw))
-                    if role_obj:
-                        emp.role_id = role_obj.id
-                        emp.role = role_obj.name
-                        # Default delay_rate from role unless overridden
-                        if delay_rate_raw:
-                            emp.delay_rate = float(delay_rate_raw)
-                        elif role_obj.delay_rate:
-                            emp.delay_rate = role_obj.delay_rate
-                else:
-                    emp.role = request.form.get('role_name', '').strip() or None
-                    emp.delay_rate = float(delay_rate_raw) if delay_rate_raw else None
                 db.session.add(emp)
+                db.session.flush()  # get emp.id before setting m2m
+                if role_ids:
+                    role_objs = Role.query.filter(Role.id.in_([int(r) for r in role_ids])).all()
+                    emp.roles = role_objs
+                    emp.role = ', '.join(r.name for r in sorted(role_objs, key=lambda r: r.name))
+                    emp.role_id = role_objs[0].id if len(role_objs) == 1 else None
+                    if delay_rate_raw:
+                        emp.delay_rate = float(delay_rate_raw)
+                    else:
+                        rates = [r.delay_rate for r in role_objs if r.delay_rate]
+                        emp.delay_rate = max(rates) if rates else None
+                else:
+                    emp.delay_rate = float(delay_rate_raw) if delay_rate_raw else None
                 db.session.commit()
                 flash(f'Employee "{name}" added.', 'success')
             else:
@@ -3715,17 +3719,22 @@ def admin_employees():
         elif action == 'edit':
             emp = Employee.query.get_or_404(int(request.form.get('id')))
             emp.name = request.form.get('name', '').strip()
-            role_id_raw = request.form.get('role_id', '').strip()
+            role_ids = request.form.getlist('role_ids')
             delay_rate_raw = request.form.get('delay_rate', '').strip()
-            if role_id_raw:
-                role_obj = Role.query.get(int(role_id_raw))
-                if role_obj:
-                    emp.role_id = role_obj.id
-                    emp.role = role_obj.name
-                    emp.delay_rate = float(delay_rate_raw) if delay_rate_raw else role_obj.delay_rate
+            if role_ids:
+                role_objs = Role.query.filter(Role.id.in_([int(r) for r in role_ids])).all()
+                emp.roles = role_objs
+                emp.role = ', '.join(r.name for r in sorted(role_objs, key=lambda r: r.name))
+                emp.role_id = role_objs[0].id if len(role_objs) == 1 else None
+                if delay_rate_raw:
+                    emp.delay_rate = float(delay_rate_raw)
+                else:
+                    rates = [r.delay_rate for r in role_objs if r.delay_rate]
+                    emp.delay_rate = max(rates) if rates else None
             else:
+                emp.roles = []
                 emp.role_id = None
-                emp.role = request.form.get('role_name', '').strip() or None
+                emp.role = None
                 emp.delay_rate = float(delay_rate_raw) if delay_rate_raw else None
             db.session.commit()
             flash('Employee updated.', 'success')
@@ -3859,17 +3868,20 @@ def admin_holidays():
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'add':
-            state = request.form.get('state', '').strip()
+            selected_states = request.form.getlist('states')
             date_str = request.form.get('date', '').strip()
             name = request.form.get('name', '').strip()
-            if state and date_str and name:
+            if selected_states and date_str and name:
                 try:
                     d = datetime.strptime(date_str, '%Y-%m-%d').date()
-                    db.session.add(PublicHoliday(state=state, date=d, name=name))
+                    states_str = ','.join(selected_states)
+                    db.session.add(PublicHoliday(states=states_str, date=d, name=name))
                     db.session.commit()
-                    flash(f'Added: {name} ({state} {d.strftime("%d/%m/%Y")}).', 'success')
+                    flash(f'Added: {name} ({states_str} — {d.strftime("%d/%m/%Y")}).', 'success')
                 except ValueError:
                     flash('Invalid date.', 'danger')
+            else:
+                flash('Select at least one state, a date, and a name.', 'danger')
         elif action == 'delete':
             h = PublicHoliday.query.get(int(request.form.get('id', 0)))
             if h:
@@ -3877,7 +3889,7 @@ def admin_holidays():
                 db.session.commit()
                 flash('Holiday deleted.', 'success')
         return redirect(url_for('admin_holidays'))
-    holidays = PublicHoliday.query.order_by(PublicHoliday.state, PublicHoliday.date).all()
+    holidays = PublicHoliday.query.order_by(PublicHoliday.date).all()
     return render_template('admin/holidays.html', holidays=holidays, states=AUSTRALIAN_STATES)
 
 
@@ -3889,14 +3901,18 @@ def admin_cfmeu():
         if action == 'add':
             date_str = request.form.get('date', '').strip()
             name = request.form.get('name', '').strip()
-            if date_str and name:
+            selected_states = request.form.getlist('states')
+            if date_str and name and selected_states:
                 try:
                     d = datetime.strptime(date_str, '%Y-%m-%d').date()
-                    db.session.add(CFMEUDate(state='ALL', date=d, name=name))
+                    states_str = ','.join(selected_states)
+                    db.session.add(CFMEUDate(states=states_str, date=d, name=name))
                     db.session.commit()
-                    flash(f'Added: {name} ({d.strftime("%d/%m/%Y")}).', 'success')
+                    flash(f'Added: {name} ({states_str} — {d.strftime("%d/%m/%Y")}).', 'success')
                 except ValueError:
                     flash('Invalid date.', 'danger')
+            else:
+                flash('Select at least one state, a date, and a name.', 'danger')
         elif action == 'delete':
             c = CFMEUDate.query.get(int(request.form.get('id', 0)))
             if c:
@@ -3904,7 +3920,7 @@ def admin_cfmeu():
                 db.session.commit()
                 flash('CFMEU date deleted.', 'success')
         return redirect(url_for('admin_cfmeu'))
-    cfmeu_dates = CFMEUDate.query.order_by(CFMEUDate.state, CFMEUDate.date).all()
+    cfmeu_dates = CFMEUDate.query.order_by(CFMEUDate.date).all()
     return render_template('admin/cfmeu.html', cfmeu_dates=cfmeu_dates, states=AUSTRALIAN_STATES)
 
 
@@ -4067,9 +4083,13 @@ def build_schedule_grid(employees, date_list):
     holidays_by_state = defaultdict(set)
     for h in PublicHoliday.query.filter(
             PublicHoliday.date >= min_date, PublicHoliday.date <= max_date).all():
-        holidays_by_state[h.state].add(h.date)
-    cfmeu_dates_set = {c.date for c in CFMEUDate.query.filter(
-        CFMEUDate.date >= min_date, CFMEUDate.date <= max_date).all()}
+        for s in h.states_list():
+            holidays_by_state[s].add(h.date)
+    cfmeu_by_state = defaultdict(set)
+    for c in CFMEUDate.query.filter(
+            CFMEUDate.date >= min_date, CFMEUDate.date <= max_date).all():
+        for s in c.states_list():
+            cfmeu_by_state[s].add(c.date)
 
     grid = {}
     for emp in employees:
@@ -4150,7 +4170,9 @@ def build_schedule_grid(employees, date_list):
                 proj = project_info.get(active_assign.project_id)
                 if proj:
                     is_pub_holiday = bool(proj.state and d in holidays_by_state.get(proj.state, set()))
-                    is_cfmeu_day = bool(proj.is_cfmeu and d in cfmeu_dates_set)
+                    is_cfmeu_day = bool(proj.is_cfmeu and (
+                        d in cfmeu_by_state.get('ALL', set()) or
+                        (proj.state and d in cfmeu_by_state.get(proj.state, set()))))
                     if is_pub_holiday or is_cfmeu_day:
                         grid[emp.id][date_str] = {
                             'status': 'rdo',
@@ -4459,10 +4481,19 @@ def scheduling_project(project_id):
     # Budgeted by role group name (ProjectBudgetedRole.role_name should match group names)
     budgeted = {br.role_name: br.budgeted_count for br in project.budgeted_roles}
 
+    # Map employee → their scheduled role name for this project (from active assignments)
+    emp_scheduled_role_name = {}
+    for a in assignments:
+        if a.scheduled_role:
+            emp_scheduled_role_name[a.employee_id] = a.scheduled_role.name
+        elif a.employee.role:
+            emp_scheduled_role_name.setdefault(a.employee_id, a.employee.role)
+
     # Count employees on site (status='assigned') grouped by their role group per date
     role_coverage = {}   # group_name -> {date_str -> count}
     for emp in assigned_employees:
-        group = role_group_map.get(emp.role or '', emp.role or 'No Role')
+        role_name = emp_scheduled_role_name.get(emp.id) or emp.role or ''
+        group = role_group_map.get(role_name, role_name or 'No Role')
         if group not in role_coverage:
             role_coverage[group] = {d.isoformat(): 0 for d in date_list}
         for d in date_list:
@@ -4472,15 +4503,22 @@ def scheduling_project(project_id):
                 role_coverage[group][ds] += 1
 
     all_employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
+    # Build per-employee roles JSON for the assignment form's dynamic role dropdown
+    emp_roles_data = {
+        emp.id: [{'id': r.id, 'name': r.name, 'delay_rate': r.delay_rate} for r in emp.roles]
+        for emp in all_employees
+    }
 
     # Non-work dates including public holidays
     project_nwd = {nwd.date for nwd in ProjectNonWorkDate.query.filter_by(project_id=project_id).all()}
     if project.state:
-        for h in PublicHoliday.query.filter_by(state=project.state).all():
-            project_nwd.add(h.date)
+        for h in PublicHoliday.query.all():
+            if project.state in h.states_list():
+                project_nwd.add(h.date)
         if project.is_cfmeu:
             for c in CFMEUDate.query.all():
-                project_nwd.add(c.date)
+                if 'ALL' in c.states_list() or project.state in c.states_list():
+                    project_nwd.add(c.date)
 
     # Equipment requirements with coverage
     equip_reqs = (ProjectEquipmentRequirement.query
@@ -4533,10 +4571,12 @@ def scheduling_project(project_id):
         next_period=next_period,
         assignments=assignments,
         assigned_employees=assigned_employees,
+        emp_scheduled_role_name=emp_scheduled_role_name,
         grid=grid,
         budgeted=budgeted,
         role_coverage=role_coverage,
         all_employees=all_employees,
+        emp_roles_data=emp_roles_data,
         all_projects=all_projects,
         project_nwd=project_nwd,
         equip_coverage=equip_coverage,
@@ -4570,12 +4610,14 @@ def scheduling_assign_add():
         flash('Employee and project are required.', 'danger')
         return redirect(url_for(redirect_to))
 
+    scheduled_role_id = request.form.get('scheduled_role_id', type=int) or None
     pa = ProjectAssignment(
         employee_id=employee_id,
         project_id=project_id,
         date_from=date_from,
         date_to=date_to,
-        notes=notes or None
+        notes=notes or None,
+        scheduled_role_id=scheduled_role_id,
     )
     db.session.add(pa)
     db.session.commit()

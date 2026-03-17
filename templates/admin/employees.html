@@ -34,7 +34,15 @@
             {% for emp in employees %}
             <tr>
               <td class="fw-semibold">{{ emp.name }}</td>
-              <td class="text-muted">{{ emp.role or '—' }}</td>
+              <td class="text-muted">
+                {% if emp.roles %}
+                  {% for r in emp.roles|sort(attribute='name') %}
+                    <span class="badge bg-secondary-subtle text-secondary me-1">{{ r.name }}</span>
+                  {% endfor %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
               <td>
                 {% if emp.delay_rate %}
                   <span class="text-success fw-semibold">${{ '%.2f'|format(emp.delay_rate) }}/hr</span>
@@ -53,7 +61,7 @@
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
                   <button class="btn btn-sm btn-outline-secondary" type="button"
-                          onclick="openEditEmployee({{ emp.id }}, '{{ emp.name|replace("'", "\\'") }}', {{ emp.role_id or 'null' }}, '{{ emp.delay_rate or '' }}')"
+                          onclick="openEditEmployee({{ emp.id }}, '{{ emp.name|replace("'", "\\'") }}', {{ emp.roles|map(attribute='id')|list|tojson }}, '{{ emp.delay_rate or '' }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -108,30 +116,31 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label fw-semibold">Role / Position</label>
+            <label class="form-label fw-semibold">Roles <span class="text-muted fw-normal small">(select all that apply)</span></label>
             {% if roles %}
-            <select name="role_id" id="empRoleId" class="form-select"
-                    onchange="onRoleChange(this)">
-              <option value="">— Select a role —</option>
+            <div class="border rounded p-2" style="max-height:180px; overflow-y:auto;" id="roleCheckboxes">
               {% for role in roles %}
-              <option value="{{ role.id }}"
-                      data-rate="{{ role.delay_rate or '' }}">
-                {{ role.name }}{% if role.delay_rate %} — ${{ '%.2f'|format(role.delay_rate) }}/hr{% endif %}
-              </option>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox"
+                       name="role_ids" value="{{ role.id }}"
+                       id="role_{{ role.id }}"
+                       data-rate="{{ role.delay_rate or '' }}"
+                       onchange="onRolesChange()">
+                <label class="form-check-label" for="role_{{ role.id }}">
+                  {{ role.name }}{% if role.delay_rate %} <span class="text-success small">${{ '%.2f'|format(role.delay_rate) }}/hr</span>{% endif %}
+                </label>
+              </div>
               {% endfor %}
-            </select>
+            </div>
             <div class="form-text">
-              Selecting a role auto-fills the delay rate. You can still override it below.
+              Select one or more roles. Delay rate defaults to the highest rate among selected roles.
               <a href="{{ url_for('admin_roles') }}">Manage roles →</a>
             </div>
             {% else %}
             <div class="alert alert-warning small py-2 mb-0">
               No roles defined yet.
-              <a href="{{ url_for('admin_roles') }}" class="alert-link">Add roles first</a>
-              or enter a title manually below.
+              <a href="{{ url_for('admin_roles') }}" class="alert-link">Add roles first.</a>
             </div>
-            <input type="text" name="role_name" id="empRoleName" class="form-control mt-2"
-                   placeholder="e.g. Operator, Labourer...">
             {% endif %}
           </div>
 
@@ -164,45 +173,43 @@
 
 {% block scripts %}
 <script>
-  // Role data from server
-  const roleRates = {
-    {% for role in roles %}
-    {{ role.id }}: {{ role.delay_rate or 'null' }}{% if not loop.last %},{% endif %}
-    {% endfor %}
-  };
-
-  function onRoleChange(select) {
-    const opt = select.options[select.selectedIndex];
-    const rate = opt.dataset.rate;
+  function onRolesChange() {
+    const checked = [...document.querySelectorAll('#roleCheckboxes input:checked')];
     const rateField = document.getElementById('empDelayRate');
     const rateLabel = document.getElementById('rateSourceLabel');
-    if (rate) {
-      rateField.value = parseFloat(rate).toFixed(2);
-      rateLabel.textContent = '(from role — override if needed)';
+    if (checked.length === 0) {
+      rateLabel.textContent = '';
+      return;
+    }
+    const rates = checked.map(cb => parseFloat(cb.dataset.rate)).filter(r => !isNaN(r));
+    if (rates.length > 0) {
+      const maxRate = Math.max(...rates);
+      rateField.value = maxRate.toFixed(2);
+      rateLabel.textContent = checked.length > 1
+        ? `(highest rate of ${checked.length} roles — override if needed)`
+        : '(from role — override if needed)';
     } else {
-      rateField.value = '';
       rateLabel.textContent = '';
     }
   }
 
-  function openEditEmployee(id, name, roleId, delayRate) {
+  function openEditEmployee(id, name, roleIds, delayRate) {
     document.getElementById('formTitle').textContent = 'Edit Employee';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
     document.getElementById('empName').value = name;
 
-    const roleSelect = document.getElementById('empRoleId');
-    if (roleSelect) {
-      roleSelect.value = roleId || '';
-      const rateLabel = document.getElementById('rateSourceLabel');
-      if (roleId && roleRates[roleId]) {
-        rateLabel.textContent = '(from role — override if needed)';
-      } else {
-        rateLabel.textContent = '';
-      }
+    // Uncheck all, then check the employee's roles
+    document.querySelectorAll('#roleCheckboxes input').forEach(cb => {
+      cb.checked = roleIds.includes(parseInt(cb.value));
+    });
+    onRolesChange();
+    // If delay rate was manually set, override what onRolesChange just set
+    if (delayRate) {
+      document.getElementById('empDelayRate').value = delayRate;
+      document.getElementById('rateSourceLabel').textContent = '(override — change role to recalculate)';
     }
 
-    document.getElementById('empDelayRate').value = delayRate;
     document.getElementById('submitBtn').textContent = 'Save Changes';
     document.getElementById('cancelEditBtn').classList.remove('d-none');
     document.getElementById('empName').focus();
@@ -214,8 +221,7 @@
     document.getElementById('formAction').value = 'add';
     document.getElementById('editId').value = '';
     document.getElementById('empName').value = '';
-    const roleSelect = document.getElementById('empRoleId');
-    if (roleSelect) roleSelect.value = '';
+    document.querySelectorAll('#roleCheckboxes input').forEach(cb => cb.checked = false);
     document.getElementById('empDelayRate').value = '';
     document.getElementById('rateSourceLabel').textContent = '';
     document.getElementById('submitBtn').textContent = 'Add Employee';
