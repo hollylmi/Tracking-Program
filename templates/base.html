@@ -43,12 +43,12 @@
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'entries' %}active{% endif %}" href="{{ url_for('entries') }}">
+          <a class="nav-link {% if request.endpoint == 'entries.entries' %}active{% endif %}" href="{{ url_for('entries.entries') }}">
             <i class="bi bi-table me-1"></i>All Entries
           </a>
         </li>
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('hire') or 'delay_report' in (request.endpoint or '') or request.endpoint == 'morning_standdown') %}active{% endif %}"
+          <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('hire') or 'delay_report' in (request.endpoint or '') or request.endpoint == 'entries.morning_standdown') %}active{% endif %}"
              href="#" data-bs-toggle="dropdown">
             <i class="bi bi-journal-check me-1"></i>Tracking
           </a>
@@ -59,7 +59,7 @@
             <li><a class="dropdown-item" href="{{ url_for('delay_report') }}">
               <i class="bi bi-exclamation-triangle me-2"></i>Delay Report
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('morning_standdown') }}">
+            <li><a class="dropdown-item" href="{{ url_for('entries.morning_standdown') }}">
               <i class="bi bi-envelope-exclamation me-2"></i>Standdown Email
             </a></li>
           </ul>
@@ -149,7 +149,7 @@
       </ul>
 
       <div class="d-flex align-items-center gap-2">
-        <a href="{{ url_for('new_entry') }}" class="btn btn-ply-primary fw-semibold">
+        <a href="{{ url_for('entries.new_entry') }}" class="btn btn-ply-primary fw-semibold">
           <i class="bi bi-plus-circle me-1"></i>New Entry
         </a>
         <div class="dropdown">

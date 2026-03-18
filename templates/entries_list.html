@@ -4,7 +4,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="fw-bold mb-0"><i class="bi bi-table me-2 text-primary"></i>All Entries</h2>
-  <a href="{{ url_for('new_entry') }}" class="btn btn-primary">
+  <a href="{{ url_for('entries.new_entry') }}" class="btn btn-primary">
     <i class="bi bi-plus-circle me-1"></i>New Entry
   </a>
 </div>
@@ -36,7 +36,7 @@
         <button type="submit" class="btn btn-sm btn-primary">
           <i class="bi bi-filter me-1"></i>Filter
         </button>
-        <a href="{{ url_for('entries') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+        <a href="{{ url_for('entries.entries') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
       </div>
     </form>
   </div>
@@ -126,7 +126,7 @@
               {% endif %}
             </td>
             <td class="text-end text-nowrap">
-              <a href="{{ url_for('edit_entry', entry_id=entry.id) }}" class="btn btn-sm btn-outline-secondary"
+              <a href="{{ url_for('entries.edit_entry', entry_id=entry.id) }}" class="btn btn-sm btn-outline-secondary"
                  title="Edit">
                 <i class="bi bi-pencil"></i>
               </a>
@@ -141,9 +141,9 @@
       <i class="bi bi-inbox fs-1 d-block mb-2"></i>
       No entries found.
       {% if project_filter or date_from or date_to %}
-        <a href="{{ url_for('entries') }}">Clear filters</a> or
+        <a href="{{ url_for('entries.entries') }}">Clear filters</a> or
       {% endif %}
-      <a href="{{ url_for('new_entry') }}">create a new entry</a>.
+      <a href="{{ url_for('entries.new_entry') }}">create a new entry</a>.
     </div>
     {% endif %}
   </div>

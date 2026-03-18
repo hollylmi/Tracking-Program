@@ -7,13 +7,13 @@
     <i class="bi bi-{% if entry %}pencil-square{% else %}plus-circle{% endif %} me-2 text-primary"></i>
     {% if entry %}Edit Entry{% else %}New Daily Entry{% endif %}
   </h2>
-  <a href="{{ url_for('entries') }}" class="btn btn-outline-secondary">
+  <a href="{{ url_for('entries.entries') }}" class="btn btn-outline-secondary">
     <i class="bi bi-arrow-left me-1"></i>Back to Entries
   </a>
 </div>
 
 <form method="POST" enctype="multipart/form-data"
-      action="{% if entry %}{{ url_for('edit_entry', entry_id=entry.id) }}{% else %}{{ url_for('new_entry') }}{% endif %}">
+      action="{% if entry %}{{ url_for('entries.edit_entry', entry_id=entry.id) }}{% else %}{{ url_for('entries.new_entry') }}{% endif %}">
 
   <div class="row g-4">
 
@@ -255,15 +255,15 @@
             {% for photo in entry.photos %}
             <div class="col-sm-4 col-md-3" id="photoThumb_{{ photo.id }}">
               <div class="card border shadow-sm h-100">
-                <a href="{{ url_for('serve_entry_photo', filename=photo.filename) }}" target="_blank">
-                  <img src="{{ url_for('serve_entry_photo', filename=photo.filename) }}"
+                <a href="{{ url_for('entries.serve_entry_photo', filename=photo.filename) }}" target="_blank">
+                  <img src="{{ url_for('entries.serve_entry_photo', filename=photo.filename) }}"
                        class="card-img-top" style="height:100px;object-fit:cover;"
                        alt="{{ photo.original_name or 'Site photo' }}">
                 </a>
                 <div class="card-body p-1">
                   <div class="text-muted small text-truncate">{{ photo.original_name or photo.filename }}</div>
                   <form method="POST"
-                        action="{{ url_for('delete_photo', entry_id=entry.id, photo_id=photo.id) }}"
+                        action="{{ url_for('entries.delete_photo', entry_id=entry.id, photo_id=photo.id) }}"
                         onsubmit="return confirm('Delete this photo?')" class="mt-1">
                     <button type="submit" class="btn btn-sm btn-outline-danger w-100 py-0">
                       <i class="bi bi-trash"></i> Remove
@@ -433,7 +433,7 @@
     <button type="submit" class="btn btn-primary px-4">
       <i class="bi bi-save me-1"></i>{% if entry %}Save Changes{% else %}Save Entry{% endif %}
     </button>
-    <a href="{{ url_for('entries') }}" class="btn btn-outline-secondary px-4">Cancel</a>
+    <a href="{{ url_for('entries.entries') }}" class="btn btn-outline-secondary px-4">Cancel</a>
     {% if entry %}
     <div class="ms-auto">
       <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
@@ -458,7 +458,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <form method="POST" action="{{ url_for('delete_entry', entry_id=entry.id) }}" class="d-inline">
+        <form method="POST" action="{{ url_for('entries.delete_entry', entry_id=entry.id) }}" class="d-inline">
           <button type="submit" class="btn btn-danger">Delete</button>
         </form>
       </div>
