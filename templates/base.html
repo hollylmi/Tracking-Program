@@ -78,7 +78,7 @@
           <ul class="dropdown-menu">
             {% for project in _active_projects %}
             <li>
-              <a class="dropdown-item" href="{{ url_for('project_dashboard', project_id=project.id) }}">
+              <a class="dropdown-item" href="{{ url_for('projects.project_dashboard', project_id=project.id) }}">
                 <i class="bi bi-folder me-2"></i>{{ project.name }}
               </a>
             </li>

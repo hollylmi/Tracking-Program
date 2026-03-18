@@ -226,7 +226,7 @@
 <div class="card shadow-sm mb-4">
   <div class="card-header fw-semibold d-flex align-items-center justify-content-between">
     <span><i class="bi bi-truck me-2"></i>Equipment</span>
-    <a href="{{ url_for('project_dashboard', project_id=project.id) }}#tab-scheduling"
+    <a href="{{ url_for('projects.project_dashboard', project_id=project.id) }}#tab-scheduling"
        class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-pencil me-1"></i>Manage Requirements
     </a>
@@ -268,7 +268,7 @@
             </span>
             {% else %}
             <span class="text-muted small fst-italic">None assigned —
-              <a href="{{ url_for('project_dashboard', project_id=project.id) }}#tab-scheduling">assign now</a>
+              <a href="{{ url_for('projects.project_dashboard', project_id=project.id) }}#tab-scheduling">assign now</a>
             </span>
             {% endfor %}
           </td>
@@ -282,7 +282,7 @@
 <div class="alert alert-light border small mb-4">
   <i class="bi bi-truck me-2 text-muted"></i>
   No equipment requirements set for this project.
-  <a href="{{ url_for('project_dashboard', project_id=project.id) }}#tab-scheduling">Set requirements</a>
+  <a href="{{ url_for('projects.project_dashboard', project_id=project.id) }}#tab-scheduling">Set requirements</a>
 </div>
 {% endif %}
 

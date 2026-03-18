@@ -165,7 +165,7 @@
                 {% set projs = own_machine_projects.get(m.id, []) %}
                 {% if projs %}
                   {% for p, lbl in projs %}
-                    <a href="{{ url_for('project_dashboard', project_id=p.id) }}#tab-scheduling"
+                    <a href="{{ url_for('projects.project_dashboard', project_id=p.id) }}#tab-scheduling"
                        class="badge bg-primary-subtle text-primary text-decoration-none me-1">{{ p.name }}</a>
                   {% endfor %}
                 {% else %}<span class="text-muted fst-italic">Unassigned</span>{% endif %}
@@ -393,7 +393,7 @@
               <td class="text-muted small">{{ hm.machine_type or '—' }}</td>
               <td class="small">
                 {% if hm.project %}
-                  <a href="{{ url_for('project_dashboard', project_id=hm.project_id) }}" class="text-decoration-none">{{ hm.project.name }}</a>
+                  <a href="{{ url_for('projects.project_dashboard', project_id=hm.project_id) }}" class="text-decoration-none">{{ hm.project.name }}</a>
                 {% else %}—{% endif %}
               </td>
               <td class="small">{{ hm.hire_company or '—' }}</td>
