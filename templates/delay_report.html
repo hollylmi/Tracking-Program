@@ -274,7 +274,7 @@
           Download the PDF, then click <strong>Open in Outlook</strong> to compose the email — attach the PDF before sending.
         </p>
 
-        <a href="{{ url_for('delay_report_pdf', date_from=date_from_str, date_to=date_to_str, project_id=project_id, billable=billable_filter) }}"
+        <a href="{{ url_for('delays.delay_report_pdf', date_from=date_from_str, date_to=date_to_str, project_id=project_id, billable=billable_filter) }}"
            class="btn btn-success w-100 mb-3">
           <i class="bi bi-download me-1"></i>Download PDF
         </a>
