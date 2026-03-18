@@ -3333,6 +3333,312 @@ def change_password():
 
 
 # ---------------------------------------------------------------------------
+# Admin — SQLite → Postgres one-time migration
+# ---------------------------------------------------------------------------
+
+@app.route('/admin/migrate-from-sqlite')
+@login_required
+def admin_migrate_sqlite():
+    """One-time migration: read the old SQLite file on the volume and import into Postgres."""
+    if not current_user.is_admin:
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('index'))
+
+    db_url = app.config['SQLALCHEMY_DATABASE_URI']
+    if not db_url.startswith('postgresql'):
+        flash('This tool only works when the app is using PostgreSQL. You are currently on SQLite.', 'warning')
+        return redirect(url_for('admin_settings'))
+
+    # Find the SQLite file — try common Railway paths
+    sqlite_candidates = [
+        os.path.join(os.path.dirname(__file__), 'instance', 'tracking.db'),
+        '/app/instance/tracking.db',
+        '/data/tracking.db',
+        '/var/data/tracking.db',
+    ]
+    sqlite_path = next((p for p in sqlite_candidates if os.path.exists(p)), None)
+    if not sqlite_path:
+        flash('SQLite file not found. It may have already been cleaned up, or was never on this volume.', 'danger')
+        return redirect(url_for('admin_settings'))
+
+    import sqlite3 as _sqlite3
+    conn = _sqlite3.connect(sqlite_path)
+    conn.row_factory = _sqlite3.Row
+
+    def tbl(name):
+        try:
+            cur = conn.execute(f"SELECT * FROM {name}")
+            return [dict(r) for r in cur.fetchall()]
+        except Exception:
+            return []
+
+    def assoc(name):
+        try:
+            cur = conn.execute(f"SELECT * FROM {name}")
+            return [list(r) for r in cur.fetchall()]
+        except Exception:
+            return []
+
+    data = {
+        'role':                  tbl('role'),
+        'project':               tbl('project'),
+        'employee':              tbl('employee'),
+        'machine':               tbl('machine'),
+        'daily_entry':           tbl('daily_entry'),
+        'entry_employees':       assoc('entry_employees'),
+        'entry_machines':        assoc('entry_machines'),
+        'hired_machine':         tbl('hired_machine'),
+        'stand_down':            tbl('stand_down'),
+        'planned_data':          tbl('planned_data'),
+        'project_non_work_date': tbl('project_non_work_date'),
+        'project_budgeted_role': tbl('project_budgeted_role'),
+        'project_machine':       tbl('project_machine'),
+        'project_worked_sunday': tbl('project_worked_sunday'),
+        'public_holiday':        tbl('public_holiday'),
+        'cfmeu_date':            tbl('cfmeu_date'),
+        'swing_pattern':         tbl('swing_pattern'),
+        'employee_swing':        tbl('employee_swing'),
+        'user':                  tbl('user'),
+    }
+    conn.close()
+
+    total = sum(len(v) for v in data.values())
+    if total == 0:
+        flash('SQLite file exists but appears to be empty — nothing to migrate.', 'warning')
+        return redirect(url_for('admin_settings'))
+
+    # Save as JSON and feed through the existing import route logic
+    import io
+    json_bytes = json.dumps(data, default=str).encode('utf-8')
+    json_file = io.BytesIO(json_bytes)
+    json_file.filename = 'export.json'
+
+    # Store in session and redirect to import page with auto-trigger
+    # Instead, redirect with the data available via a temp file
+    tmp_path = os.path.join(os.path.dirname(__file__), 'instance', '_sqlite_migration.json')
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, default=str)
+
+    flash(f'SQLite file found with {total} rows. Use the Import Data page to upload the migration file, '
+          f'or visit /admin/migrate-from-sqlite/run to run it automatically.', 'info')
+    return redirect(url_for('admin_migrate_sqlite_run'))
+
+
+@app.route('/admin/migrate-from-sqlite/run')
+@login_required
+def admin_migrate_sqlite_run():
+    """Actually perform the SQLite → Postgres migration using the temp JSON file."""
+    if not current_user.is_admin:
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('index'))
+
+    tmp_path = os.path.join(os.path.dirname(__file__), 'instance', '_sqlite_migration.json')
+    if not os.path.exists(tmp_path):
+        flash('No migration file found. Visit /admin/migrate-from-sqlite first.', 'danger')
+        return redirect(url_for('admin_settings'))
+
+    with open(tmp_path, encoding='utf-8') as f:
+        data = json.load(f)
+
+    from sqlalchemy import text as _text
+
+    def _d(val):
+        if not val:
+            return None
+        try:
+            return datetime.strptime(str(val)[:10], '%Y-%m-%d').date()
+        except Exception:
+            return None
+
+    counts = {}
+    try:
+        # Roles
+        role_id_map = {}
+        for r in data.get('role', []):
+            existing = Role.query.filter_by(name=r['name']).first()
+            if not existing:
+                obj = Role(name=r['name'], delay_rate=r.get('delay_rate'), group_name=r.get('group_name'))
+                db.session.add(obj)
+                db.session.flush()
+                role_id_map[r['id']] = obj.id
+            else:
+                role_id_map[r['id']] = existing.id
+        counts['roles'] = len(role_id_map)
+
+        # Projects
+        proj_id_map = {}
+        for p in data.get('project', []):
+            existing = Project.query.filter_by(name=p['name']).first()
+            if existing:
+                proj_id_map[p['id']] = existing.id
+                continue
+            obj = Project(
+                name=p['name'], description=p.get('description'),
+                active=bool(p.get('active', True)),
+                start_date=_d(p.get('start_date')),
+                planned_crew=p.get('planned_crew'),
+                hours_per_day=p.get('hours_per_day'),
+                quoted_days=p.get('quoted_days'),
+                state=p.get('state'), is_cfmeu=bool(p.get('is_cfmeu', False)),
+            )
+            db.session.add(obj)
+            db.session.flush()
+            proj_id_map[p['id']] = obj.id
+        counts['projects'] = len(proj_id_map)
+
+        # Employees
+        emp_id_map = {}
+        for e in data.get('employee', []):
+            existing = Employee.query.filter_by(name=e['name']).first()
+            if existing:
+                emp_id_map[e['id']] = existing.id
+                continue
+            obj = Employee(
+                name=e['name'], role=e.get('role'),
+                role_id=role_id_map.get(e['role_id']) if e.get('role_id') else None,
+                delay_rate=e.get('delay_rate'), active=bool(e.get('active', True)),
+            )
+            db.session.add(obj)
+            db.session.flush()
+            emp_id_map[e['id']] = obj.id
+        counts['employees'] = len(emp_id_map)
+
+        # Machines
+        mach_id_map = {}
+        for m in data.get('machine', []):
+            existing = Machine.query.filter_by(name=m['name']).first()
+            if existing:
+                mach_id_map[m['id']] = existing.id
+                continue
+            obj = Machine(
+                name=m['name'], machine_type=m.get('machine_type'),
+                delay_rate=m.get('delay_rate'), active=bool(m.get('active', True)),
+            )
+            db.session.add(obj)
+            db.session.flush()
+            mach_id_map[m['id']] = obj.id
+        counts['machines'] = len(mach_id_map)
+
+        # Daily Entries
+        entry_id_map = {}
+        for e in data.get('daily_entry', []):
+            new_proj_id = proj_id_map.get(e['project_id'])
+            if not new_proj_id:
+                continue
+            obj = DailyEntry(
+                project_id=new_proj_id, entry_date=_d(e['entry_date']),
+                lot_number=e.get('lot_number'), location=e.get('location'),
+                material=e.get('material'), num_people=e.get('num_people'),
+                install_hours=e.get('install_hours') or 0,
+                install_sqm=e.get('install_sqm') or 0,
+                delay_hours=e.get('delay_hours') or 0,
+                delay_billable=bool(e.get('delay_billable', True)),
+                delay_reason=e.get('delay_reason'),
+                delay_description=e.get('delay_description'),
+                machines_stood_down=bool(e.get('machines_stood_down', False)),
+                notes=e.get('notes'),
+                other_work_description=e.get('other_work_description'),
+                weather=e.get('weather'),
+            )
+            db.session.add(obj)
+            db.session.flush()
+            entry_id_map[e['id']] = obj.id
+        counts['entries'] = len(entry_id_map)
+
+        # Entry ↔ Employee
+        assoc_e = 0
+        for row in data.get('entry_employees', []):
+            new_entry_id = entry_id_map.get(row[0])
+            new_emp_id = emp_id_map.get(row[1])
+            if new_entry_id and new_emp_id:
+                db.session.execute(_text(
+                    'INSERT INTO entry_employees (entry_id, employee_id) VALUES (:e, :m)'
+                ), {'e': new_entry_id, 'm': new_emp_id})
+                assoc_e += 1
+        counts['entry_employees'] = assoc_e
+
+        # Entry ↔ Machine
+        assoc_m = 0
+        for row in data.get('entry_machines', []):
+            new_entry_id = entry_id_map.get(row[0])
+            new_mach_id = mach_id_map.get(row[1])
+            if new_entry_id and new_mach_id:
+                db.session.execute(_text(
+                    'INSERT INTO entry_machines (entry_id, machine_id) VALUES (:e, :m)'
+                ), {'e': new_entry_id, 'm': new_mach_id})
+                assoc_m += 1
+        counts['entry_machines'] = assoc_m
+
+        # Hired Machines
+        hm_id_map = {}
+        for h in data.get('hired_machine', []):
+            new_proj_id = proj_id_map.get(h['project_id'])
+            if not new_proj_id:
+                continue
+            obj = HiredMachine(
+                project_id=new_proj_id, machine_name=h['machine_name'],
+                machine_type=h.get('machine_type'), hire_company=h.get('hire_company'),
+                delivery_date=_d(h.get('delivery_date')), return_date=_d(h.get('return_date')),
+                cost_per_day=h.get('cost_per_day'), cost_per_week=h.get('cost_per_week'),
+                active=bool(h.get('active', True)), notes=h.get('notes'),
+            )
+            db.session.add(obj)
+            db.session.flush()
+            hm_id_map[h['id']] = obj.id
+        counts['hired_machines'] = len(hm_id_map)
+
+        # Public Holidays
+        ph_count = 0
+        for h in data.get('public_holiday', []):
+            existing = PublicHoliday.query.filter_by(date=_d(h['date']), name=h['name']).first()
+            if not existing:
+                db.session.add(PublicHoliday(
+                    date=_d(h['date']), name=h['name'],
+                    state=h.get('state', 'ALL'), recurring=bool(h.get('recurring', True)),
+                ))
+                ph_count += 1
+        counts['public_holidays'] = ph_count
+
+        # CFMEU Dates
+        cfmeu_count = 0
+        for c in data.get('cfmeu_date', []):
+            existing = CFMEUDate.query.filter_by(date=_d(c['date'])).first()
+            if not existing:
+                db.session.add(CFMEUDate(
+                    date=_d(c['date']), name=c.get('name', ''),
+                    state=c.get('state', 'ALL'),
+                ))
+                cfmeu_count += 1
+        counts['cfmeu_dates'] = cfmeu_count
+
+        # Non-work dates, budgeted roles, worked sundays
+        for n in data.get('project_non_work_date', []):
+            new_proj_id = proj_id_map.get(n['project_id'])
+            if new_proj_id:
+                db.session.add(ProjectNonWorkDate(project_id=new_proj_id, date=_d(n['date']), reason=n.get('reason')))
+        for b in data.get('project_budgeted_role', []):
+            new_proj_id = proj_id_map.get(b['project_id'])
+            if new_proj_id:
+                db.session.add(ProjectBudgetedRole(project_id=new_proj_id, role_name=b['role_name'], budgeted_count=b.get('budgeted_count', 1)))
+        for w in data.get('project_worked_sunday', []):
+            new_proj_id = proj_id_map.get(w['project_id'])
+            if new_proj_id:
+                db.session.add(ProjectWorkedSunday(project_id=new_proj_id, date=_d(w['date']), reason=w.get('reason')))
+
+        db.session.commit()
+        os.remove(tmp_path)  # Clean up temp file
+
+        summary = ', '.join(f'{v} {k}' for k, v in counts.items() if v)
+        flash(f'Migration successful! {summary}', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Migration failed: {e}', 'danger')
+
+    return redirect(url_for('admin_settings'))
+
+
+# ---------------------------------------------------------------------------
 # Admin — Data Import (migrate local data to production)
 # ---------------------------------------------------------------------------
 
