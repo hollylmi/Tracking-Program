@@ -112,25 +112,31 @@ with app.app_context():
         "ALTER TABLE hired_machine ADD COLUMN description TEXT",
         "ALTER TABLE user ADD COLUMN email VARCHAR(200)",
         "ALTER TABLE daily_entry ADD COLUMN weather VARCHAR(200)",
+        "ALTER TABLE diagram_layer ADD COLUMN canvas_bg_filename VARCHAR(500)",
+        "ALTER TABLE diagram_layer ADD COLUMN canvas_bg_original_name VARCHAR(500)",
+        "ALTER TABLE panel_install_record ADD COLUMN source VARCHAR(20)",
     ]:
         try:
             db.session.execute(db.text(stmt))
             db.session.commit()
         except Exception:
             db.session.rollback()
-    # Seed default admin user if none exist
-    if User.query.count() == 0:
-        from werkzeug.security import generate_password_hash
-        admin = User(
-            username='admin',
-            display_name='Administrator',
-            password_hash=generate_password_hash('admin123'),
-            is_admin=True,
-            active=True,
-        )
-        db.session.add(admin)
-        db.session.commit()
-        print("Created default admin user: admin / admin123 — please change the password!")
+    # Seed default admin user if none exist (guard against race condition with multiple workers)
+    try:
+        if User.query.count() == 0:
+            from werkzeug.security import generate_password_hash
+            admin = User(
+                username='admin',
+                display_name='Administrator',
+                password_hash=generate_password_hash('admin123'),
+                is_admin=True,
+                active=True,
+            )
+            db.session.add(admin)
+            db.session.commit()
+            print("Created default admin user: admin / admin123 — please change the password!")
+    except Exception:
+        db.session.rollback()
 
 
 @app.context_processor
@@ -3922,6 +3928,60 @@ def admin_cfmeu():
         return redirect(url_for('admin_cfmeu'))
     cfmeu_dates = CFMEUDate.query.order_by(CFMEUDate.date).all()
     return render_template('admin/cfmeu.html', cfmeu_dates=cfmeu_dates, states=AUSTRALIAN_STATES)
+
+
+@app.route('/admin/backup/download')
+@login_required
+def admin_backup_download():
+    """Download a database backup. Admin only."""
+    if not current_user.is_admin:
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('index'))
+
+    db_url = app.config['SQLALCHEMY_DATABASE_URI']
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    if db_url.startswith('postgresql'):
+        # Postgres — use pg_dump
+        import subprocess, tempfile
+        from urllib.parse import urlparse
+        parsed = urlparse(db_url)
+        env = os.environ.copy()
+        env['PGPASSWORD'] = parsed.password or ''
+        dump_file = os.path.join(tempfile.gettempdir(), f'plytrack_backup_{timestamp}.sql')
+        cmd = [
+            'pg_dump',
+            '-h', parsed.hostname,
+            '-p', str(parsed.port or 5432),
+            '-U', parsed.username,
+            '-d', parsed.path.lstrip('/'),
+            '-f', dump_file,
+            '--no-password',
+        ]
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        if result.returncode != 0:
+            flash(f'pg_dump failed: {result.stderr[:200]}', 'danger')
+            return redirect(url_for('admin_settings'))
+        return send_file(
+            dump_file,
+            as_attachment=True,
+            download_name=f'plytrack_backup_{timestamp}.sql',
+            mimetype='application/sql',
+        )
+    else:
+        # SQLite — send the .db file directly
+        db_path = db_url.replace('sqlite:///', '')
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(os.path.dirname(__file__), 'instance', 'tracking.db')
+        if not os.path.exists(db_path):
+            flash('Database file not found.', 'danger')
+            return redirect(url_for('admin_settings'))
+        return send_file(
+            db_path,
+            as_attachment=True,
+            download_name=f'plytrack_backup_{timestamp}.db',
+            mimetype='application/octet-stream',
+        )
 
 
 @app.route('/admin/settings', methods=['GET', 'POST'])

@@ -90,9 +90,68 @@
   </div>
 
   <div class="col-lg-5">
+
+    <!-- Backup -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-download me-2 text-success"></i>Database Backup</h5>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Download a full backup of your database. Store it somewhere safe (cloud drive, email to yourself, etc.).
+          Do this regularly — especially before updates.
+        </p>
+        <a href="{{ url_for('admin_backup_download') }}" class="btn btn-success w-100">
+          <i class="bi bi-cloud-download me-2"></i>Download Backup Now
+        </a>
+        <hr class="my-3">
+        <p class="small text-muted mb-1"><strong>What's backed up:</strong></p>
+        <ul class="small text-muted ps-3 mb-2">
+          <li>All database records (projects, entries, employees, schedules, etc.)</li>
+          <li>SQLite: downloads the <code>.db</code> file</li>
+          <li>Railway/Postgres: runs <code>pg_dump</code> and downloads a <code>.sql</code> file</li>
+        </ul>
+        <div class="alert alert-warning small py-2 mb-0">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          <strong>Uploaded files</strong> (photos, DXF files, documents) are <em>not</em> included in this download.
+          On Railway, these are stored in ephemeral storage — see the Railway setup guide below for how to handle this.
+        </div>
+      </div>
+    </div>
+
+    <!-- Railway Setup Guide -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-train-front me-2 text-primary"></i>Railway Setup Guide</h5>
+      </div>
+      <div class="card-body small text-muted">
+        <p><strong>Required environment variables on Railway:</strong></p>
+        <ul class="ps-3 mb-3">
+          <li><code>SECRET_KEY</code> — any long random string (e.g. 32+ random chars). Never share this.</li>
+          <li><code>DATABASE_URL</code> — auto-set by Railway when you add a Postgres plugin. Don't change it.</li>
+          <li><code>PORT</code> — auto-set by Railway. Don't change it.</li>
+        </ul>
+        <p><strong>Enable automatic Postgres backups:</strong></p>
+        <ol class="ps-3 mb-3">
+          <li>In your Railway project, click the <strong>Postgres plugin</strong></li>
+          <li>Go to <strong>Backups</strong> tab</li>
+          <li>Enable <strong>Scheduled Backups</strong> (daily recommended)</li>
+          <li>Railway keeps 7 days of history on the Hobby plan</li>
+        </ol>
+        <p><strong>Uploaded files on Railway:</strong></p>
+        <p>Railway's filesystem resets on every deploy. To keep uploaded files permanently, you need an object storage bucket:</p>
+        <ul class="ps-3 mb-0">
+          <li><strong>Cloudflare R2</strong> — free for up to 10 GB, no egress fees (recommended)</li>
+          <li><strong>AWS S3</strong> — very cheap, industry standard</li>
+          <li><strong>Backblaze B2</strong> — cheap, S3-compatible</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Email Help -->
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-white py-3">
-        <h5 class="mb-0 fw-semibold"><i class="bi bi-question-circle me-2 text-primary"></i>Help</h5>
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-question-circle me-2 text-primary"></i>Email Help</h5>
       </div>
       <div class="card-body small text-muted">
         <p><strong>Getting email working:</strong></p>
