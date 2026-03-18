@@ -199,7 +199,9 @@ def build_schedule_grid(employees, date_list):
             if active_assign:
                 proj = project_info.get(active_assign.project_id)
                 if proj:
-                    is_pub_holiday = bool(proj.state and d in holidays_by_state.get(proj.state, set()))
+                    is_pub_holiday = bool(
+                        d in holidays_by_state.get('ALL', set()) or
+                        (proj.state and d in holidays_by_state.get(proj.state, set())))
                     is_cfmeu_day = bool(proj.is_cfmeu and (
                         d in cfmeu_by_state.get('ALL', set()) or
                         (proj.state and d in cfmeu_by_state.get(proj.state, set()))))
