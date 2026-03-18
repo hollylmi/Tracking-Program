@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
 from werkzeug.utils import secure_filename
+import storage
 try:
     from dxf_to_svg import dxf_to_svg as _dxf_to_svg
     _DXF_AVAILABLE = True
@@ -1033,7 +1034,7 @@ def new_entry():
             if photo and photo.filename and allowed_photo(photo.filename):
                 ext = photo.filename.rsplit('.', 1)[1].lower()
                 stored_name = f"photo_{uuid.uuid4().hex}.{ext}"
-                photo.save(os.path.join(UPLOAD_FOLDER, stored_name))
+                storage.upload_file(photo, f'photos/{stored_name}', os.path.join(UPLOAD_FOLDER, stored_name))
                 caption = request.form.get(f'caption_{photo.filename}', '').strip() or None
                 db.session.add(EntryPhoto(entry_id=entry.id, filename=stored_name,
                                           original_name=secure_filename(photo.filename),
@@ -1118,7 +1119,7 @@ def edit_entry(entry_id):
             if photo and photo.filename and allowed_photo(photo.filename):
                 ext = photo.filename.rsplit('.', 1)[1].lower()
                 stored_name = f"photo_{uuid.uuid4().hex}.{ext}"
-                photo.save(os.path.join(UPLOAD_FOLDER, stored_name))
+                storage.upload_file(photo, f'photos/{stored_name}', os.path.join(UPLOAD_FOLDER, stored_name))
                 db.session.add(EntryPhoto(entry_id=entry.id, filename=stored_name,
                                           original_name=secure_filename(photo.filename)))
 
@@ -1176,9 +1177,7 @@ def delete_entry(entry_id):
     entry = DailyEntry.query.get_or_404(entry_id)
     # Remove photo files
     for photo in entry.photos:
-        path = os.path.join(UPLOAD_FOLDER, photo.filename)
-        if os.path.exists(path):
-            os.remove(path)
+        storage.delete_file(f'photos/{photo.filename}', os.path.join(UPLOAD_FOLDER, photo.filename))
     db.session.delete(entry)
     db.session.commit()
     flash('Entry deleted.', 'info')
@@ -1191,9 +1190,7 @@ def delete_photo(entry_id, photo_id):
     if photo.entry_id != entry_id:
         flash('Invalid request.', 'danger')
         return redirect(url_for('edit_entry', entry_id=entry_id))
-    path = os.path.join(UPLOAD_FOLDER, photo.filename)
-    if os.path.exists(path):
-        os.remove(path)
+    storage.delete_file(f'photos/{photo.filename}', os.path.join(UPLOAD_FOLDER, photo.filename))
     db.session.delete(photo)
     db.session.commit()
     flash('Photo deleted.', 'info')
@@ -1202,7 +1199,7 @@ def delete_photo(entry_id, photo_id):
 
 @app.route('/entry-photo/<filename>')
 def serve_entry_photo(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    return storage.serve_file(f'photos/{filename}', os.path.join(UPLOAD_FOLDER, filename))
 
 
 @app.route('/entries')
@@ -1562,13 +1559,12 @@ def panel_layer_add(project_id):
                 except OSError:
                     pass
             stored_name = f'{uuid.uuid4().hex}.svg'
-            with open(os.path.join(SVG_FOLDER, stored_name), 'w', encoding='utf-8') as f:
-                f.write(svg_content)
+            storage.upload_text(svg_content, f'panels/{stored_name}', os.path.join(SVG_FOLDER, stored_name))
             layer.svg_filename = stored_name
             layer.svg_original_name = secure_filename(svg_file.filename).replace('.dxf', '.svg')
         elif ext == 'svg':
             stored_name = f'{uuid.uuid4().hex}.svg'
-            svg_file.save(os.path.join(SVG_FOLDER, stored_name))
+            storage.upload_file(svg_file, f'panels/{stored_name}', os.path.join(SVG_FOLDER, stored_name))
             layer.svg_filename = stored_name
             layer.svg_original_name = secure_filename(svg_file.filename)
         else:
@@ -1596,11 +1592,9 @@ def panel_layer_upload_svg(project_id, layer_id):
         return redirect(url_for('panel_overview', project_id=project_id))
     os.makedirs(SVG_FOLDER, exist_ok=True)
     if layer.svg_filename:
-        old_path = os.path.join(SVG_FOLDER, layer.svg_filename)
-        if os.path.exists(old_path):
-            os.remove(old_path)
+        storage.delete_file(f'panels/{layer.svg_filename}', os.path.join(SVG_FOLDER, layer.svg_filename))
     stored_name = f'{uuid.uuid4().hex}.svg'
-    svg_file.save(os.path.join(SVG_FOLDER, stored_name))
+    storage.upload_file(svg_file, f'panels/{stored_name}', os.path.join(SVG_FOLDER, stored_name))
     layer.svg_filename = stored_name
     layer.svg_original_name = secure_filename(svg_file.filename)
     db.session.commit()
@@ -1645,13 +1639,9 @@ def panel_layer_upload_dxf(project_id, layer_id):
             pass
     # Remove old SVG if present
     if layer.svg_filename:
-        old_path = os.path.join(SVG_FOLDER, layer.svg_filename)
-        if os.path.exists(old_path):
-            os.remove(old_path)
+        storage.delete_file(f'panels/{layer.svg_filename}', os.path.join(SVG_FOLDER, layer.svg_filename))
     stored_name = f'{uuid.uuid4().hex}.svg'
-    svg_path = os.path.join(SVG_FOLDER, stored_name)
-    with open(svg_path, 'w', encoding='utf-8') as f:
-        f.write(svg_content)
+    storage.upload_text(svg_content, f'panels/{stored_name}', os.path.join(SVG_FOLDER, stored_name))
     layer.svg_filename = stored_name
     layer.svg_original_name = secure_filename(dxf_file.filename).replace('.dxf', '.svg')
     db.session.commit()
@@ -1677,11 +1667,10 @@ def panel_layer_upload_bg(project_id, layer_id):
     os.makedirs(SVG_FOLDER, exist_ok=True)
     # Remove old background
     if layer.bg_filename:
-        old = os.path.join(SVG_FOLDER, layer.bg_filename)
-        if os.path.exists(old):
-            os.remove(old)
+        storage.delete_file(f'panels/{layer.bg_filename}', os.path.join(SVG_FOLDER, layer.bg_filename))
     stored_name = f'{uuid.uuid4().hex}_bg.png'
     dest = os.path.join(SVG_FOLDER, stored_name)
+    os.makedirs(SVG_FOLDER, exist_ok=True)
     if ext == 'pdf':
         if not _PYMUPDF_AVAILABLE:
             flash('PDF conversion requires PyMuPDF. Run: pip install PyMuPDF', 'danger')
@@ -1693,7 +1682,7 @@ def panel_layer_upload_bg(project_id, layer_id):
         try:
             doc = _fitz.open(tmp_path)
             page = doc[0]
-            mat = _fitz.Matrix(2.0, 2.0)   # 2× scale for crisp rendering
+            mat = _fitz.Matrix(2.0, 2.0)
             pix = page.get_pixmap(matrix=mat)
             pix.save(dest)
         finally:
@@ -1701,8 +1690,9 @@ def panel_layer_upload_bg(project_id, layer_id):
                 os.unlink(tmp_path)
             except OSError:
                 pass
+        storage.upload_local_file(dest, f'panels/{stored_name}')
     else:
-        bg_file.save(dest)
+        storage.upload_file(bg_file, f'panels/{stored_name}', dest)
     layer.bg_filename = stored_name
     layer.bg_original_name = secure_filename(bg_file.filename)
     db.session.commit()
@@ -1717,8 +1707,7 @@ def panel_layer_bg_image(project_id, layer_id):
     layer = DiagramLayer.query.get_or_404(layer_id)
     if layer.project_id != project_id or not layer.bg_filename:
         return '', 404
-    from flask import send_from_directory
-    return send_from_directory(SVG_FOLDER, layer.bg_filename)
+    return storage.serve_file(f'panels/{layer.bg_filename}', os.path.join(SVG_FOLDER, layer.bg_filename))
 
 
 
@@ -1866,10 +1855,7 @@ def panel_layer_delete(project_id, layer_id):
         return 'Not found', 404
     for fname in (layer.svg_filename, layer.bg_filename):
         if fname:
-            try:
-                os.remove(os.path.join(SVG_FOLDER, fname))
-            except OSError:
-                pass
+            storage.delete_file(f'panels/{fname}', os.path.join(SVG_FOLDER, fname))
     db.session.delete(layer)
     db.session.commit()
     flash(f'Layer "{layer.layer_name}" deleted.', 'success')
@@ -1889,10 +1875,7 @@ def panel_layer_view(project_id, layer_id):
                   .all())
     svg_content = None
     if layer.svg_filename:
-        svg_path = os.path.join(SVG_FOLDER, layer.svg_filename)
-        if os.path.exists(svg_path):
-            with open(svg_path, 'r', encoding='utf-8', errors='replace') as f:
-                svg_content = f.read()
+        svg_content = storage.read_text(f'panels/{layer.svg_filename}', os.path.join(SVG_FOLDER, layer.svg_filename))
     panel_data = {}
     for rec in layer.panels:
         panel_data[rec.panel_id] = {
@@ -2285,8 +2268,7 @@ def project_document_upload(project_id):
     ext = f.filename.rsplit('.', 1)[1].lower()
     stored_name = f"doc_{uuid.uuid4().hex}.{ext}"
     proj_upload_dir = os.path.join(UPLOAD_FOLDER, 'projects', str(project_id))
-    os.makedirs(proj_upload_dir, exist_ok=True)
-    f.save(os.path.join(proj_upload_dir, stored_name))
+    storage.upload_file(f, f'docs/{stored_name}', os.path.join(proj_upload_dir, stored_name))
     db.session.add(ProjectDocument(
         project_id=project_id,
         filename=stored_name,
@@ -2305,9 +2287,8 @@ def project_document_download(project_id, doc_id):
         flash('Document not found.', 'danger')
         return redirect(url_for('project_dashboard', project_id=project_id))
     proj_upload_dir = os.path.join(UPLOAD_FOLDER, 'projects', str(project_id))
-    return send_from_directory(proj_upload_dir, doc.filename,
-                               as_attachment=True,
-                               download_name=doc.original_name or doc.filename)
+    return storage.serve_file(f'docs/{doc.filename}', os.path.join(proj_upload_dir, doc.filename),
+                              as_attachment=True, download_name=doc.original_name or doc.filename)
 
 
 @app.route('/project/<int:project_id>/documents/<int:doc_id>/delete', methods=['POST'])
@@ -2317,9 +2298,7 @@ def project_document_delete(project_id, doc_id):
         flash('Document not found.', 'danger')
         return redirect(url_for('project_dashboard', project_id=project_id))
     proj_upload_dir = os.path.join(UPLOAD_FOLDER, 'projects', str(project_id))
-    path = os.path.join(proj_upload_dir, doc.filename)
-    if os.path.exists(path):
-        os.remove(path)
+    storage.delete_file(f'docs/{doc.filename}', os.path.join(proj_upload_dir, doc.filename))
     db.session.delete(doc)
     db.session.commit()
     flash('Document deleted.', 'info')
@@ -3061,7 +3040,8 @@ def hire_new():
         if file and file.filename and allowed_file(file.filename):
             ext = file.filename.rsplit('.', 1)[1].lower()
             stored_name = f"{uuid.uuid4().hex}.{ext}"
-            file.save(os.path.join(UPLOAD_FOLDER, stored_name))
+            local_path = os.path.join(UPLOAD_FOLDER, stored_name)
+            storage.upload_file(file, f'invoices/{stored_name}', local_path)
             hm.invoice_filename = stored_name
             hm.invoice_original_name = secure_filename(file.filename)
         db.session.add(hm)
@@ -3104,12 +3084,12 @@ def hire_edit(hm_id):
         file = request.files.get('invoice_file')
         if file and file.filename and allowed_file(file.filename):
             if hm.invoice_filename:
-                old_path = os.path.join(UPLOAD_FOLDER, hm.invoice_filename)
-                if os.path.exists(old_path):
-                    os.remove(old_path)
+                storage.delete_file(f'invoices/{hm.invoice_filename}',
+                                    os.path.join(UPLOAD_FOLDER, hm.invoice_filename))
             ext = file.filename.rsplit('.', 1)[1].lower()
             stored_name = f"{uuid.uuid4().hex}.{ext}"
-            file.save(os.path.join(UPLOAD_FOLDER, stored_name))
+            local_path = os.path.join(UPLOAD_FOLDER, stored_name)
+            storage.upload_file(file, f'invoices/{stored_name}', local_path)
             hm.invoice_filename = stored_name
             hm.invoice_original_name = secure_filename(file.filename)
         db.session.commit()
@@ -3122,9 +3102,8 @@ def hire_edit(hm_id):
 def hire_delete(hm_id):
     hm = HiredMachine.query.get_or_404(hm_id)
     if hm.invoice_filename:
-        path = os.path.join(UPLOAD_FOLDER, hm.invoice_filename)
-        if os.path.exists(path):
-            os.remove(path)
+        storage.delete_file(f'invoices/{hm.invoice_filename}',
+                            os.path.join(UPLOAD_FOLDER, hm.invoice_filename))
     db.session.delete(hm)
     db.session.commit()
     flash('Hire record deleted.', 'info')
@@ -3137,9 +3116,10 @@ def hire_invoice(hm_id):
     if not hm.invoice_filename:
         flash('No file attached.', 'warning')
         return redirect(url_for('hire_detail', hm_id=hm_id))
-    return send_from_directory(UPLOAD_FOLDER, hm.invoice_filename,
-                               as_attachment=False,
-                               download_name=hm.invoice_original_name)
+    return storage.serve_file(f'invoices/{hm.invoice_filename}',
+                              os.path.join(UPLOAD_FOLDER, hm.invoice_filename),
+                              download_name=hm.invoice_original_name,
+                              as_attachment=False)
 
 
 @app.route('/hire/<int:hm_id>/standdown/add', methods=['POST'])
@@ -4709,13 +4689,12 @@ def breakdown_add():
     db.session.flush()
     # Handle photos
     photos = request.files.getlist('photos')
-    upload_folder = os.path.join(app.config.get('UPLOAD_FOLDER', 'static/uploads'), 'breakdowns')
-    os.makedirs(upload_folder, exist_ok=True)
     for photo in photos:
         if photo and photo.filename:
             ext = os.path.splitext(photo.filename)[1].lower()
             stored = f"{uuid.uuid4()}{ext}"
-            photo.save(os.path.join(upload_folder, stored))
+            local_path = os.path.join(UPLOAD_FOLDER, 'breakdowns', stored)
+            storage.upload_file(photo, f'breakdowns/{stored}', local_path)
             db.session.add(BreakdownPhoto(breakdown_id=bd.id, filename=stored, original_name=photo.filename))
     db.session.commit()
     flash('Breakdown recorded.', 'warning')
