@@ -826,7 +826,7 @@ def generate_pdf(hm, date_from, date_to, days, summary, settings):
             pdf.set_font('Helvetica', 'B', 9)
             pdf.cell(35, 6, d['date'].strftime('%d/%m/%Y') + ' ' + d['day_name'][:3] + ':')
             pdf.set_font('Helvetica', '', 9)
-            pdf.multi_cell(0, 6, safe(d['reason']))
+            pdf.cell(0, 6, safe(d['reason']) or '-', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.ln(4)
 
     pdf.ln(6)
@@ -5285,6 +5285,21 @@ def project_settings_save(project_id):
     db.session.commit()
     flash('Project settings saved.', 'success')
     return redirect(url_for('project_dashboard', project_id=project_id) + '#tab-settings')
+
+
+# ---------------------------------------------------------------------------
+# utils/ re-exports — keeps existing routes working during refactor
+# ---------------------------------------------------------------------------
+from utils.files import safe, allowed_file, allowed_photo, allowed_doc
+from utils.settings import load_settings, save_settings
+from utils.helpers import _natural_key
+from utils.reports import (generate_pdf, generate_delay_pdf,
+                            generate_project_report_pdf,
+                            generate_weekly_report_pdf)
+from utils.gantt import compute_gantt_data
+from utils.progress import (compute_project_progress,
+                             compute_delay_summary, build_delay_report)
+from utils.schedule import build_schedule_grid, build_day_summary
 
 
 if __name__ == '__main__':
