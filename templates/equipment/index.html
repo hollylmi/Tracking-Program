@@ -37,7 +37,7 @@
       </div>
       <div class="collapse" id="addMachineForm">
         <div class="card-body bg-light border-bottom">
-          <form method="POST" action="{{ url_for('equipment_machine_save') }}">
+          <form method="POST" action="{{ url_for('equipment.equipment_machine_save') }}">
             <input type="hidden" name="action" value="add">
             <div class="row g-2">
               <div class="col-sm-4">
@@ -79,7 +79,7 @@
       </div>
       <div class="collapse" id="ownBreakdownForm">
         <div class="card-body bg-light border-bottom">
-          <form method="POST" action="{{ url_for('breakdown_add') }}" enctype="multipart/form-data">
+          <form method="POST" action="{{ url_for('equipment.breakdown_add') }}" enctype="multipart/form-data">
             <div class="row g-2">
               <div class="col-sm-4">
                 <label class="form-label small fw-semibold mb-1">Machine <span class="text-danger">*</span></label>
@@ -187,7 +187,7 @@
                   {% if bd.repairing_by %}<br><i class="bi bi-person me-1"></i>{{ bd.repairing_by }}{% endif %}
                   {% if bd.anticipated_return %}<br><i class="bi bi-calendar me-1"></i>Est. return: {{ bd.anticipated_return.strftime('%d/%m/%Y') }}{% endif %}
                   <br>
-                  <form method="POST" action="{{ url_for('breakdown_update', bd_id=bd.id) }}"
+                  <form method="POST" action="{{ url_for('equipment.breakdown_update', bd_id=bd.id) }}"
                         class="d-flex flex-wrap gap-1 mt-1 align-items-center">
                     <select name="repair_status" class="form-select form-select-sm" style="width:150px;">
                       <option value="pending" {{ 'selected' if bd.repair_status == 'pending' }}>Pending</option>
@@ -200,10 +200,21 @@
                            class="form-control form-control-sm" style="width:140px;">
                     <button type="submit" class="btn btn-sm btn-outline-warning">Update</button>
                   </form>
-                  <form method="POST" action="{{ url_for('breakdown_delete', bd_id=bd.id) }}"
+                  <form method="POST" action="{{ url_for('equipment.breakdown_delete', bd_id=bd.id) }}"
                         class="d-inline mt-1" onsubmit="return confirm('Delete this breakdown record?')">
                     <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete record</button>
                   </form>
+                  {% if bd.photos %}
+                  <div class="d-flex flex-wrap gap-1 mt-1">
+                    {% for photo in bd.photos %}
+                    <a href="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}" target="_blank">
+                      <img src="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}"
+                           alt="{{ photo.original_name or 'Photo' }}"
+                           style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
+                    </a>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
                 </div>
                 {% else %}
                 <span class="text-muted small">—</span>
@@ -223,6 +234,17 @@
                     {% if h.description %}<div class="text-muted">{{ h.description }}</div>{% endif %}
                     {% if h.repairing_by %}<div><i class="bi bi-person me-1"></i>{{ h.repairing_by }}</div>{% endif %}
                     {% if h.resolved_date %}<div class="text-success"><i class="bi bi-check-circle me-1"></i>Resolved {{ h.resolved_date.strftime('%d/%m/%Y') }}</div>{% endif %}
+                    {% if h.photos %}
+                    <div class="d-flex flex-wrap gap-1 mt-1">
+                      {% for photo in h.photos %}
+                      <a href="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}" target="_blank">
+                        <img src="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}"
+                             alt="{{ photo.original_name or 'Photo' }}"
+                             style="width:36px;height:36px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
+                      </a>
+                      {% endfor %}
+                    </div>
+                    {% endif %}
                   </div>
                   {% endfor %}
                 </div>
@@ -233,13 +255,13 @@
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
                   <!-- Edit button → triggers modal -->
-                  <button class="btn btn-sm btn-outline-secondary py-0 px-1"
-                          onclick="openMachineEdit({{ m.id }}, {{ m.name|tojson }}, {{ (m.plant_id or '')|tojson }}, {{ (m.machine_type or '')|tojson }}, {{ (m.description or '')|tojson }}, {{ m.delay_rate or '' }})"
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button"
+                          onclick='openMachineEdit({{ m.id }}, {{ m.name|tojson }}, {{ (m.plant_id or "")|tojson }}, {{ (m.machine_type or "")|tojson }}, {{ (m.description or "")|tojson }}, {{ m.delay_rate or "" }})'
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
                   <!-- Toggle active -->
-                  <form method="POST" action="{{ url_for('equipment_machine_save') }}" class="d-inline">
+                  <form method="POST" action="{{ url_for('equipment.equipment_machine_save') }}" class="d-inline">
                     <input type="hidden" name="action" value="toggle">
                     <input type="hidden" name="machine_id" value="{{ m.id }}">
                     <button type="submit" class="btn btn-sm btn-outline-{{ 'warning' if m.active else 'success' }} py-0 px-1"
@@ -249,7 +271,7 @@
                   </form>
                   <!-- Delete (only if no entries) -->
                   {% if not m.entries %}
-                  <form method="POST" action="{{ url_for('equipment_machine_save') }}" class="d-inline"
+                  <form method="POST" action="{{ url_for('equipment.equipment_machine_save') }}" class="d-inline"
                         onsubmit="return confirm('Delete {{ m.name }}?')">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="machine_id" value="{{ m.id }}">
@@ -291,7 +313,7 @@
     <div class="collapse mb-3" id="hiredBreakdownForm">
       <div class="card border-0 shadow-sm">
         <div class="card-body bg-light">
-          <form method="POST" action="{{ url_for('breakdown_add') }}" enctype="multipart/form-data">
+          <form method="POST" action="{{ url_for('equipment.breakdown_add') }}" enctype="multipart/form-data">
             <div class="row g-2">
               <div class="col-sm-4">
                 <label class="form-label small fw-semibold mb-1">Hired Machine <span class="text-danger">*</span></label>
@@ -392,7 +414,7 @@
                   {% if bd.repairing_by %}<br><i class="bi bi-person me-1"></i>{{ bd.repairing_by }}{% endif %}
                   {% if bd.anticipated_return %}<br><i class="bi bi-calendar me-1"></i>Est. return: {{ bd.anticipated_return.strftime('%d/%m/%Y') }}{% endif %}
                   <br>
-                  <form method="POST" action="{{ url_for('breakdown_update', bd_id=bd.id) }}"
+                  <form method="POST" action="{{ url_for('equipment.breakdown_update', bd_id=bd.id) }}"
                         class="d-flex flex-wrap gap-1 mt-1 align-items-center">
                     <select name="repair_status" class="form-select form-select-sm" style="width:150px;">
                       <option value="pending" {{ 'selected' if bd.repair_status == 'pending' }}>Pending</option>
@@ -405,10 +427,21 @@
                            class="form-control form-control-sm" style="width:140px;">
                     <button type="submit" class="btn btn-sm btn-outline-warning">Update</button>
                   </form>
-                  <form method="POST" action="{{ url_for('breakdown_delete', bd_id=bd.id) }}"
+                  <form method="POST" action="{{ url_for('equipment.breakdown_delete', bd_id=bd.id) }}"
                         class="d-inline mt-1" onsubmit="return confirm('Delete this breakdown record?')">
                     <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete record</button>
                   </form>
+                  {% if bd.photos %}
+                  <div class="d-flex flex-wrap gap-1 mt-1">
+                    {% for photo in bd.photos %}
+                    <a href="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}" target="_blank">
+                      <img src="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}"
+                           alt="{{ photo.original_name or 'Photo' }}"
+                           style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
+                    </a>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
                 </div>
                 {% else %}
                 <span class="text-muted">—</span>
@@ -428,6 +461,17 @@
                     {% if h.description %}<div class="text-muted">{{ h.description }}</div>{% endif %}
                     {% if h.repairing_by %}<div><i class="bi bi-person me-1"></i>{{ h.repairing_by }}</div>{% endif %}
                     {% if h.resolved_date %}<div class="text-success"><i class="bi bi-check-circle me-1"></i>Resolved {{ h.resolved_date.strftime('%d/%m/%Y') }}</div>{% endif %}
+                    {% if h.photos %}
+                    <div class="d-flex flex-wrap gap-1 mt-1">
+                      {% for photo in h.photos %}
+                      <a href="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}" target="_blank">
+                        <img src="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}"
+                             alt="{{ photo.original_name or 'Photo' }}"
+                             style="width:36px;height:36px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
+                      </a>
+                      {% endfor %}
+                    </div>
+                    {% endif %}
                   </div>
                   {% endfor %}
                 </div>
@@ -464,7 +508,7 @@
         <h6 class="modal-title fw-bold">Edit Machine</h6>
         <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST" action="{{ url_for('equipment_machine_save') }}">
+      <form method="POST" action="{{ url_for('equipment.equipment_machine_save') }}">
         <input type="hidden" name="action" value="edit">
         <input type="hidden" name="machine_id" id="editMachineId">
         <div class="modal-body">
