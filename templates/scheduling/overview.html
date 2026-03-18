@@ -147,7 +147,7 @@
       {% if not employees %}
       <tr>
         <td colspan="{{ date_list|length + 1 }}" class="text-center text-muted py-4">
-          No active employees. <a href="{{ url_for('admin_employees') }}">Add employees</a> first.
+          No active employees. <a href="{{ url_for('admin.admin_employees') }}">Add employees</a> first.
         </td>
       </tr>
       {% endif %}

@@ -422,6 +422,7 @@ def admin_swings():
             pattern_id = request.form.get('pattern_id', type=int)
             sp = SwingPattern.query.get(pattern_id)
             if sp:
+                EmployeeSwing.query.filter_by(pattern_id=sp.id).delete()
                 db.session.delete(sp)
                 db.session.commit()
                 flash('Pattern deleted.', 'success')

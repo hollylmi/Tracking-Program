@@ -93,7 +93,7 @@
             {% endif %}
             <li><hr class="dropdown-divider"></li>
             <li>
-              <a class="dropdown-item" href="{{ url_for('admin_projects') }}">
+              <a class="dropdown-item" href="{{ url_for('admin.admin_projects') }}">
                 <i class="bi bi-plus-circle me-2"></i>Manage Projects
               </a>
             </li>
@@ -111,37 +111,37 @@
             <i class="bi bi-gear me-1"></i>Admin
           </a>
           <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{{ url_for('admin_projects') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_projects') }}">
               <i class="bi bi-folder me-2"></i>Projects
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_employees') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_employees') }}">
               <i class="bi bi-people me-2"></i>Employees
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_machines') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_machines') }}">
               <i class="bi bi-tools me-2"></i>Equipment List
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_roles') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_roles') }}">
               <i class="bi bi-person-badge me-2"></i>Roles &amp; Rates
             </a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('scheduling.admin_swings') }}">
               <i class="bi bi-arrow-repeat me-2"></i>Swing Patterns
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_holidays') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_holidays') }}">
               <i class="bi bi-calendar-event me-2"></i>Public Holidays
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_cfmeu') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_cfmeu') }}">
               <i class="bi bi-hammer me-2"></i>CFMEU Dates
             </a></li>
             {% if current_user.is_admin %}
             <li><a class="dropdown-item" href="{{ url_for('auth.admin_users') }}">
               <i class="bi bi-person-gear me-2"></i>Users
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_import_data') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_import_data') }}">
               <i class="bi bi-cloud-upload me-2"></i>Import Data
             </a></li>
             {% endif %}
-            <li><a class="dropdown-item" href="{{ url_for('admin_settings') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_settings') }}">
               <i class="bi bi-sliders me-2"></i>Settings
             </a></li>
           </ul>
