@@ -888,7 +888,7 @@
           <span class="fw-semibold small text-secondary">
             <i class="bi bi-building me-1"></i>Hired Machines
           </span>
-          <a href="{{ url_for('hire_list') }}?project_id={{ project.id }}" class="small text-primary">Manage</a>
+          <a href="{{ url_for('hire.hire_list') }}?project_id={{ project.id }}" class="small text-primary">Manage</a>
         </div>
         {% if hired_machines_list %}
         <table class="table table-sm table-hover mb-0">
@@ -923,7 +923,7 @@
         {% else %}
         <div class="text-center py-3 text-muted small">
           No hired machines active on this project.
-          <a href="{{ url_for('hire_new') }}" class="d-block mt-1">Add a hired machine</a>
+          <a href="{{ url_for('hire.hire_new') }}" class="d-block mt-1">Add a hired machine</a>
         </div>
         {% endif %}
 

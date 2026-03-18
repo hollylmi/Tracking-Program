@@ -30,7 +30,7 @@
     <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
     <h5>No standdowns on {{ selected_date.strftime('%A %d %B %Y') }}</h5>
     <p>No hired machines have a stand-down recorded for this date.</p>
-    <a href="{{ url_for('hire_list') }}" class="btn btn-outline-primary btn-sm">
+    <a href="{{ url_for('hire.hire_list') }}" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-truck me-1"></i>View Hire Tracker
     </a>
   </div>

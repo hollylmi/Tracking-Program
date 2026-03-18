@@ -7,13 +7,13 @@
     <i class="bi bi-truck me-2 text-primary"></i>
     {% if hm %}Edit Hire Record{% else %}Add Hired Machine{% endif %}
   </h2>
-  <a href="{{ url_for('hire_list') }}" class="btn btn-outline-secondary">
+  <a href="{{ url_for('hire.hire_list') }}" class="btn btn-outline-secondary">
     <i class="bi bi-arrow-left me-1"></i>Back
   </a>
 </div>
 
 <form method="POST"
-      action="{% if hm %}{{ url_for('hire_edit', hm_id=hm.id) }}{% else %}{{ url_for('hire_new') }}{% endif %}"
+      action="{% if hm %}{{ url_for('hire.hire_edit', hm_id=hm.id) }}{% else %}{{ url_for('hire.hire_new') }}{% endif %}"
       enctype="multipart/form-data">
 
   <div class="row g-4">
@@ -161,7 +161,7 @@
           <div class="alert alert-info py-2 d-flex align-items-center gap-2 mb-3">
             <i class="bi bi-file-earmark-check"></i>
             <span>Current file: <strong>{{ hm.invoice_original_name }}</strong></span>
-            <a href="{{ url_for('hire_invoice', hm_id=hm.id) }}" target="_blank"
+            <a href="{{ url_for('hire.hire_invoice', hm_id=hm.id) }}" target="_blank"
                class="ms-auto btn btn-sm btn-outline-primary">View</a>
           </div>
           <label class="form-label fw-semibold small">Replace file</label>
@@ -181,7 +181,7 @@
     <button type="submit" class="btn btn-primary px-4">
       <i class="bi bi-save me-1"></i>{% if hm %}Save Changes{% else %}Add Machine{% endif %}
     </button>
-    <a href="{{ url_for('hire_list') }}" class="btn btn-outline-secondary px-4">Cancel</a>
+    <a href="{{ url_for('hire.hire_list') }}" class="btn btn-outline-secondary px-4">Cancel</a>
     {% if hm %}
     <div class="ms-auto">
       <button type="button" class="btn btn-outline-danger"
@@ -207,7 +207,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <form method="POST" action="{{ url_for('hire_delete', hm_id=hm.id) }}" class="d-inline">
+        <form method="POST" action="{{ url_for('hire.hire_delete', hm_id=hm.id) }}" class="d-inline">
           <button type="submit" class="btn btn-danger">Delete</button>
         </form>
       </div>

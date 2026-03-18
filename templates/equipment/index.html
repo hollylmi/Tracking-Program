@@ -279,7 +279,7 @@
 
     <!-- Add link + breakdown form header -->
     <div class="d-flex gap-2 mb-3">
-      <a href="{{ url_for('hire_new') }}" class="btn btn-sm btn-outline-primary">
+      <a href="{{ url_for('hire.hire_new') }}" class="btn btn-sm btn-outline-primary">
         <i class="bi bi-plus me-1"></i>Add Hired Machine
       </a>
       <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#hiredBreakdownForm">
@@ -436,7 +436,7 @@
                 {% endif %}
               </td>
               <td>
-                <a href="{{ url_for('hire_edit', hm_id=hm.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Edit">
+                <a href="{{ url_for('hire.hire_edit', hm_id=hm.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Edit">
                   <i class="bi bi-pencil"></i>
                 </a>
               </td>
@@ -447,7 +447,7 @@
         {% else %}
         <div class="text-center py-5 text-muted">
           <i class="bi bi-building fs-1 d-block mb-2"></i>
-          No hired machines. <a href="{{ url_for('hire_new') }}">Add a hired machine</a>.
+          No hired machines. <a href="{{ url_for('hire.hire_new') }}">Add a hired machine</a>.
         </div>
         {% endif %}
       </div>
