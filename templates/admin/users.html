@@ -53,7 +53,7 @@
                 <div class="btn-group btn-group-sm">
                   <!-- Toggle admin -->
                   {% if user.id != current_user.id %}
-                  <form method="POST" action="{{ url_for('admin_users_toggle_admin', user_id=user.id) }}"
+                  <form method="POST" action="{{ url_for('auth.admin_users_toggle_admin', user_id=user.id) }}"
                         onsubmit="return confirm('Change admin status for {{ user.username }}?')">
                     <button class="btn btn-outline-secondary" title="{{ 'Remove Admin' if user.is_admin else 'Make Admin' }}">
                       <i class="bi bi-{{ 'shield-minus' if user.is_admin else 'shield-plus' }}"></i>
@@ -69,7 +69,7 @@
 
                   <!-- Toggle active -->
                   {% if user.id != current_user.id %}
-                  <form method="POST" action="{{ url_for('admin_users_toggle', user_id=user.id) }}"
+                  <form method="POST" action="{{ url_for('auth.admin_users_toggle', user_id=user.id) }}"
                         onsubmit="return confirm('{{ 'Deactivate' if user.active else 'Activate' }} {{ user.username }}?')">
                     <button class="btn btn-outline-{{ 'danger' if user.active else 'success' }}"
                             title="{{ 'Deactivate' if user.active else 'Activate' }}">
@@ -84,7 +84,7 @@
             <!-- Reset password modal -->
             <div class="modal fade" id="resetModal{{ user.id }}" tabindex="-1">
               <div class="modal-dialog modal-sm">
-                <form method="POST" action="{{ url_for('admin_users_reset_password', user_id=user.id) }}">
+                <form method="POST" action="{{ url_for('auth.admin_users_reset_password', user_id=user.id) }}">
                   <div class="modal-content">
                     <div class="modal-header">
                       <h6 class="modal-title fw-semibold">Reset Password — {{ user.username }}</h6>
@@ -114,7 +114,7 @@
     <div class="card shadow-sm">
       <div class="card-header fw-semibold"><i class="bi bi-person-plus me-2"></i>Add New User</div>
       <div class="card-body">
-        <form method="POST" action="{{ url_for('admin_users_add') }}">
+        <form method="POST" action="{{ url_for('auth.admin_users_add') }}">
           <div class="mb-3">
             <label class="form-label">Username <span class="text-danger">*</span></label>
             <input type="text" class="form-control" name="username" required
