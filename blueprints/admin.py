@@ -21,7 +21,7 @@ def admin_migrate_sqlite():
     """One-time migration: read the old SQLite file on the volume and import into Postgres."""
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
 
     db_url = current_app.config['SQLALCHEMY_DATABASE_URI']
     if not db_url.startswith('postgresql'):
@@ -111,7 +111,7 @@ def admin_migrate_sqlite_run():
     """Actually perform the SQLite → Postgres migration using the temp JSON file."""
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
 
     tmp_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance', '_sqlite_migration.json')
     if not os.path.exists(tmp_path):
@@ -329,7 +329,7 @@ def admin_migrate_sqlite_run():
 def admin_import_data():
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
 
     if request.method == 'POST':
         f = request.files.get('export_file')

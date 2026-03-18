@@ -399,7 +399,7 @@ def schedule_override():
 def admin_swings():
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
 
     if request.method == 'POST':
         action = request.form.get('action')

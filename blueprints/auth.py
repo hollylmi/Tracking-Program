@@ -14,7 +14,7 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
@@ -22,7 +22,7 @@ def login():
         if user and user.active and check_password_hash(user.password_hash, password):
             login_user(user, remember=request.form.get('remember') == 'on')
             next_page = request.args.get('next')
-            return redirect(next_page or url_for('index'))
+            return redirect(next_page or url_for('main.index'))
         flash('Invalid username or password.', 'danger')
     return render_template('login.html')
 
@@ -41,7 +41,7 @@ def logout():
 def admin_users():
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
     users = User.query.order_by(User.username).all()
     return render_template('admin/users.html', users=users)
 
@@ -50,7 +50,7 @@ def admin_users():
 def admin_users_add():
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
     username = request.form.get('username', '').strip().lower()
     display_name = request.form.get('display_name', '').strip()
     email = request.form.get('email', '').strip()
@@ -80,7 +80,7 @@ def admin_users_add():
 def admin_users_toggle(user_id):
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
     if user.id == current_user.id:
         flash('You cannot deactivate your own account.', 'danger')
@@ -96,7 +96,7 @@ def admin_users_toggle(user_id):
 def admin_users_reset_password(user_id):
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
     new_password = request.form.get('new_password', '')
     if not new_password:
@@ -112,7 +112,7 @@ def admin_users_reset_password(user_id):
 def admin_users_toggle_admin(user_id):
     if not current_user.is_admin:
         flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
     if user.id == current_user.id:
         flash('You cannot change your own admin status.', 'danger')
@@ -141,5 +141,5 @@ def change_password():
             current_user.password_hash = generate_password_hash(new_pw)
             db.session.commit()
             flash('Password changed successfully.', 'success')
-            return redirect(url_for('index'))
+            return redirect(url_for('main.index'))
     return render_template('change_password.html')

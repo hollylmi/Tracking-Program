@@ -19,7 +19,7 @@
   <div class="container-fluid px-4">
 
     <!-- Logo + Brand -->
-    <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('index') }}">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.index') }}">
       <!-- Plytrack logo mark: P + two diagonal strokes -->
       <svg width="34" height="30" viewBox="0 0 34 30" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <!-- Bold P -->
@@ -38,7 +38,7 @@
     <div class="collapse navbar-collapse" id="navMenu">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
+          <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">
             <i class="bi bi-speedometer2 me-1"></i>Dashboard
           </a>
         </li>
