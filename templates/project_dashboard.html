@@ -1330,7 +1330,7 @@
       </div>
       <div class="collapse" id="addDocumentForm">
         <div class="card-body border-bottom bg-light py-3">
-          <form method="POST" action="{{ url_for('project_document_upload', project_id=project.id) }}"
+          <form method="POST" action="{{ url_for('documents.project_document_upload', project_id=project.id) }}"
                 enctype="multipart/form-data" class="row g-2 align-items-end">
             <div class="col-sm-5">
               <label class="form-label fw-semibold small mb-1">File</label>
@@ -1367,7 +1367,7 @@
             {% for doc in project_documents %}
             <tr>
               <td class="small">
-                <a href="{{ url_for('project_document_download', project_id=project.id, doc_id=doc.id) }}"
+                <a href="{{ url_for('documents.project_document_download', project_id=project.id, doc_id=doc.id) }}"
                    class="text-decoration-none">
                   <i class="bi bi-file-earmark me-1"></i>{{ doc.original_name or doc.filename }}
                 </a>
@@ -1384,7 +1384,7 @@
               <td class="small text-muted">{{ doc.uploaded_at.strftime('%d/%m/%Y') if doc.uploaded_at else '—' }}</td>
               <td class="text-end">
                 <form method="POST"
-                      action="{{ url_for('project_document_delete', project_id=project.id, doc_id=doc.id) }}"
+                      action="{{ url_for('documents.project_document_delete', project_id=project.id, doc_id=doc.id) }}"
                       onsubmit="return confirm('Delete this document?')" class="d-inline">
                   <button type="submit" class="btn btn-sm btn-outline-danger">
                     <i class="bi bi-trash"></i>
