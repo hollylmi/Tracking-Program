@@ -60,20 +60,16 @@ def logout():
 # ---------------------------------------------------------------------------
 
 @auth_bp.route('/admin/users')
+@require_role('admin')
 def admin_users():
-    if current_user.role != 'admin':
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
     users = User.query.order_by(User.username).all()
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     return render_template('admin/users.html', users=users, employees=employees)
 
 
 @auth_bp.route('/admin/users/add', methods=['POST'])
+@require_role('admin')
 def admin_users_add():
-    if current_user.role != 'admin':
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
     username = request.form.get('username', '').strip().lower()
     display_name = request.form.get('display_name', '').strip()
     email = request.form.get('email', '').strip()
@@ -105,10 +101,8 @@ def admin_users_add():
 
 
 @auth_bp.route('/admin/users/<int:user_id>/toggle', methods=['POST'])
+@require_role('admin')
 def admin_users_toggle(user_id):
-    if current_user.role != 'admin':
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
     if user.id == current_user.id:
         flash('You cannot deactivate your own account.', 'danger')
@@ -121,10 +115,8 @@ def admin_users_toggle(user_id):
 
 
 @auth_bp.route('/admin/users/<int:user_id>/reset-password', methods=['POST'])
+@require_role('admin')
 def admin_users_reset_password(user_id):
-    if current_user.role != 'admin':
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
     new_password = request.form.get('new_password', '')
     if not new_password:
@@ -137,16 +129,15 @@ def admin_users_reset_password(user_id):
 
 
 @auth_bp.route('/admin/users/<int:user_id>/toggle-admin', methods=['POST'])
+@require_role('admin')
 def admin_users_toggle_admin(user_id):
     flash('Admin status is now managed via Change Role. Please use that instead.', 'warning')
     return redirect(url_for('auth.admin_users'))
 
 
 @auth_bp.route('/admin/users/<int:user_id>/change-role', methods=['POST'])
+@require_role('admin')
 def admin_users_change_role(user_id):
-    if current_user.role != 'admin':
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
     if user.id == current_user.id:
         flash('You cannot change your own role.', 'danger')
@@ -169,6 +160,7 @@ def no_project():
 
 
 @auth_bp.route('/account/change-password', methods=['GET', 'POST'])
+@require_role('admin', 'supervisor', 'site')
 def change_password():
     """Allow any logged-in user to change their own password."""
     if request.method == 'POST':

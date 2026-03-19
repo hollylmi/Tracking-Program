@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Blueprint, render_template, request, Response
 
+from blueprints.auth import require_role
 from models import Project
 from utils.progress import build_delay_report
 from utils.reports import generate_delay_pdf
@@ -11,6 +12,7 @@ delays_bp = Blueprint('delays', __name__)
 
 
 @delays_bp.route('/delay-report')
+@require_role('admin', 'supervisor')
 def delay_report():
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
@@ -46,6 +48,7 @@ def delay_report():
 
 
 @delays_bp.route('/delay-report/pdf')
+@require_role('admin', 'supervisor')
 def delay_report_pdf():
     date_from_str = request.args.get('date_from')
     date_to_str = request.args.get('date_to')

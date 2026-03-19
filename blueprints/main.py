@@ -2,12 +2,14 @@ from datetime import date
 
 from flask import Blueprint, render_template
 
+from blueprints.auth import require_role
 from models import DailyEntry, Project, HiredMachine
 
 main_bp = Blueprint('main', __name__)
 
 
 @main_bp.route('/')
+@require_role('admin', 'supervisor', 'site')
 def index():
     today = date.today()
     recent_entries = (

@@ -3,8 +3,11 @@ import uuid
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
+from flask_login import current_user
 from werkzeug.utils import secure_filename
 
+from blueprints.auth import require_role
+from utils.helpers import get_active_project_id
 from models import db, Project, HiredMachine, StandDown
 import storage
 from utils.files import allowed_file
@@ -22,10 +25,21 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instan
 # ---------------------------------------------------------------------------
 
 @hire_bp.route('/hire')
+@require_role('admin', 'supervisor', 'site')
 def hire_list():
     project_filter = request.args.get('project_id', '')
     query = HiredMachine.query.order_by(HiredMachine.created_at.desc())
-    if project_filter:
+    if current_user.role != 'admin':
+        active_pid = get_active_project_id()
+        if active_pid:
+            query = query.filter_by(project_id=active_pid)
+            project_filter = str(active_pid)
+        else:
+            hired = []
+            projects = Project.query.order_by(Project.name).all()
+            return render_template('hire/list.html', hired=hired, projects=projects,
+                                   project_filter=project_filter)
+    elif project_filter:
         query = query.filter_by(project_id=int(project_filter))
     hired = query.all()
     projects = Project.query.order_by(Project.name).all()
@@ -34,6 +48,7 @@ def hire_list():
 
 
 @hire_bp.route('/hire/new', methods=['GET', 'POST'])
+@require_role('admin')
 def hire_new():
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
@@ -86,6 +101,7 @@ def hire_new():
 
 
 @hire_bp.route('/hire/<int:hm_id>')
+@require_role('admin', 'supervisor', 'site')
 def hire_detail(hm_id):
     hm = HiredMachine.query.get_or_404(hm_id)
     today = date.today()
@@ -95,6 +111,7 @@ def hire_detail(hm_id):
 
 
 @hire_bp.route('/hire/<int:hm_id>/edit', methods=['GET', 'POST'])
+@require_role('admin')
 def hire_edit(hm_id):
     hm = HiredMachine.query.get_or_404(hm_id)
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
@@ -132,6 +149,7 @@ def hire_edit(hm_id):
 
 
 @hire_bp.route('/hire/<int:hm_id>/delete', methods=['POST'])
+@require_role('admin')
 def hire_delete(hm_id):
     hm = HiredMachine.query.get_or_404(hm_id)
     if hm.invoice_filename:
@@ -144,6 +162,7 @@ def hire_delete(hm_id):
 
 
 @hire_bp.route('/hire/<int:hm_id>/invoice')
+@require_role('admin', 'supervisor')
 def hire_invoice(hm_id):
     hm = HiredMachine.query.get_or_404(hm_id)
     if not hm.invoice_filename:
@@ -156,6 +175,7 @@ def hire_invoice(hm_id):
 
 
 @hire_bp.route('/hire/<int:hm_id>/standdown/add', methods=['POST'])
+@require_role('admin', 'supervisor')
 def standdown_add(hm_id):
     hm = HiredMachine.query.get_or_404(hm_id)
     date_str = request.form.get('stand_down_date', '').strip()
@@ -179,6 +199,7 @@ def standdown_add(hm_id):
 
 
 @hire_bp.route('/hire/<int:hm_id>/standdown/<int:sd_id>/delete', methods=['POST'])
+@require_role('admin', 'supervisor')
 def standdown_delete(hm_id, sd_id):
     sd = StandDown.query.get_or_404(sd_id)
     db.session.delete(sd)
@@ -188,6 +209,7 @@ def standdown_delete(hm_id, sd_id):
 
 
 @hire_bp.route('/hire/<int:hm_id>/report')
+@require_role('admin', 'supervisor')
 def hire_report(hm_id):
     hm = HiredMachine.query.get_or_404(hm_id)
     today = date.today()
@@ -209,6 +231,7 @@ def hire_report(hm_id):
 
 
 @hire_bp.route('/hire/<int:hm_id>/report/pdf')
+@require_role('admin', 'supervisor')
 def hire_report_pdf(hm_id):
     hm = HiredMachine.query.get_or_404(hm_id)
     date_from_str = request.args.get('date_from')

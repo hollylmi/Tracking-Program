@@ -4,7 +4,9 @@ from datetime import datetime
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, send_file, current_app)
-from flask_login import login_required, current_user
+from flask_login import current_user
+
+from blueprints.auth import require_role
 
 from models import (db, Project, Employee, Machine, DailyEntry, HiredMachine,
                     StandDown, Role, PlannedData, ProjectNonWorkDate,
@@ -17,13 +19,9 @@ admin_bp = Blueprint('admin', __name__)
 
 
 @admin_bp.route('/admin/migrate-from-sqlite')
-@login_required
+@require_role('admin')
 def admin_migrate_sqlite():
     """One-time migration: read the old SQLite file on the volume and import into Postgres."""
-    if not current_user.is_admin:
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
-
     db_url = current_app.config['SQLALCHEMY_DATABASE_URI']
     if not db_url.startswith('postgresql'):
         flash('This tool only works when the app is using PostgreSQL. You are currently on SQLite.', 'warning')
@@ -107,13 +105,9 @@ def admin_migrate_sqlite():
 # FRAGILE: complex ID-remapping across 15+ models.
 # Do not modify without reading the full import sequence.
 @admin_bp.route('/admin/migrate-from-sqlite/run')
-@login_required
+@require_role('admin')
 def admin_migrate_sqlite_run():
     """Actually perform the SQLite → Postgres migration using the temp JSON file."""
-    if not current_user.is_admin:
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
-
     tmp_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance', '_sqlite_migration.json')
     if not os.path.exists(tmp_path):
         flash('No migration file found. Visit /admin/migrate-from-sqlite first.', 'danger')
@@ -327,11 +321,8 @@ def admin_migrate_sqlite_run():
 # FRAGILE: complex ID-remapping across 15+ models.
 # Do not modify without reading the full import sequence.
 @admin_bp.route('/admin/import-data', methods=['GET', 'POST'])
+@require_role('admin')
 def admin_import_data():
-    if not current_user.is_admin:
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
-
     if request.method == 'POST':
         f = request.files.get('export_file')
         if not f or not f.filename.endswith('.json'):
@@ -622,6 +613,7 @@ def admin_import_data():
 # ---------------------------------------------------------------------------
 
 @admin_bp.route('/admin/projects', methods=['GET', 'POST'])
+@require_role('admin')
 def admin_projects():
     if request.method == 'POST':
         action = request.form.get('action')
@@ -686,11 +678,8 @@ def admin_projects():
 
 
 @admin_bp.route('/admin/users/<int:user_id>/projects', methods=['GET', 'POST'])
-@login_required
+@require_role('admin')
 def admin_user_projects(user_id):
-    if current_user.role != 'admin':
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
     all_projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
@@ -715,11 +704,8 @@ def admin_user_projects(user_id):
 
 
 @admin_bp.route('/admin/projects/<int:project_id>/users', methods=['GET', 'POST'])
-@login_required
+@require_role('admin')
 def admin_project_users(project_id):
-    if current_user.role != 'admin':
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
     project = Project.query.get_or_404(project_id)
     all_users = (User.query
                  .filter(User.role.in_(['supervisor', 'site']), User.active == True)
@@ -746,6 +732,7 @@ def admin_project_users(project_id):
 
 
 @admin_bp.route('/admin/employees', methods=['GET', 'POST'])
+@require_role('admin')
 def admin_employees():
     if request.method == 'POST':
         action = request.form.get('action')
@@ -816,6 +803,7 @@ def admin_employees():
 
 
 @admin_bp.route('/admin/machines', methods=['GET', 'POST'])
+@require_role('admin')
 def admin_machines():
     if request.method == 'POST':
         action = request.form.get('action')
@@ -885,6 +873,7 @@ def admin_machines():
 
 
 @admin_bp.route('/admin/roles', methods=['GET', 'POST'])
+@require_role('admin')
 def admin_roles():
     if request.method == 'POST':
         action = request.form.get('action')
@@ -921,7 +910,7 @@ def admin_roles():
 
 
 @admin_bp.route('/admin/holidays', methods=['GET', 'POST'])
-@login_required
+@require_role('admin')
 def admin_holidays():
     if request.method == 'POST':
         action = request.form.get('action')
@@ -952,7 +941,7 @@ def admin_holidays():
 
 
 @admin_bp.route('/admin/cfmeu', methods=['GET', 'POST'])
-@login_required
+@require_role('admin')
 def admin_cfmeu():
     if request.method == 'POST':
         action = request.form.get('action')
@@ -983,13 +972,9 @@ def admin_cfmeu():
 
 
 @admin_bp.route('/admin/backup/download')
-@login_required
+@require_role('admin')
 def admin_backup_download():
     """Download a database backup. Admin only."""
-    if not current_user.is_admin:
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('index'))
-
     db_url = current_app.config['SQLALCHEMY_DATABASE_URI']
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -1037,6 +1022,7 @@ def admin_backup_download():
 
 
 @admin_bp.route('/admin/settings', methods=['GET', 'POST'])
+@require_role('admin')
 def admin_settings():
     settings = load_settings()
     if request.method == 'POST':

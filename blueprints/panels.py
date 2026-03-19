@@ -5,9 +5,11 @@ import tempfile
 from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from flask_login import login_required, current_user
+from flask_login import current_user
 from werkzeug.utils import secure_filename
 
+from blueprints.auth import require_role
+from utils.helpers import get_active_project_id
 from models import db, Project, Employee, DiagramLayer, PanelInstallRecord
 import storage
 
@@ -40,8 +42,13 @@ SVG_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance'
 # ---------------------------------------------------------------------------
 
 @panels_bp.route('/project/<int:project_id>/panels')
-@login_required
+@require_role('admin', 'supervisor', 'site')
 def panel_overview(project_id):
+    if current_user.role != 'admin':
+        active_pid = get_active_project_id()
+        if active_pid != project_id:
+            flash('You do not have access to this project.', 'danger')
+            return redirect(url_for('main.index'))
     project = Project.query.get_or_404(project_id)
     layers = (DiagramLayer.query
               .filter_by(project_id=project_id)
@@ -51,7 +58,7 @@ def panel_overview(project_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/add', methods=['POST'])
-@login_required
+@require_role('admin')
 def panel_layer_add(project_id):
     project = Project.query.get_or_404(project_id)
     layer_name = request.form.get('layer_name', '').strip()
@@ -109,7 +116,7 @@ def panel_layer_add(project_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>/upload-svg', methods=['POST'])
-@login_required
+@require_role('admin')
 def panel_layer_upload_svg(project_id, layer_id):
     layer = DiagramLayer.query.get_or_404(layer_id)
     if layer.project_id != project_id:
@@ -135,7 +142,7 @@ def panel_layer_upload_svg(project_id, layer_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>/upload-dxf', methods=['POST'])
-@login_required
+@require_role('admin')
 def panel_layer_upload_dxf(project_id, layer_id):
     """Accept a DXF file, convert it to SVG with panel IDs, and save it."""
     if not _DXF_AVAILABLE:
@@ -181,7 +188,7 @@ def panel_layer_upload_dxf(project_id, layer_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>/upload-bg', methods=['POST'])
-@login_required
+@require_role('admin')
 def panel_layer_upload_bg(project_id, layer_id):
     """Upload a background image (JPG/PNG) or PDF (first page) for a diagram layer."""
     layer = DiagramLayer.query.get_or_404(layer_id)
@@ -231,7 +238,7 @@ def panel_layer_upload_bg(project_id, layer_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>/bg-image')
-@login_required
+@require_role('admin', 'supervisor', 'site')
 def panel_layer_bg_image(project_id, layer_id):
     """Serve the background image for a diagram layer (diagram view)."""
     layer = DiagramLayer.query.get_or_404(layer_id)
@@ -241,7 +248,7 @@ def panel_layer_bg_image(project_id, layer_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>/autodetect', methods=['POST'])
-@login_required
+@require_role('admin')
 def panel_layer_autodetect(project_id, layer_id):
     """Run OpenCV contour detection on the background image and return panel polygons."""
     if not _CV2_AVAILABLE:
@@ -377,7 +384,7 @@ def panel_layer_autodetect(project_id, layer_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>/delete', methods=['POST'])
-@login_required
+@require_role('admin')
 def panel_layer_delete(project_id, layer_id):
     layer = DiagramLayer.query.get_or_404(layer_id)
     if layer.project_id != project_id:
@@ -392,7 +399,7 @@ def panel_layer_delete(project_id, layer_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>')
-@login_required
+@require_role('admin', 'supervisor', 'site')
 def panel_layer_view(project_id, layer_id):
     project = Project.query.get_or_404(project_id)
     layer = DiagramLayer.query.get_or_404(layer_id)
@@ -436,7 +443,7 @@ def panel_layer_view(project_id, layer_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>/record', methods=['POST'])
-@login_required
+@require_role('admin', 'supervisor')
 def panel_record_save(project_id, layer_id):
     layer = DiagramLayer.query.get_or_404(layer_id)
     if layer.project_id != project_id:
@@ -505,7 +512,7 @@ def panel_record_save(project_id, layer_id):
 
 
 @panels_bp.route('/project/<int:project_id>/panels/layer/<int:layer_id>/data.json')
-@login_required
+@require_role('admin', 'supervisor', 'site')
 def panel_data_json(project_id, layer_id):
     layer = DiagramLayer.query.get_or_404(layer_id)
     if layer.project_id != project_id:

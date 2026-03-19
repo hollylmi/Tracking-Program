@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify
-from flask_login import login_required
+from blueprints.auth import require_role
 
 from models import (db, Project, Machine, DailyEntry, HiredMachine, PlannedData,
                     ProjectNonWorkDate, ProjectBudgetedRole, ProjectMachine,
@@ -27,6 +27,7 @@ projects_bp = Blueprint('projects', __name__)
 # ---------------------------------------------------------------------------
 
 @projects_bp.route('/api/progress')
+@require_role('admin', 'supervisor', 'site')
 def api_progress():
     project_id = request.args.get('project_id', '')
     lot = request.args.get('lot', '').strip()
@@ -76,6 +77,7 @@ def api_progress():
 # ---------------------------------------------------------------------------
 
 @projects_bp.route('/api/project/<int:project_id>/machines')
+@require_role('admin', 'supervisor', 'site')
 def api_project_machines(project_id):
     """Return owned machines assigned to this project."""
     assignments = (ProjectMachine.query
@@ -90,6 +92,7 @@ def api_project_machines(project_id):
 
 
 @projects_bp.route('/api/planned-options')
+@require_role('admin', 'supervisor', 'site')
 def api_planned_options():
     """Return distinct lots (and materials for a given lot) from planned data."""
     project_id = request.args.get('project_id', '').strip()
@@ -108,6 +111,7 @@ def api_planned_options():
 
 
 @projects_bp.route('/project/<int:project_id>/dashboard')
+@require_role('admin', 'supervisor')
 def project_dashboard(project_id):
     project = Project.query.get_or_404(project_id)
     progress = compute_project_progress(project_id)
@@ -294,7 +298,7 @@ def project_dashboard(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/non-work-dates/add', methods=['POST'])
-@login_required
+@require_role('admin')
 def non_work_date_add(project_id):
     project = Project.query.get_or_404(project_id)
     date_str = request.form.get('date', '').strip()
@@ -319,7 +323,7 @@ def non_work_date_add(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/non-work-dates/<int:nwd_id>/delete', methods=['POST'])
-@login_required
+@require_role('admin')
 def non_work_date_delete(project_id, nwd_id):
     nwd = ProjectNonWorkDate.query.get_or_404(nwd_id)
     db.session.delete(nwd)
@@ -329,6 +333,7 @@ def non_work_date_delete(project_id, nwd_id):
 
 
 @projects_bp.route('/project/<int:project_id>/budgeted-crew/add', methods=['POST'])
+@require_role('admin')
 def budgeted_crew_add(project_id):
     Project.query.get_or_404(project_id)
     role_name = request.form.get('role_name', '').strip()
@@ -355,6 +360,7 @@ def budgeted_crew_add(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/budgeted-crew/<int:br_id>/delete', methods=['POST'])
+@require_role('admin')
 def budgeted_crew_delete(project_id, br_id):
     br = ProjectBudgetedRole.query.get_or_404(br_id)
     db.session.delete(br)
@@ -364,6 +370,7 @@ def budgeted_crew_delete(project_id, br_id):
 
 
 @projects_bp.route('/project/<int:project_id>/planned-upload', methods=['GET', 'POST'])
+@require_role('admin')
 def planned_upload(project_id):
     project = Project.query.get_or_404(project_id)
 
@@ -459,6 +466,7 @@ def planned_upload(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/planned/clear', methods=['POST'])
+@require_role('admin')
 def planned_clear(project_id):
     Project.query.get_or_404(project_id)
     deleted = PlannedData.query.filter_by(project_id=project_id).delete()
@@ -472,6 +480,7 @@ def planned_clear(project_id):
 # ---------------------------------------------------------------------------
 
 @projects_bp.route('/project/<int:project_id>/own-equipment/add', methods=['POST'])
+@require_role('admin')
 def own_equipment_add(project_id):
     Project.query.get_or_404(project_id)
     machine_id_raw = request.form.get('machine_id', '').strip()
@@ -500,6 +509,7 @@ def own_equipment_add(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/own-equipment/<int:pm_id>/remove', methods=['POST'])
+@require_role('admin')
 def own_equipment_remove(project_id, pm_id):
     pm = ProjectMachine.query.get_or_404(pm_id)
     db.session.delete(pm)
@@ -513,6 +523,7 @@ def own_equipment_remove(project_id, pm_id):
 # ---------------------------------------------------------------------------
 
 @projects_bp.route('/project/<int:project_id>/worked-sunday/add', methods=['POST'])
+@require_role('admin')
 def worked_sunday_add(project_id):
     Project.query.get_or_404(project_id)
     date_str = request.form.get('date', '').strip()
@@ -540,6 +551,7 @@ def worked_sunday_add(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/worked-sunday/<int:ws_id>/delete', methods=['POST'])
+@require_role('admin')
 def worked_sunday_delete(project_id, ws_id):
     ws = ProjectWorkedSunday.query.get_or_404(ws_id)
     db.session.delete(ws)
@@ -553,6 +565,7 @@ def worked_sunday_delete(project_id, ws_id):
 # ---------------------------------------------------------------------------
 
 @projects_bp.route('/project/<int:project_id>/report/pdf')
+@require_role('admin', 'supervisor')
 def project_report_pdf(project_id):
     project = Project.query.get_or_404(project_id)
 
@@ -601,6 +614,7 @@ def project_report_pdf(project_id):
 # ---------------------------------------------------------------------------
 
 @projects_bp.route('/project/<int:project_id>/weekly-report/pdf')
+@require_role('admin', 'supervisor')
 def project_weekly_report_pdf(project_id):
     project = Project.query.get_or_404(project_id)
     week_start_str = request.args.get('week_start', '').strip()
@@ -630,6 +644,7 @@ def project_weekly_report_pdf(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/budgeted-crew/save-all', methods=['POST'])
+@require_role('admin')
 def budgeted_crew_save_all(project_id):
     project = Project.query.get_or_404(project_id)
     # Delete all existing budgeted roles for this project
@@ -654,6 +669,7 @@ def budgeted_crew_save_all(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/equipment-requirements/add', methods=['POST'])
+@require_role('admin')
 def equipment_req_add(project_id):
     Project.query.get_or_404(project_id)
     label = request.form.get('label', '').strip()
@@ -672,6 +688,7 @@ def equipment_req_add(project_id):
 
 
 @projects_bp.route('/project/<int:project_id>/equipment-requirements/<int:req_id>/update', methods=['POST'])
+@require_role('admin')
 def equipment_req_update(project_id, req_id):
     req = ProjectEquipmentRequirement.query.filter_by(id=req_id, project_id=project_id).first_or_404()
     label = request.form.get('label', '').strip()
@@ -688,6 +705,7 @@ def equipment_req_update(project_id, req_id):
 
 
 @projects_bp.route('/project/<int:project_id>/equipment-requirements/<int:req_id>/delete', methods=['POST'])
+@require_role('admin')
 def equipment_req_delete(project_id, req_id):
     req = ProjectEquipmentRequirement.query.filter_by(id=req_id, project_id=project_id).first_or_404()
     # cascade delete assignments
@@ -699,6 +717,7 @@ def equipment_req_delete(project_id, req_id):
 
 
 @projects_bp.route('/project/<int:project_id>/equipment-requirements/<int:req_id>/assign', methods=['POST'])
+@require_role('admin')
 def equipment_req_assign(project_id, req_id):
     req = ProjectEquipmentRequirement.query.filter_by(id=req_id, project_id=project_id).first_or_404()
     machine_id = request.form.get('machine_id', '').strip()
@@ -718,6 +737,7 @@ def equipment_req_assign(project_id, req_id):
 
 
 @projects_bp.route('/project/<int:project_id>/equipment-assignments/<int:assign_id>/remove', methods=['POST'])
+@require_role('admin')
 def equipment_req_unassign(project_id, assign_id):
     a = ProjectEquipmentAssignment.query.filter_by(id=assign_id).first_or_404()
     # verify it belongs to this project
@@ -730,6 +750,7 @@ def equipment_req_unassign(project_id, assign_id):
 
 
 @projects_bp.route('/project/<int:project_id>/settings/save', methods=['POST'])
+@require_role('admin')
 def project_settings_save(project_id):
     project = Project.query.get_or_404(project_id)
     project.name = request.form.get('name', '').strip() or project.name

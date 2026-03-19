@@ -2,7 +2,9 @@ from datetime import date, datetime, timedelta
 from itertools import groupby
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from flask_login import login_required, current_user
+from flask_login import current_user
+
+from blueprints.auth import require_role
 
 from models import (
     db,
@@ -33,6 +35,7 @@ SCHED_PALETTE = [
 
 
 @scheduling_bp.route('/scheduling')
+@require_role('admin', 'supervisor', 'site')
 def scheduling_overview():
     # Navigation: ?week=YYYY-MM-DD (Monday of start week), jumps in 4-week increments
     week_str = request.args.get('week')
@@ -49,7 +52,15 @@ def scheduling_overview():
     prev_period = (week_start - timedelta(weeks=4)).isoformat()
     next_period = (week_start + timedelta(weeks=4)).isoformat()
 
-    employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
+    no_employee_linked = False
+    if current_user.role == 'admin':
+        employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
+    elif current_user.employee_id is None:
+        employees = []
+        no_employee_linked = True
+        flash('Your account is not linked to an employee record — contact admin.', 'warning')
+    else:
+        employees = Employee.query.filter_by(id=current_user.employee_id, active=True).all()
     grid = build_schedule_grid(employees, date_list)
 
     # Group employees by role group (if set) then by role name
@@ -91,6 +102,7 @@ def scheduling_overview():
 
 
 @scheduling_bp.route('/scheduling/project/<int:project_id>')
+@require_role('admin', 'supervisor')
 def scheduling_project(project_id):
     project = Project.query.get_or_404(project_id)
 
@@ -236,6 +248,7 @@ def scheduling_project(project_id):
 # ---------------------------------------------------------------------------
 
 @scheduling_bp.route('/scheduling/assign/add', methods=['POST'])
+@require_role('admin')
 def scheduling_assign_add():
     employee_id = request.form.get('employee_id', type=int)
     project_id = request.form.get('project_id', type=int)
@@ -275,6 +288,7 @@ def scheduling_assign_add():
 
 
 @scheduling_bp.route('/scheduling/assign/<int:pa_id>/delete', methods=['POST'])
+@require_role('admin')
 def scheduling_assign_delete(pa_id):
     pa = ProjectAssignment.query.get_or_404(pa_id)
     project_id = pa.project_id
@@ -292,6 +306,7 @@ def scheduling_assign_delete(pa_id):
 # ---------------------------------------------------------------------------
 
 @scheduling_bp.route('/scheduling/leave/add', methods=['POST'])
+@require_role('admin')
 def scheduling_leave_add():
     employee_id = request.form.get('employee_id', type=int)
     date_from_str = request.form.get('date_from', '').strip()
@@ -328,6 +343,7 @@ def scheduling_leave_add():
 
 
 @scheduling_bp.route('/scheduling/leave/<int:leave_id>/delete', methods=['POST'])
+@require_role('admin')
 def scheduling_leave_delete(leave_id):
     lv = EmployeeLeave.query.get_or_404(leave_id)
     redirect_project = request.form.get('redirect_project_id', type=int)
@@ -344,7 +360,7 @@ def scheduling_leave_delete(leave_id):
 # ---------------------------------------------------------------------------
 
 @scheduling_bp.route('/scheduling/override', methods=['POST'])
-@login_required
+@require_role('admin')
 def schedule_override():
     employee_id = request.form.get('employee_id', type=int)
     date_str = request.form.get('date', '').strip()
@@ -396,11 +412,8 @@ def schedule_override():
 # ---------------------------------------------------------------------------
 
 @scheduling_bp.route('/admin/swings', methods=['GET', 'POST'])
+@require_role('admin')
 def admin_swings():
-    if not current_user.is_admin:
-        flash('Admin access required.', 'danger')
-        return redirect(url_for('main.index'))
-
     if request.method == 'POST':
         action = request.form.get('action')
 

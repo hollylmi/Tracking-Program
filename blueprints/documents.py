@@ -4,6 +4,7 @@ import uuid
 from flask import Blueprint, request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
 
+from blueprints.auth import require_role
 from models import db, Project, ProjectDocument
 import storage
 from utils.files import allowed_doc
@@ -14,6 +15,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instan
 
 
 @documents_bp.route('/project/<int:project_id>/documents/upload', methods=['POST'])
+@require_role('admin', 'supervisor')
 def project_document_upload(project_id):
     Project.query.get_or_404(project_id)
     f = request.files.get('document')
@@ -42,6 +44,7 @@ def project_document_upload(project_id):
 
 
 @documents_bp.route('/project/<int:project_id>/documents/<int:doc_id>/download')
+@require_role('admin', 'supervisor', 'site')
 def project_document_download(project_id, doc_id):
     doc = ProjectDocument.query.get_or_404(doc_id)
     if doc.project_id != project_id:
@@ -53,6 +56,7 @@ def project_document_download(project_id, doc_id):
 
 
 @documents_bp.route('/project/<int:project_id>/documents/<int:doc_id>/delete', methods=['POST'])
+@require_role('admin', 'supervisor')
 def project_document_delete(project_id, doc_id):
     doc = ProjectDocument.query.get_or_404(doc_id)
     if doc.project_id != project_id:

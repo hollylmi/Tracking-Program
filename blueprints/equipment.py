@@ -4,10 +4,14 @@ from collections import defaultdict
 from datetime import date, datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from flask_login import login_required
+from flask_login import current_user
+
+from blueprints.auth import require_role
+from utils.helpers import get_active_project_id
 
 from models import (db, Machine, Project, HiredMachine, MachineBreakdown,
-                    BreakdownPhoto, ProjectEquipmentAssignment, ProjectEquipmentRequirement)
+                    BreakdownPhoto, ProjectEquipmentAssignment, ProjectEquipmentRequirement,
+                    ProjectMachine)
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -16,7 +20,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instan
 
 
 @equipment_bp.route('/equipment/machine/save', methods=['POST'])
-@login_required
+@require_role('admin', 'supervisor')
 def equipment_machine_save():
     action = request.form.get('action')
     if action == 'add':
@@ -60,10 +64,20 @@ def equipment_machine_save():
 
 
 @equipment_bp.route('/equipment')
-@login_required
+@require_role('admin', 'supervisor', 'site')
 def equipment_overview():
-    own_machines = Machine.query.order_by(Machine.name).all()
-    hired_machines = HiredMachine.query.order_by(HiredMachine.machine_name).all()
+    if current_user.role != 'admin':
+        active_pid = get_active_project_id()
+        if active_pid:
+            assigned_ids = {pm.machine_id for pm in ProjectMachine.query.filter_by(project_id=active_pid).all()}
+            own_machines = Machine.query.filter(Machine.id.in_(assigned_ids)).order_by(Machine.name).all()
+            hired_machines = HiredMachine.query.filter_by(project_id=active_pid).order_by(HiredMachine.machine_name).all()
+        else:
+            own_machines = []
+            hired_machines = []
+    else:
+        own_machines = Machine.query.order_by(Machine.name).all()
+        hired_machines = HiredMachine.query.order_by(HiredMachine.machine_name).all()
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
     own_breakdowns = {b.machine_id: b for b in
@@ -116,7 +130,7 @@ def equipment_overview():
 
 
 @equipment_bp.route('/equipment/breakdown/add', methods=['POST'])
-@login_required
+@require_role('admin', 'supervisor', 'site')
 def breakdown_add():
     machine_id = request.form.get('machine_id') or None
     hired_machine_id = request.form.get('hired_machine_id') or None
@@ -153,7 +167,7 @@ def breakdown_add():
 
 
 @equipment_bp.route('/equipment/breakdown/<int:bd_id>/update', methods=['POST'])
-@login_required
+@require_role('admin', 'supervisor')
 def breakdown_update(bd_id):
     bd = MachineBreakdown.query.get_or_404(bd_id)
     bd.repair_status = request.form.get('repair_status', bd.repair_status)
@@ -172,7 +186,7 @@ def breakdown_update(bd_id):
 
 
 @equipment_bp.route('/equipment/breakdown-photo/<filename>')
-@login_required
+@require_role('admin', 'supervisor', 'site')
 def serve_breakdown_photo(filename):
     return storage.serve_file(
         f'breakdowns/{filename}',
@@ -181,7 +195,7 @@ def serve_breakdown_photo(filename):
 
 
 @equipment_bp.route('/equipment/breakdown/<int:bd_id>/delete', methods=['POST'])
-@login_required
+@require_role('admin', 'supervisor')
 def breakdown_delete(bd_id):
     bd = MachineBreakdown.query.get_or_404(bd_id)
     db.session.delete(bd)

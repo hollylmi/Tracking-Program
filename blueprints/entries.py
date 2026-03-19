@@ -3,6 +3,9 @@ import uuid
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import current_user
+
+from blueprints.auth import require_role
+from utils.helpers import get_active_project_id
 from werkzeug.utils import secure_filename
 from datetime import date, datetime
 
@@ -21,6 +24,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instan
 # ---------------------------------------------------------------------------
 
 @entries_bp.route('/entry/new', methods=['GET', 'POST'])
+@require_role('admin', 'supervisor', 'site')
 def new_entry():
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
@@ -125,8 +129,12 @@ def new_entry():
 
 
 @entries_bp.route('/entry/<int:entry_id>/edit', methods=['GET', 'POST'])
+@require_role('admin', 'supervisor', 'site')
 def edit_entry(entry_id):
     entry = DailyEntry.query.get_or_404(entry_id)
+    if current_user.role == 'site' and entry.user_id != current_user.id:
+        flash('You can only edit your own entries.', 'danger')
+        return redirect(url_for('entries.entries'))
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
@@ -220,6 +228,7 @@ def edit_entry(entry_id):
 
 
 @entries_bp.route('/entry/<int:entry_id>/delete', methods=['POST'])
+@require_role('admin')
 def delete_entry(entry_id):
     entry = DailyEntry.query.get_or_404(entry_id)
     # Remove photo files
@@ -232,6 +241,7 @@ def delete_entry(entry_id):
 
 
 @entries_bp.route('/entry/<int:entry_id>/photo/<int:photo_id>/delete', methods=['POST'])
+@require_role('admin', 'supervisor')
 def delete_photo(entry_id, photo_id):
     photo = EntryPhoto.query.get_or_404(photo_id)
     if photo.entry_id != entry_id:
@@ -245,17 +255,23 @@ def delete_photo(entry_id, photo_id):
 
 
 @entries_bp.route('/entry-photo/<filename>')
+@require_role('admin', 'supervisor', 'site')
 def serve_entry_photo(filename):
     return storage.serve_file(f'photos/{filename}', os.path.join(UPLOAD_FOLDER, filename))
 
 
 @entries_bp.route('/entries')
+@require_role('admin', 'supervisor', 'site')
 def entries():
     project_filter = request.args.get('project_id', '')
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
     query = DailyEntry.query.order_by(DailyEntry.entry_date.desc(), DailyEntry.created_at.desc())
-    if project_filter:
+    if current_user.role != 'admin':
+        active_pid = get_active_project_id()
+        if active_pid:
+            query = query.filter_by(project_id=active_pid)
+    elif project_filter:
         query = query.filter_by(project_id=int(project_filter))
     if date_from:
         try:
@@ -274,6 +290,7 @@ def entries():
 
 
 @entries_bp.route('/morning-standdown')
+@require_role('admin', 'supervisor', 'site')
 def morning_standdown():
     date_str = request.args.get('date', date.today().strftime('%Y-%m-%d'))
     try:
