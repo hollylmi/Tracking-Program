@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from flask import Flask, request, redirect, url_for, session
 from flask_login import LoginManager, current_user
 from models import db, User, Project
@@ -14,9 +16,18 @@ app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB upload limit
 
+# TODO: Set JWT_SECRET_KEY environment variable in Railway before deploying to production.
+# Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-change-in-prod')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=12)
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'instance', 'uploads')
 
 db.init_app(app)
+
+from flask_jwt_extended import JWTManager
+jwt = JWTManager(app)
 
 from blueprints.auth import auth_bp
 app.register_blueprint(auth_bp)
@@ -51,10 +62,26 @@ app.register_blueprint(admin_bp)
 from blueprints.main import main_bp
 app.register_blueprint(main_bp)
 
+from blueprints.api.auth import api_auth_bp
+app.register_blueprint(api_auth_bp, url_prefix='/api')
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'auth.login'
 login_manager.login_message = 'Please log in to access this page.'
 login_manager.login_message_category = 'warning'
+
+
+@jwt.unauthorized_loader
+def unauthorized_response(callback):
+    return {'error': 'Missing or invalid token'}, 401
+
+@jwt.expired_token_loader
+def expired_token_response(jwt_header, jwt_payload):
+    return {'error': 'Token has expired'}, 401
+
+@jwt.invalid_token_loader
+def invalid_token_response(callback):
+    return {'error': 'Invalid token'}, 422
 
 
 @login_manager.user_loader
@@ -173,6 +200,8 @@ def inject_project_context():
 @app.before_request
 def require_login():
     """Redirect unauthenticated users to login for all routes except login/static."""
+    if request.path.startswith('/api/'):
+        return  # JWT handles auth for all /api/* routes
     public_endpoints = {'auth.login', 'auth.logout', 'auth.no_project', 'static'}
     if request.endpoint not in public_endpoints and not current_user.is_authenticated:
         return redirect(url_for('auth.login', next=request.url))
@@ -181,6 +210,8 @@ def require_login():
 @app.before_request
 def set_active_project():
     """Track the active project for supervisor/site users via the session."""
+    if request.path.startswith('/api/'):
+        return  # JWT handles auth for all /api/* routes
     if not current_user.is_authenticated:
         return
     if request.endpoint in ('static', 'auth.login', 'auth.logout', 'auth.no_project'):
