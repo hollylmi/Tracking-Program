@@ -7,7 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import (
     db, User, Project, DailyEntry, Employee, Machine, HiredMachine,
     MachineBreakdown, ProjectDocument, ProjectMachine, ProjectAssignment,
-    PlannedData, Role,
+    PlannedData, Role, DeviceToken,
 )
 from utils.gantt import compute_gantt_data
 from utils.progress import compute_project_progress, compute_delay_summary, build_delay_report
@@ -1152,3 +1152,76 @@ def report_hire(hired_machine_id):
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEVICE TOKENS (push notifications)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/device-token', methods=['POST'])
+@jwt_required()
+def register_device_token():
+    user, err = _get_user()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    token = (data.get('token') or '').strip()
+    platform = (data.get('platform') or '').strip()
+
+    if not token or not platform:
+        return {'error': 'token and platform are required'}, 400
+    if platform not in ('ios', 'android'):
+        return {'error': 'platform must be ios or android'}, 400
+
+    existing = DeviceToken.query.filter_by(user_id=user.id, token=token).first()
+    if existing:
+        existing.updated_at = datetime.utcnow()
+    else:
+        db.session.add(DeviceToken(user_id=user.id, token=token, platform=platform))
+    db.session.commit()
+
+    return {'message': 'Device token registered'}, 200
+
+
+@api_data_bp.route('/device-token', methods=['DELETE'])
+@jwt_required()
+def remove_device_token():
+    user, err = _get_user()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    token = (data.get('token') or '').strip()
+
+    device = DeviceToken.query.filter_by(user_id=user.id, token=token).first()
+    if not device:
+        return {'error': 'Device token not found'}, 404
+
+    db.session.delete(device)
+    db.session.commit()
+
+    return {'message': 'Device token removed'}, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADMIN — scheduled job endpoints
+# In production, POST /api/admin/send-reminders should be called by a
+# scheduled job (Railway cron job or similar) at 4pm every weekday.
+# This will be configured after beta launch.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/admin/send-reminders', methods=['POST'])
+@jwt_required()
+def send_reminders():
+    user, err = _get_user()
+    if err:
+        return err
+
+    if user.role != 'admin':
+        return {'error': 'Access denied'}, 403
+
+    from utils.notifications import send_entry_reminders
+    count = send_entry_reminders()
+
+    return {'message': 'Reminders sent', 'count': count}, 200

@@ -21,6 +21,9 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB upload limit
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-change-in-prod')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=12)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+# TODO: Set up Railway cron job to call
+# POST /api/admin/send-reminders at 4pm
+# daily after beta launch
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'instance', 'uploads')
 
@@ -136,6 +139,15 @@ with app.app_context():
             granted_by INTEGER REFERENCES "user"(id),
             granted_at TIMESTAMP DEFAULT NOW(),
             UNIQUE(user_id, project_id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS device_token (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES "user"(id),
+            token VARCHAR(500) NOT NULL,
+            platform VARCHAR(20) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, token)
         )""",
     ]:
         try:
