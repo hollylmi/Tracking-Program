@@ -65,6 +65,9 @@ app.register_blueprint(main_bp)
 from blueprints.api.auth import api_auth_bp
 app.register_blueprint(api_auth_bp, url_prefix='/api')
 
+from blueprints.api.data import api_data_bp
+app.register_blueprint(api_data_bp, url_prefix='/api')
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'auth.login'
 login_manager.login_message = 'Please log in to access this page.'
@@ -119,6 +122,7 @@ with app.app_context():
         "ALTER TABLE hired_machine ADD COLUMN description TEXT",
         "ALTER TABLE user ADD COLUMN email VARCHAR(200)",
         "ALTER TABLE daily_entry ADD COLUMN weather VARCHAR(200)",
+        "ALTER TABLE daily_entry ADD COLUMN local_id VARCHAR(100)",
         "ALTER TABLE diagram_layer ADD COLUMN canvas_bg_filename VARCHAR(500)",
         "ALTER TABLE diagram_layer ADD COLUMN canvas_bg_original_name VARCHAR(500)",
         "ALTER TABLE panel_install_record ADD COLUMN source VARCHAR(20)",

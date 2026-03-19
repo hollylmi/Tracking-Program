@@ -157,6 +157,7 @@ class DailyEntry(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    local_id = db.Column(db.String(100), nullable=True, index=True)
 
     employees = db.relationship(
         'Employee', secondary=entry_employees, lazy='subquery',
