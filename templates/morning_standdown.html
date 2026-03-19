@@ -30,7 +30,7 @@
     <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
     <h5>No standdowns on {{ selected_date.strftime('%A %d %B %Y') }}</h5>
     <p>No hired machines have a stand-down recorded for this date.</p>
-    <a href="{{ url_for('hire_list') }}" class="btn btn-outline-primary btn-sm">
+    <a href="{{ url_for('hire.hire_list') }}" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-truck me-1"></i>View Hire Tracker
     </a>
   </div>
@@ -91,9 +91,9 @@
         <div class="row g-1">
           {% for photo in company.photos %}
           <div class="col-6">
-            <a href="{{ url_for('serve_entry_photo', filename=photo.filename) }}"
+            <a href="{{ url_for('entries.serve_entry_photo', filename=photo.filename) }}"
                download="{{ photo.original_name or photo.filename }}" target="_blank">
-              <img src="{{ url_for('serve_entry_photo', filename=photo.filename) }}"
+              <img src="{{ url_for('entries.serve_entry_photo', filename=photo.filename) }}"
                    class="img-thumbnail w-100" style="height:70px;object-fit:cover;"
                    alt="{{ photo.original_name }}">
               <div class="small text-center text-primary mt-1">

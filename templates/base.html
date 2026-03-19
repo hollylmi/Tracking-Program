@@ -19,7 +19,7 @@
   <div class="container-fluid px-4">
 
     <!-- Logo + Brand -->
-    <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('index') }}">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.index') }}">
       <!-- Plytrack logo mark: P + two diagonal strokes -->
       <svg width="34" height="30" viewBox="0 0 34 30" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <!-- Bold P -->
@@ -38,35 +38,35 @@
     <div class="collapse navbar-collapse" id="navMenu">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
+          <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">
             <i class="bi bi-speedometer2 me-1"></i>Dashboard
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'entries' %}active{% endif %}" href="{{ url_for('entries') }}">
+          <a class="nav-link {% if request.endpoint == 'entries.entries' %}active{% endif %}" href="{{ url_for('entries.entries') }}">
             <i class="bi bi-table me-1"></i>All Entries
           </a>
         </li>
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('hire') or 'delay_report' in (request.endpoint or '') or request.endpoint == 'morning_standdown') %}active{% endif %}"
+          <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('hire') or 'delay_report' in (request.endpoint or '') or request.endpoint == 'entries.morning_standdown') %}active{% endif %}"
              href="#" data-bs-toggle="dropdown">
             <i class="bi bi-journal-check me-1"></i>Tracking
           </a>
           <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{{ url_for('hire_list') }}">
+            <li><a class="dropdown-item" href="{{ url_for('hire.hire_list') }}">
               <i class="bi bi-truck me-2"></i>Hire Tracker
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('delay_report') }}">
+            <li><a class="dropdown-item" href="{{ url_for('delays.delay_report') }}">
               <i class="bi bi-exclamation-triangle me-2"></i>Delay Report
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('morning_standdown') }}">
+            <li><a class="dropdown-item" href="{{ url_for('entries.morning_standdown') }}">
               <i class="bi bi-envelope-exclamation me-2"></i>Standdown Email
             </a></li>
           </ul>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'equipment_overview' %}active{% endif %}"
-             href="{{ url_for('equipment_overview') }}">
+          <a class="nav-link {% if request.endpoint == 'equipment.equipment_overview' %}active{% endif %}"
+             href="{{ url_for('equipment.equipment_overview') }}">
             <i class="bi bi-truck me-1"></i>Equipment
           </a>
         </li>
@@ -78,12 +78,12 @@
           <ul class="dropdown-menu">
             {% for project in _active_projects %}
             <li>
-              <a class="dropdown-item" href="{{ url_for('project_dashboard', project_id=project.id) }}">
+              <a class="dropdown-item" href="{{ url_for('projects.project_dashboard', project_id=project.id) }}">
                 <i class="bi bi-folder me-2"></i>{{ project.name }}
               </a>
             </li>
             <li>
-              <a class="dropdown-item ps-4 small" href="{{ url_for('panel_overview', project_id=project.id) }}">
+              <a class="dropdown-item ps-4 small" href="{{ url_for('panels.panel_overview', project_id=project.id) }}">
                 <i class="bi bi-grid-3x3-gap me-2"></i>{{ project.name }} &mdash; Panels
               </a>
             </li>
@@ -93,7 +93,7 @@
             {% endif %}
             <li><hr class="dropdown-divider"></li>
             <li>
-              <a class="dropdown-item" href="{{ url_for('admin_projects') }}">
+              <a class="dropdown-item" href="{{ url_for('admin.admin_projects') }}">
                 <i class="bi bi-plus-circle me-2"></i>Manage Projects
               </a>
             </li>
@@ -101,7 +101,7 @@
         </li>
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint and 'scheduling' in request.endpoint %}active{% endif %}"
-             href="{{ url_for('scheduling_overview') }}">
+             href="{{ url_for('scheduling.scheduling_overview') }}">
             <i class="bi bi-calendar3-week me-1"></i>Scheduling
           </a>
         </li>
@@ -111,37 +111,37 @@
             <i class="bi bi-gear me-1"></i>Admin
           </a>
           <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{{ url_for('admin_projects') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_projects') }}">
               <i class="bi bi-folder me-2"></i>Projects
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_employees') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_employees') }}">
               <i class="bi bi-people me-2"></i>Employees
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_machines') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_machines') }}">
               <i class="bi bi-tools me-2"></i>Equipment List
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_roles') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_roles') }}">
               <i class="bi bi-person-badge me-2"></i>Roles &amp; Rates
             </a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_swings') }}">
+            <li><a class="dropdown-item" href="{{ url_for('scheduling.admin_swings') }}">
               <i class="bi bi-arrow-repeat me-2"></i>Swing Patterns
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_holidays') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_holidays') }}">
               <i class="bi bi-calendar-event me-2"></i>Public Holidays
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_cfmeu') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_cfmeu') }}">
               <i class="bi bi-hammer me-2"></i>CFMEU Dates
             </a></li>
             {% if current_user.is_admin %}
-            <li><a class="dropdown-item" href="{{ url_for('admin_users') }}">
+            <li><a class="dropdown-item" href="{{ url_for('auth.admin_users') }}">
               <i class="bi bi-person-gear me-2"></i>Users
             </a></li>
-            <li><a class="dropdown-item" href="{{ url_for('admin_import_data') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_import_data') }}">
               <i class="bi bi-cloud-upload me-2"></i>Import Data
             </a></li>
             {% endif %}
-            <li><a class="dropdown-item" href="{{ url_for('admin_settings') }}">
+            <li><a class="dropdown-item" href="{{ url_for('admin.admin_settings') }}">
               <i class="bi bi-sliders me-2"></i>Settings
             </a></li>
           </ul>
@@ -149,7 +149,7 @@
       </ul>
 
       <div class="d-flex align-items-center gap-2">
-        <a href="{{ url_for('new_entry') }}" class="btn btn-ply-primary fw-semibold">
+        <a href="{{ url_for('entries.new_entry') }}" class="btn btn-ply-primary fw-semibold">
           <i class="bi bi-plus-circle me-1"></i>New Entry
         </a>
         <div class="dropdown">
@@ -159,10 +159,10 @@
           <ul class="dropdown-menu dropdown-menu-end">
             <li><span class="dropdown-item-text small text-muted">Logged in as <strong>{{ current_user.username }}</strong></span></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="{{ url_for('change_password') }}">
+            <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">
               <i class="bi bi-key me-2"></i>Change Password
             </a></li>
-            <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
+            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
               <i class="bi bi-box-arrow-right me-2"></i>Log Out
             </a></li>
           </ul>

@@ -8,7 +8,7 @@
       <i class="bi bi-grid-3x3-gap me-2 text-primary"></i>Panel Diagrams
     </h2>
     <div class="text-muted small mt-1">
-      <a href="{{ url_for('project_dashboard', project_id=project.id) }}" class="text-muted">
+      <a href="{{ url_for('projects.project_dashboard', project_id=project.id) }}" class="text-muted">
         <i class="bi bi-arrow-left me-1"></i>{{ project.name }}
       </a>
     </div>
@@ -23,7 +23,7 @@
   <div class="card shadow-sm">
     <div class="card-header fw-semibold"><i class="bi bi-stack me-2"></i>New Diagram Layer</div>
     <div class="card-body">
-      <form method="POST" action="{{ url_for('panel_layer_add', project_id=project.id) }}"
+      <form method="POST" action="{{ url_for('panels.panel_layer_add', project_id=project.id) }}"
             enctype="multipart/form-data">
         <div class="row g-3">
           <div class="col-md-4">
@@ -121,7 +121,7 @@
             {% endif %}
           </div>
           <form method="POST"
-                action="{{ url_for('panel_layer_delete', project_id=project.id, layer_id=layer.id) }}"
+                action="{{ url_for('panels.panel_layer_delete', project_id=project.id, layer_id=layer.id) }}"
                 onsubmit="return confirm('Delete layer \'{{ layer.layer_name }}\' and all panel records?')">
             <button class="btn btn-outline-danger btn-sm" title="Delete layer">
               <i class="bi bi-trash"></i>
@@ -151,17 +151,17 @@
         {% endif %}
 
         {% if layer.svg_filename %}
-        <a href="{{ url_for('panel_layer_view', project_id=project.id, layer_id=layer.id) }}"
+        <a href="{{ url_for('panels.panel_layer_view', project_id=project.id, layer_id=layer.id) }}"
            class="btn btn-primary btn-sm w-100">
           <i class="bi bi-grid-3x3-gap me-1"></i>Open Diagram
         </a>
         {% else %}
-        <a href="{{ url_for('panel_layer_view', project_id=project.id, layer_id=layer.id) }}"
+        <a href="{{ url_for('panels.panel_layer_view', project_id=project.id, layer_id=layer.id) }}"
            class="btn btn-outline-primary btn-sm w-100 mb-2">
           <i class="bi bi-arrow-right-circle me-1"></i>Open Layer (upload PNG / DXF / SVG inside)
         </a>
         <form method="POST"
-              action="{{ url_for('panel_layer_upload_bg', project_id=project.id, layer_id=layer.id) }}"
+              action="{{ url_for('panels.panel_layer_upload_bg', project_id=project.id, layer_id=layer.id) }}"
               enctype="multipart/form-data" class="d-flex gap-2 mb-2">
           <input type="file" class="form-control form-control-sm" name="bg_file" accept=".jpg,.jpeg,.png,.pdf" required>
           <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">
@@ -169,7 +169,7 @@
           </button>
         </form>
         <form method="POST"
-              action="{{ url_for('panel_layer_upload_dxf', project_id=project.id, layer_id=layer.id) }}"
+              action="{{ url_for('panels.panel_layer_upload_dxf', project_id=project.id, layer_id=layer.id) }}"
               enctype="multipart/form-data" class="d-flex gap-2">
           <input type="file" class="form-control form-control-sm" name="dxf_file" accept=".dxf" required>
           <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">

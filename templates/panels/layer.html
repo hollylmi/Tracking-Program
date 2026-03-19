@@ -140,7 +140,7 @@
       <i class="bi bi-grid-3x3-gap me-2 text-primary"></i>{{ layer.layer_name }}
     </h2>
     <div class="text-muted small mt-1">
-      <a href="{{ url_for('panel_overview', project_id=project.id) }}" class="text-muted">
+      <a href="{{ url_for('panels.panel_overview', project_id=project.id) }}" class="text-muted">
         <i class="bi bi-arrow-left me-1"></i>{{ project.name }} — Panel Diagrams
       </a>
       {% if layer.description %}&nbsp;&bull;&nbsp;{{ layer.description }}{% endif %}
@@ -160,7 +160,7 @@
     <select class="form-select form-select-sm" style="width:auto;"
             onchange="window.location=this.value">
       {% for l in all_layers %}
-      <option value="{{ url_for('panel_layer_view', project_id=project.id, layer_id=l.id) }}"
+      <option value="{{ url_for('panels.panel_layer_view', project_id=project.id, layer_id=l.id) }}"
               {% if l.id == layer.id %}selected{% endif %}>
         {{ l.layer_name }}
       </option>
@@ -194,7 +194,7 @@
       <i class="bi bi-magic me-1"></i>Auto-detect Panels
     </button>
     {% endif %}
-    <a href="{{ url_for('panel_data_json', project_id=project.id, layer_id=layer.id) }}"
+    <a href="{{ url_for('panels.panel_data_json', project_id=project.id, layer_id=layer.id) }}"
        class="btn btn-outline-secondary btn-sm"
        download="{{ layer.layer_name|replace(' ','_') }}_data.json">
       <i class="bi bi-download me-1"></i>Export
@@ -216,7 +216,7 @@
         by overlapping or shared polylines. Text labels (if present) are matched to each panel.
       </p>
       <form method="POST"
-            action="{{ url_for('panel_layer_upload_dxf', project_id=project.id, layer_id=layer.id) }}"
+            action="{{ url_for('panels.panel_layer_upload_dxf', project_id=project.id, layer_id=layer.id) }}"
             enctype="multipart/form-data" class="d-flex gap-2 align-items-end flex-wrap">
         <div>
           <label class="form-label small fw-semibold mb-1">DXF file</label>
@@ -237,7 +237,7 @@
 <!-- Replace SVG collapse -->
 <div class="collapse mb-3" id="uploadSvgForm">
   <form method="POST"
-        action="{{ url_for('panel_layer_upload_svg', project_id=project.id, layer_id=layer.id) }}"
+        action="{{ url_for('panels.panel_layer_upload_svg', project_id=project.id, layer_id=layer.id) }}"
         enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
     <div>
       <label class="form-label small fw-semibold mb-1">SVG file</label>
@@ -258,7 +258,7 @@
         diagram. Accepts <strong>JPG, PNG</strong>, or <strong>PDF</strong> (first page is used).
       </p>
       <form method="POST"
-            action="{{ url_for('panel_layer_upload_bg', project_id=project.id, layer_id=layer.id) }}"
+            action="{{ url_for('panels.panel_layer_upload_bg', project_id=project.id, layer_id=layer.id) }}"
             enctype="multipart/form-data" class="d-flex gap-2 align-items-end flex-wrap">
         <div>
           <label class="form-label small fw-semibold mb-1">Background file</label>
@@ -511,9 +511,9 @@ window._plyClick = function(el) {
 (function () {
   'use strict';
 
-  const SAVE_URL       = "{{ url_for('panel_record_save', project_id=project.id, layer_id=layer.id) }}";
-  const AUTODETECT_URL = "{{ url_for('panel_layer_autodetect', project_id=project.id, layer_id=layer.id) }}";
-  const UPLOAD_SVG_URL = "{{ url_for('panel_layer_upload_svg', project_id=project.id, layer_id=layer.id) }}";
+  const SAVE_URL       = "{{ url_for('panels.panel_record_save', project_id=project.id, layer_id=layer.id) }}";
+  const AUTODETECT_URL = "{{ url_for('panels.panel_layer_autodetect', project_id=project.id, layer_id=layer.id) }}";
+  const UPLOAD_SVG_URL = "{{ url_for('panels.panel_layer_upload_svg', project_id=project.id, layer_id=layer.id) }}";
   let   panelData = {{ panel_data_json | safe }};
   const employeeMap = { {% for emp in employees %}"{{ emp.id }}": "{{ emp.name }}"{% if not loop.last %}, {% endif %}{% endfor %} };
 

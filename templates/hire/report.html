@@ -7,7 +7,7 @@
     <i class="bi bi-file-earmark-pdf me-2 text-success"></i>Stand-Down Report
     <span class="text-muted fs-5 fw-normal ms-2">{{ hm.machine_name }}</span>
   </h2>
-  <a href="{{ url_for('hire_detail', hm_id=hm.id) }}" class="btn btn-outline-secondary">
+  <a href="{{ url_for('hire.hire_detail', hm_id=hm.id) }}" class="btn btn-outline-secondary">
     <i class="bi bi-arrow-left me-1"></i>Back to Machine
   </a>
 </div>
@@ -37,7 +37,7 @@
           {% set ws = date_from - timedelta(days=7) if offset == -1 else date_from %}
           {% set label = 'This Week' if offset == 0 else 'Last Week' %}
         {% endfor %}
-        <a href="{{ url_for('hire_report', hm_id=hm.id) }}" class="btn btn-sm btn-outline-secondary">
+        <a href="{{ url_for('hire.hire_report', hm_id=hm.id) }}" class="btn btn-sm btn-outline-secondary">
           This Week
         </a>
       </div>
@@ -87,7 +87,7 @@
           Daily Breakdown &mdash;
           {{ date_from.strftime('%d/%m/%Y') }} to {{ date_to.strftime('%d/%m/%Y') }}
         </h5>
-        <a href="{{ url_for('hire_report_pdf', hm_id=hm.id, date_from=date_from_str, date_to=date_to_str) }}"
+        <a href="{{ url_for('hire.hire_report_pdf', hm_id=hm.id, date_from=date_from_str, date_to=date_to_str) }}"
            class="btn btn-sm btn-success">
           <i class="bi bi-download me-1"></i>Download PDF
         </a>
@@ -143,7 +143,7 @@
           Download the PDF, then click <strong>Open in Outlook</strong> to compose the email — attach the PDF before sending.
         </p>
 
-        <a href="{{ url_for('hire_report_pdf', hm_id=hm.id, date_from=date_from_str, date_to=date_to_str) }}"
+        <a href="{{ url_for('hire.hire_report_pdf', hm_id=hm.id, date_from=date_from_str, date_to=date_to_str) }}"
            class="btn btn-success w-100 mb-3">
           <i class="bi bi-download me-1"></i>Download PDF
         </a>

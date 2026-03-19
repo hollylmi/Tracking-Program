@@ -67,10 +67,10 @@
     <button class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#weeklyReportModal">
       <i class="bi bi-file-earmark-pdf me-1"></i>Weekly Report PDF
     </button>
-    <a href="{{ url_for('new_entry') }}?project_id={{ project.id }}" class="btn btn-primary btn-sm">
+    <a href="{{ url_for('entries.new_entry') }}?project_id={{ project.id }}" class="btn btn-primary btn-sm">
       <i class="bi bi-plus-circle me-1"></i>New Entry
     </a>
-    <a href="{{ url_for('entries') }}?project_id={{ project.id }}" class="btn btn-outline-secondary btn-sm">
+    <a href="{{ url_for('entries.entries') }}?project_id={{ project.id }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-list-ul me-1"></i>Entry History
     </a>
   </div>
@@ -103,7 +103,7 @@
     </button>
   </li>
   <li class="nav-item" role="presentation">
-    <a class="nav-link" href="{{ url_for('panel_overview', project_id=project.id) }}">
+    <a class="nav-link" href="{{ url_for('panels.panel_overview', project_id=project.id) }}">
       <i class="bi bi-grid-3x3-gap me-1"></i>Panels
     </a>
   </li>
@@ -572,13 +572,13 @@
     <div class="card shadow-sm mb-4">
       <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
         <span><i class="bi bi-people me-2"></i>Crew Requirements by Role Group</span>
-        <a href="{{ url_for('scheduling_project', project_id=project.id) }}" class="btn btn-sm btn-outline-info">
+        <a href="{{ url_for('scheduling.scheduling_project', project_id=project.id) }}" class="btn btn-sm btn-outline-info">
           <i class="bi bi-zoom-in me-1"></i>View Scheduling Grid
         </a>
       </div>
       <div class="card-body">
         {% if role_groups_all %}
-        <form method="POST" action="{{ url_for('budgeted_crew_save_all', project_id=project.id) }}">
+        <form method="POST" action="{{ url_for('projects.budgeted_crew_save_all', project_id=project.id) }}">
           <div class="row g-3 mb-3">
             {% for group in role_groups_all %}
             <div class="col-sm-4 col-md-3">
@@ -591,13 +591,13 @@
             </div>
             {% endfor %}
           </div>
-          <p class="text-muted small mb-3">Set to 0 to remove a role from the budget. Only role groups configured in <a href="{{ url_for('admin_roles') }}">Admin &rarr; Roles &amp; Rates</a> appear here.</p>
+          <p class="text-muted small mb-3">Set to 0 to remove a role from the budget. Only role groups configured in <a href="{{ url_for('admin.admin_roles') }}">Admin &rarr; Roles &amp; Rates</a> appear here.</p>
           <button type="submit" class="btn btn-primary">Save Crew Requirements</button>
         </form>
         {% else %}
         <div class="alert alert-info mb-0">
           <i class="bi bi-info-circle me-2"></i>
-          No scheduling groups configured. Go to <a href="{{ url_for('admin_roles') }}">Admin &rarr; Roles &amp; Rates</a> and set a <strong>Scheduling Group</strong> on each role first.
+          No scheduling groups configured. Go to <a href="{{ url_for('admin.admin_roles') }}">Admin &rarr; Roles &amp; Rates</a> and set a <strong>Scheduling Group</strong> on each role first.
         </div>
         {% endif %}
       </div>
@@ -614,7 +614,7 @@
       </div>
       <div class="collapse" id="addCrewForm">
         <div class="card-body border-bottom bg-light py-3">
-          <form method="POST" action="{{ url_for('budgeted_crew_add', project_id=project.id) }}"
+          <form method="POST" action="{{ url_for('projects.budgeted_crew_add', project_id=project.id) }}"
                 class="row g-2 align-items-end">
             <div class="col-sm-5">
               <label class="form-label fw-semibold small mb-1">Role / Type</label>
@@ -681,7 +681,7 @@
               </td>
               <td class="text-end">
                 <form method="POST"
-                      action="{{ url_for('budgeted_crew_delete', project_id=project.id, br_id=br.id) }}"
+                      action="{{ url_for('projects.budgeted_crew_delete', project_id=project.id, br_id=br.id) }}"
                       onsubmit="return confirm('Remove this budgeted role?')" class="d-inline">
                   <button type="submit" class="btn btn-sm btn-outline-danger">
                     <i class="bi bi-trash"></i>
@@ -714,7 +714,7 @@
       <!-- Add requirement form (collapsible) -->
       <div class="collapse" id="addEquipReqForm">
         <div class="card-body border-bottom bg-light py-3">
-          <form method="POST" action="{{ url_for('equipment_req_add', project_id=project.id) }}"
+          <form method="POST" action="{{ url_for('projects.equipment_req_add', project_id=project.id) }}"
                 class="row g-2 align-items-end">
             <div class="col-sm-5">
               <label class="form-label small fw-semibold mb-1">Equipment Name <span class="text-danger">*</span></label>
@@ -744,7 +744,7 @@
           <div class="px-3 py-2 d-flex justify-content-between align-items-center bg-light">
             <div class="d-flex align-items-center gap-3">
               <!-- Inline edit form -->
-              <form method="POST" action="{{ url_for('equipment_req_update', project_id=project.id, req_id=row.req.id) }}"
+              <form method="POST" action="{{ url_for('projects.equipment_req_update', project_id=project.id, req_id=row.req.id) }}"
                     class="d-flex align-items-center gap-2">
                 <input type="text" name="label" value="{{ row.label }}"
                        class="form-control form-control-sm fw-semibold" style="width:180px;" required>
@@ -768,7 +768,7 @@
                 </span>
               {% endif %}
             </div>
-            <form method="POST" action="{{ url_for('equipment_req_delete', project_id=project.id, req_id=row.req.id) }}"
+            <form method="POST" action="{{ url_for('projects.equipment_req_delete', project_id=project.id, req_id=row.req.id) }}"
                   class="d-inline" onsubmit="return confirm('Remove this requirement and all its assignments?')">
               <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove requirement">
                 <i class="bi bi-trash"></i>
@@ -785,7 +785,7 @@
                 <i class="bi bi-{{ 'wrench' if a.machine_id else 'building' }} me-1"></i>
                 {{ a.display_name }}
                 <span class="text-muted small">({{ a.source }})</span>
-                <form method="POST" action="{{ url_for('equipment_req_unassign', project_id=project.id, assign_id=a.id) }}"
+                <form method="POST" action="{{ url_for('projects.equipment_req_unassign', project_id=project.id, assign_id=a.id) }}"
                       class="d-inline ms-1">
                   <button type="submit" class="btn btn-link p-0 text-danger" style="font-size:.7rem;" title="Remove">
                     <i class="bi bi-x-lg"></i>
@@ -799,7 +799,7 @@
             {% endif %}
 
             <!-- Assign machine form -->
-            <form method="POST" action="{{ url_for('equipment_req_assign', project_id=project.id, req_id=row.req.id) }}"
+            <form method="POST" action="{{ url_for('projects.equipment_req_assign', project_id=project.id, req_id=row.req.id) }}"
                   class="d-flex flex-wrap gap-2 align-items-center">
               <select name="machine_id" class="form-select form-select-sm" style="max-width:220px;"
                       onchange="this.nextElementSibling.value=''">
@@ -888,7 +888,7 @@
           <span class="fw-semibold small text-secondary">
             <i class="bi bi-building me-1"></i>Hired Machines
           </span>
-          <a href="{{ url_for('hire_list') }}?project_id={{ project.id }}" class="small text-primary">Manage</a>
+          <a href="{{ url_for('hire.hire_list') }}?project_id={{ project.id }}" class="small text-primary">Manage</a>
         </div>
         {% if hired_machines_list %}
         <table class="table table-sm table-hover mb-0">
@@ -923,7 +923,7 @@
         {% else %}
         <div class="text-center py-3 text-muted small">
           No hired machines active on this project.
-          <a href="{{ url_for('hire_new') }}" class="d-block mt-1">Add a hired machine</a>
+          <a href="{{ url_for('hire.hire_new') }}" class="d-block mt-1">Add a hired machine</a>
         </div>
         {% endif %}
 
@@ -933,7 +933,7 @@
             <div class="fw-semibold small text-secondary mb-2">
               <i class="bi bi-wrench me-1"></i>Assign Own Equipment to this Project
             </div>
-            <form method="POST" action="{{ url_for('own_equipment_add', project_id=project.id) }}"
+            <form method="POST" action="{{ url_for('projects.own_equipment_add', project_id=project.id) }}"
                   class="row g-2 align-items-end">
               <div class="col-sm-5">
                 <label class="form-label fw-semibold small mb-1">Machine</label>
@@ -973,7 +973,7 @@
       </div>
       <div class="collapse" id="addOwnEquipForm">
         <div class="card-body border-bottom bg-light py-3">
-          <form method="POST" action="{{ url_for('own_equipment_add', project_id=project.id) }}"
+          <form method="POST" action="{{ url_for('projects.own_equipment_add', project_id=project.id) }}"
                 class="row g-2 align-items-end">
             <div class="col-sm-5">
               <label class="form-label fw-semibold small mb-1">Machine</label>
@@ -1023,7 +1023,7 @@
               </td>
               <td class="text-end">
                 <form method="POST"
-                      action="{{ url_for('own_equipment_remove', project_id=project.id, pm_id=pm.id) }}"
+                      action="{{ url_for('projects.own_equipment_remove', project_id=project.id, pm_id=pm.id) }}"
                       onsubmit="return confirm('Remove this equipment from project?')" class="d-inline">
                   <button type="submit" class="btn btn-sm btn-outline-danger">
                     <i class="bi bi-trash"></i>
@@ -1056,7 +1056,7 @@
         <h5 class="mb-0 fw-semibold"><i class="bi bi-pencil-square me-2 text-primary"></i>Project Details</h5>
       </div>
       <div class="card-body">
-        <form method="POST" action="{{ url_for('project_settings_save', project_id=project.id) }}"
+        <form method="POST" action="{{ url_for('projects.project_settings_save', project_id=project.id) }}"
               class="row g-3">
           <div class="col-sm-6">
             <label class="form-label fw-semibold small mb-1">Project Name <span class="text-danger">*</span></label>
@@ -1127,7 +1127,7 @@
       </div>
       <div class="collapse" id="addNwdForm">
         <div class="card-body border-bottom bg-light py-3">
-          <form method="POST" action="{{ url_for('non_work_date_add', project_id=project.id) }}"
+          <form method="POST" action="{{ url_for('projects.non_work_date_add', project_id=project.id) }}"
                 class="row g-2 align-items-end">
             <div class="col-sm-4">
               <label class="form-label fw-semibold small mb-1">Date</label>
@@ -1175,7 +1175,7 @@
               <td class="small"><span class="badge bg-secondary-subtle text-secondary">Manual</span></td>
               <td class="text-end">
                 <form method="POST"
-                      action="{{ url_for('non_work_date_delete', project_id=project.id, nwd_id=nwd.id) }}"
+                      action="{{ url_for('projects.non_work_date_delete', project_id=project.id, nwd_id=nwd.id) }}"
                       onsubmit="return confirm('Remove this date?')" class="d-inline">
                   <button type="submit" class="btn btn-sm btn-outline-danger">
                     <i class="bi bi-trash"></i>
@@ -1207,7 +1207,7 @@
       </div>
       <div class="collapse" id="addWorkedSundayForm">
         <div class="card-body border-bottom bg-light py-3">
-          <form method="POST" action="{{ url_for('worked_sunday_add', project_id=project.id) }}"
+          <form method="POST" action="{{ url_for('projects.worked_sunday_add', project_id=project.id) }}"
                 class="row g-2 align-items-end">
             <div class="col-sm-4">
               <label class="form-label fw-semibold small mb-1">Sunday Date</label>
@@ -1241,7 +1241,7 @@
               <td class="small">{{ ws.reason or '—' }}</td>
               <td class="text-end">
                 <form method="POST"
-                      action="{{ url_for('worked_sunday_delete', project_id=project.id, ws_id=ws.id) }}"
+                      action="{{ url_for('projects.worked_sunday_delete', project_id=project.id, ws_id=ws.id) }}"
                       onsubmit="return confirm('Remove this worked Sunday?')" class="d-inline">
                   <button type="submit" class="btn btn-sm btn-outline-danger">
                     <i class="bi bi-trash"></i>
@@ -1275,7 +1275,7 @@
             <code>openpyxl</code> is not installed. Run <code>pip install openpyxl</code> then restart.
           </div>
           {% endif %}
-          <form method="POST" action="{{ url_for('planned_upload', project_id=project.id) }}"
+          <form method="POST" action="{{ url_for('projects.planned_upload', project_id=project.id) }}"
                 enctype="multipart/form-data" class="row g-3 align-items-end">
             <div class="col-sm-6">
               <label class="form-label fw-semibold small mb-1">File (Excel or CSV)</label>
@@ -1303,7 +1303,7 @@
         {% else %}
         <span>No planned data loaded</span>
         {% endif %}
-        <form method="POST" action="{{ url_for('planned_clear', project_id=project.id) }}"
+        <form method="POST" action="{{ url_for('projects.planned_clear', project_id=project.id) }}"
               onsubmit="return confirm('Clear all planned data for this project?')">
           <button type="submit" class="btn btn-sm btn-outline-danger">
             <i class="bi bi-trash me-1"></i>Clear All
@@ -1330,7 +1330,7 @@
       </div>
       <div class="collapse" id="addDocumentForm">
         <div class="card-body border-bottom bg-light py-3">
-          <form method="POST" action="{{ url_for('project_document_upload', project_id=project.id) }}"
+          <form method="POST" action="{{ url_for('documents.project_document_upload', project_id=project.id) }}"
                 enctype="multipart/form-data" class="row g-2 align-items-end">
             <div class="col-sm-5">
               <label class="form-label fw-semibold small mb-1">File</label>
@@ -1367,7 +1367,7 @@
             {% for doc in project_documents %}
             <tr>
               <td class="small">
-                <a href="{{ url_for('project_document_download', project_id=project.id, doc_id=doc.id) }}"
+                <a href="{{ url_for('documents.project_document_download', project_id=project.id, doc_id=doc.id) }}"
                    class="text-decoration-none">
                   <i class="bi bi-file-earmark me-1"></i>{{ doc.original_name or doc.filename }}
                 </a>
@@ -1384,7 +1384,7 @@
               <td class="small text-muted">{{ doc.uploaded_at.strftime('%d/%m/%Y') if doc.uploaded_at else '—' }}</td>
               <td class="text-end">
                 <form method="POST"
-                      action="{{ url_for('project_document_delete', project_id=project.id, doc_id=doc.id) }}"
+                      action="{{ url_for('documents.project_document_delete', project_id=project.id, doc_id=doc.id) }}"
                       onsubmit="return confirm('Delete this document?')" class="d-inline">
                   <button type="submit" class="btn btn-sm btn-outline-danger">
                     <i class="bi bi-trash"></i>
@@ -1416,7 +1416,7 @@
         <h5 class="modal-title"><i class="bi bi-file-earmark-pdf me-2 text-danger"></i>Generate Progress Report</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="GET" action="{{ url_for('project_report_pdf', project_id=project.id) }}" target="_blank">
+      <form method="GET" action="{{ url_for('projects.project_report_pdf', project_id=project.id) }}" target="_blank">
         <div class="modal-body">
           <p class="text-muted small mb-3">Select the date range to include in the report. The Gantt chart always shows the full project timeline.</p>
           <div class="row g-3">
@@ -1451,7 +1451,7 @@
         <h5 class="modal-title"><i class="bi bi-file-earmark-pdf me-2 text-success"></i>Generate Weekly Report</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="GET" action="{{ url_for('project_weekly_report_pdf', project_id=project.id) }}" target="_blank">
+      <form method="GET" action="{{ url_for('projects.project_weekly_report_pdf', project_id=project.id) }}" target="_blank">
         <div class="modal-body">
           <p class="text-muted small mb-3">Select the week start date (Monday) for the weekly report.</p>
           <div class="row g-3">

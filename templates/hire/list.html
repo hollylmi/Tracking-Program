@@ -4,7 +4,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="fw-bold mb-0"><i class="bi bi-truck me-2 text-primary"></i>Hire Tracker</h2>
-  <a href="{{ url_for('hire_new') }}" class="btn btn-primary">
+  <a href="{{ url_for('hire.hire_new') }}" class="btn btn-primary">
     <i class="bi bi-plus-circle me-1"></i>Add Hired Machine
   </a>
 </div>
@@ -26,7 +26,7 @@
       </div>
       <div class="col-auto d-flex gap-2">
         <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-filter me-1"></i>Filter</button>
-        <a href="{{ url_for('hire_list') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+        <a href="{{ url_for('hire.hire_list') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
       </div>
     </form>
   </div>
@@ -57,7 +57,7 @@
           {% for hm in hired %}
           <tr>
             <td class="fw-semibold">
-              <a href="{{ url_for('hire_detail', hm_id=hm.id) }}" class="text-decoration-none">
+              <a href="{{ url_for('hire.hire_detail', hm_id=hm.id) }}" class="text-decoration-none">
                 {{ hm.machine_name }}
               </a>
             </td>
@@ -82,7 +82,7 @@
             </td>
             <td>
               {% if hm.invoice_filename %}
-                <a href="{{ url_for('hire_invoice', hm_id=hm.id) }}" target="_blank"
+                <a href="{{ url_for('hire.hire_invoice', hm_id=hm.id) }}" target="_blank"
                    class="btn btn-sm btn-outline-secondary" title="{{ hm.invoice_original_name }}">
                   <i class="bi bi-file-earmark"></i>
                 </a>
@@ -91,10 +91,10 @@
               {% endif %}
             </td>
             <td class="text-end text-nowrap">
-              <a href="{{ url_for('hire_detail', hm_id=hm.id) }}" class="btn btn-sm btn-outline-primary" title="View">
+              <a href="{{ url_for('hire.hire_detail', hm_id=hm.id) }}" class="btn btn-sm btn-outline-primary" title="View">
                 <i class="bi bi-eye"></i>
               </a>
-              <a href="{{ url_for('hire_report', hm_id=hm.id) }}" class="btn btn-sm btn-outline-success" title="Report">
+              <a href="{{ url_for('hire.hire_report', hm_id=hm.id) }}" class="btn btn-sm btn-outline-success" title="Report">
                 <i class="bi bi-file-earmark-pdf"></i>
               </a>
             </td>
@@ -107,7 +107,7 @@
     <div class="text-center py-5 text-muted">
       <i class="bi bi-truck fs-1 d-block mb-2"></i>
       No hired machines recorded yet.
-      <a href="{{ url_for('hire_new') }}">Add your first one</a>.
+      <a href="{{ url_for('hire.hire_new') }}">Add your first one</a>.
     </div>
     {% endif %}
   </div>
