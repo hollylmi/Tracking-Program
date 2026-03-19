@@ -37,16 +37,22 @@
 
     <div class="collapse navbar-collapse" id="navMenu">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+
+        <!-- Dashboard — all roles -->
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">
             <i class="bi bi-speedometer2 me-1"></i>Dashboard
           </a>
         </li>
+
+        <!-- All Entries — all roles -->
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'entries.entries' %}active{% endif %}" href="{{ url_for('entries.entries') }}">
             <i class="bi bi-table me-1"></i>All Entries
           </a>
         </li>
+
+        <!-- Tracking dropdown — all roles; Delay Report hidden for site -->
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('hire') or 'delay_report' in (request.endpoint or '') or request.endpoint == 'entries.morning_standdown') %}active{% endif %}"
              href="#" data-bs-toggle="dropdown">
@@ -56,20 +62,30 @@
             <li><a class="dropdown-item" href="{{ url_for('hire.hire_list') }}">
               <i class="bi bi-truck me-2"></i>Hire Tracker
             </a></li>
+            {% if current_user.role != 'site' %}
             <li><a class="dropdown-item" href="{{ url_for('delays.delay_report') }}">
               <i class="bi bi-exclamation-triangle me-2"></i>Delay Report
             </a></li>
+            {% endif %}
             <li><a class="dropdown-item" href="{{ url_for('entries.morning_standdown') }}">
               <i class="bi bi-envelope-exclamation me-2"></i>Standdown Email
             </a></li>
           </ul>
         </li>
+
+        <!-- Equipment — all roles -->
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'equipment.equipment_overview' %}active{% endif %}"
              href="{{ url_for('equipment.equipment_overview') }}">
-            <i class="bi bi-truck me-1"></i>Equipment
+            <i class="bi bi-tools me-1"></i>Equipment
           </a>
         </li>
+
+        <!-- Progress dropdown:
+             admin     — all active projects (full dropdown with Manage Projects)
+             supervisor — their permitted projects only
+             site      — hidden (project dashboards are not in their scope) -->
+        {% if current_user.role == 'admin' %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {% if request.endpoint and ('project_dashboard' in request.endpoint or 'panel' in request.endpoint) %}active{% endif %}"
              href="#" data-bs-toggle="dropdown">
@@ -99,12 +115,46 @@
             </li>
           </ul>
         </li>
+        {% elif current_user.role == 'supervisor' %}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if request.endpoint and ('project_dashboard' in request.endpoint or 'panel' in request.endpoint) %}active{% endif %}"
+             href="#" data-bs-toggle="dropdown">
+            <i class="bi bi-graph-up me-1"></i>Progress
+          </a>
+          <ul class="dropdown-menu">
+            {% for project in permitted_projects %}
+            <li>
+              <a class="dropdown-item" href="{{ url_for('projects.project_dashboard', project_id=project.id) }}">
+                <i class="bi bi-folder me-2"></i>{{ project.name }}
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item ps-4 small" href="{{ url_for('panels.panel_overview', project_id=project.id) }}">
+                <i class="bi bi-grid-3x3-gap me-2"></i>{{ project.name }} &mdash; Panels
+              </a>
+            </li>
+            {% endfor %}
+            {% if not permitted_projects %}
+            <li><span class="dropdown-item text-muted small">No projects assigned</span></li>
+            {% endif %}
+          </ul>
+        </li>
+        {% endif %}
+
+        <!-- Scheduling — all roles; label is "My Roster" for supervisor/site
+             NOTE (Prompt 2.3): scheduling_overview currently shows the full
+             company roster. Filtering to the current user's schedule is a
+             future task. -->
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint and 'scheduling' in request.endpoint %}active{% endif %}"
              href="{{ url_for('scheduling.scheduling_overview') }}">
-            <i class="bi bi-calendar3-week me-1"></i>Scheduling
+            <i class="bi bi-calendar3-week me-1"></i>
+            {%- if current_user.role == 'admin' %}Scheduling{% else %}My Roster{% endif %}
           </a>
         </li>
+
+        <!-- Admin dropdown — admin only -->
+        {% if current_user.role == 'admin' %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {% if request.endpoint and 'admin' in request.endpoint %}active{% endif %}"
              href="#" data-bs-toggle="dropdown">
@@ -146,6 +196,50 @@
             </a></li>
           </ul>
         </li>
+        {% endif %}
+
+        <!-- Project context selector — supervisor and site only -->
+        {% if current_user.role in ('supervisor', 'site') %}
+          {% if permitted_projects and permitted_projects | length > 1 %}
+          <li class="nav-item dropdown ms-lg-3">
+            <a class="nav-link dropdown-toggle fw-semibold" href="#" data-bs-toggle="dropdown"
+               style="color: #FFB7C5;">
+              <i class="bi bi-folder2-open me-1"></i>
+              {{ active_project.name if active_project else 'Select Project' }}
+            </a>
+            <ul class="dropdown-menu">
+              {% for proj in permitted_projects %}
+              <li>
+                <a class="dropdown-item {% if active_project and proj.id == active_project.id %}active{% endif %}"
+                   href="{{ request.path }}?switch_project={{ proj.id }}">
+                  {% if active_project and proj.id == active_project.id %}
+                  <i class="bi bi-check2 me-2"></i>
+                  {% else %}
+                  <i class="bi bi-folder me-2"></i>
+                  {% endif %}
+                  {{ proj.name }}
+                </a>
+              </li>
+              {% endfor %}
+            </ul>
+          </li>
+          {% elif permitted_projects and permitted_projects | length == 1 %}
+          <li class="nav-item ms-lg-3">
+            <span class="nav-link" style="color: #FFB7C5;">
+              <i class="bi bi-folder2-open me-1"></i>{{ active_project.name }}
+            </span>
+          </li>
+          {% else %}
+          <li class="nav-item ms-lg-3">
+            <span class="nav-link">
+              <span class="badge bg-warning text-dark">
+                <i class="bi bi-exclamation-triangle me-1"></i>No project assigned
+              </span>
+            </span>
+          </li>
+          {% endif %}
+        {% endif %}
+
       </ul>
 
       <div class="d-flex align-items-center gap-2">

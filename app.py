@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, url_for
+from flask import Flask, request, redirect, url_for, session
 from flask_login import LoginManager, current_user
 from models import db, User, Project
 import os
@@ -130,21 +130,80 @@ with app.app_context():
 
 
 @app.context_processor
-def inject_active_projects():
-    """Make active projects available in all templates for the Progress nav dropdown."""
-    try:
-        projects = Project.query.filter_by(active=True).order_by(Project.name).all()
-    except Exception:
-        projects = []
-    return {'_active_projects': projects}
+def inject_project_context():
+    """Inject project context into every template.
+
+    For admins: injects _active_projects (all active) for the Progress dropdown,
+                plus active_project=None and permitted_projects=None.
+    For supervisor/site: injects permitted projects, the current active project,
+                         and _active_projects (same list) for nav compatibility.
+    """
+    if not current_user.is_authenticated:
+        return {}
+
+    if current_user.role == 'admin':
+        try:
+            projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+        except Exception:
+            projects = []
+        return {
+            '_active_projects': projects,
+            'active_project': None,
+            'permitted_projects': None,
+        }
+
+    permitted = current_user.accessible_projects()
+    active_project = None
+    active_id = session.get('active_project_id')
+
+    if active_id:
+        active_project = next((p for p in permitted if p.id == active_id), None)
+
+    if not active_project and permitted:
+        active_project = permitted[0]
+        session['active_project_id'] = permitted[0].id
+
+    return {
+        '_active_projects': permitted,
+        'active_project': active_project,
+        'permitted_projects': permitted,
+    }
 
 
 @app.before_request
 def require_login():
     """Redirect unauthenticated users to login for all routes except login/static."""
-    public_endpoints = {'auth.login', 'auth.logout', 'static'}
+    public_endpoints = {'auth.login', 'auth.logout', 'auth.no_project', 'static'}
     if request.endpoint not in public_endpoints and not current_user.is_authenticated:
         return redirect(url_for('auth.login', next=request.url))
+
+
+@app.before_request
+def set_active_project():
+    """Track the active project for supervisor/site users via the session."""
+    if not current_user.is_authenticated:
+        return
+    if request.endpoint in ('static', 'auth.login', 'auth.logout', 'auth.no_project'):
+        return
+    if current_user.role == 'admin':
+        return
+
+    permitted = current_user.accessible_projects()
+
+    if not permitted:
+        session.pop('active_project_id', None)
+        return redirect(url_for('auth.no_project'))
+
+    # Allow a project switch via ?switch_project=<id>
+    requested_id = request.args.get('switch_project', type=int)
+    if requested_id:
+        permitted_ids = [p.id for p in permitted]
+        if requested_id in permitted_ids:
+            session['active_project_id'] = requested_id
+
+    # Default to first permitted project if nothing set yet
+    if 'active_project_id' not in session:
+        session['active_project_id'] = permitted[0].id
 
 
 if __name__ == '__main__':

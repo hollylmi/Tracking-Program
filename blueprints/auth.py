@@ -162,6 +162,12 @@ def admin_users_change_role(user_id):
     return redirect(url_for('auth.admin_users'))
 
 
+@auth_bp.route('/no-project')
+def no_project():
+    """Shown when a logged-in user has no project access assigned."""
+    return render_template('no_project.html')
+
+
 @auth_bp.route('/account/change-password', methods=['GET', 'POST'])
 def change_password():
     """Allow any logged-in user to change their own password."""
