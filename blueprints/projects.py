@@ -1,4 +1,3 @@
-import os
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify
@@ -8,7 +7,7 @@ from models import (db, Project, Machine, DailyEntry, HiredMachine, PlannedData,
                     ProjectNonWorkDate, ProjectBudgetedRole, ProjectMachine,
                     ProjectWorkedSunday, ProjectDocument, Role, PublicHoliday,
                     CFMEUDate, ProjectEquipmentRequirement, ProjectEquipmentAssignment)
-from utils.progress import compute_project_progress, compute_delay_summary, build_delay_report
+from utils.progress import compute_project_progress, compute_delay_summary
 from utils.gantt import compute_gantt_data
 from utils.reports import generate_project_report_pdf, generate_weekly_report_pdf
 from utils.settings import load_settings
