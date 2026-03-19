@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}User Access — {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold mb-0"><i class="bi bi-people me-2"></i>User Access</h2>
+    <div class="text-muted mt-1">
+      <span class="fw-semibold">{{ project.name }}</span>
+    </div>
+  </div>
+  <a href="{{ url_for('admin.admin_projects') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Projects
+  </a>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-person-lock me-2"></i>Supervisors &amp; Site Users
+        <span class="text-muted fw-normal small ms-2">Check users who can access this project</span>
+      </div>
+      <form method="POST">
+        <div class="card-body p-0">
+          {% if all_users %}
+          <ul class="list-group list-group-flush">
+            {% for u in all_users %}
+            <li class="list-group-item px-4 py-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox"
+                       name="user_ids" value="{{ u.id }}"
+                       id="user_{{ u.id }}"
+                       {% if u.id in access_ids %}checked{% endif %}>
+                <label class="form-check-label w-100" for="user_{{ u.id }}">
+                  <span class="fw-semibold">{{ u.display_name or u.username }}</span>
+                  <span class="text-muted small ms-1">({{ u.username }})</span>
+                  <span class="badge bg-{{ 'success' if u.role == 'supervisor' else 'secondary' }} ms-2">
+                    {{ u.role|title }}
+                  </span>
+                </label>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-people fs-1 d-block mb-2"></i>
+            No supervisor or site users found.
+          </div>
+          {% endif %}
+        </div>
+        {% if all_users %}
+        <div class="card-footer d-flex gap-2 justify-content-end">
+          <a href="{{ url_for('admin.admin_projects') }}" class="btn btn-outline-secondary">Cancel</a>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>Save Access
+          </button>
+        </div>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

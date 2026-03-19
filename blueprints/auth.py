@@ -1,10 +1,32 @@
+from functools import wraps
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import db, User
+from models import db, User, Employee
 
 auth_bp = Blueprint('auth', __name__)
+
+VALID_ROLES = ('admin', 'supervisor', 'site')
+
+
+def require_role(*roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                if request.is_json:
+                    return {'error': 'Unauthorised'}, 401
+                return redirect(url_for('auth.login'))
+            if current_user.role not in roles:
+                if request.is_json:
+                    return {'error': 'Forbidden'}, 403
+                flash('You do not have permission to access this page.', 'danger')
+                return redirect(url_for('main.index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 
 # ---------------------------------------------------------------------------
@@ -39,23 +61,27 @@ def logout():
 
 @auth_bp.route('/admin/users')
 def admin_users():
-    if not current_user.is_admin:
+    if current_user.role != 'admin':
         flash('Admin access required.', 'danger')
         return redirect(url_for('main.index'))
     users = User.query.order_by(User.username).all()
-    return render_template('admin/users.html', users=users)
+    employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
+    return render_template('admin/users.html', users=users, employees=employees)
 
 
 @auth_bp.route('/admin/users/add', methods=['POST'])
 def admin_users_add():
-    if not current_user.is_admin:
+    if current_user.role != 'admin':
         flash('Admin access required.', 'danger')
         return redirect(url_for('main.index'))
     username = request.form.get('username', '').strip().lower()
     display_name = request.form.get('display_name', '').strip()
     email = request.form.get('email', '').strip()
     password = request.form.get('password', '')
-    is_admin = request.form.get('is_admin') == 'on'
+    role = request.form.get('role', 'site')
+    employee_id = request.form.get('employee_id', '').strip() or None
+    if role not in VALID_ROLES:
+        role = 'site'
     if not username or not password:
         flash('Username and password are required.', 'danger')
         return redirect(url_for('auth.admin_users'))
@@ -67,7 +93,9 @@ def admin_users_add():
         display_name=display_name or username,
         email=email or None,
         password_hash=generate_password_hash(password),
-        is_admin=is_admin,
+        role=role,
+        is_admin=(role == 'admin'),
+        employee_id=int(employee_id) if employee_id else None,
         active=True,
     )
     db.session.add(user)
@@ -78,7 +106,7 @@ def admin_users_add():
 
 @auth_bp.route('/admin/users/<int:user_id>/toggle', methods=['POST'])
 def admin_users_toggle(user_id):
-    if not current_user.is_admin:
+    if current_user.role != 'admin':
         flash('Admin access required.', 'danger')
         return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
@@ -94,7 +122,7 @@ def admin_users_toggle(user_id):
 
 @auth_bp.route('/admin/users/<int:user_id>/reset-password', methods=['POST'])
 def admin_users_reset_password(user_id):
-    if not current_user.is_admin:
+    if current_user.role != 'admin':
         flash('Admin access required.', 'danger')
         return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
@@ -110,17 +138,27 @@ def admin_users_reset_password(user_id):
 
 @auth_bp.route('/admin/users/<int:user_id>/toggle-admin', methods=['POST'])
 def admin_users_toggle_admin(user_id):
-    if not current_user.is_admin:
+    flash('Admin status is now managed via Change Role. Please use that instead.', 'warning')
+    return redirect(url_for('auth.admin_users'))
+
+
+@auth_bp.route('/admin/users/<int:user_id>/change-role', methods=['POST'])
+def admin_users_change_role(user_id):
+    if current_user.role != 'admin':
         flash('Admin access required.', 'danger')
         return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
     if user.id == current_user.id:
-        flash('You cannot change your own admin status.', 'danger')
+        flash('You cannot change your own role.', 'danger')
         return redirect(url_for('auth.admin_users'))
-    user.is_admin = not user.is_admin
+    role = request.form.get('role', '').strip()
+    if role not in VALID_ROLES:
+        flash('Invalid role.', 'danger')
+        return redirect(url_for('auth.admin_users'))
+    user.role = role
+    user.is_admin = (role == 'admin')
     db.session.commit()
-    status = 'granted admin' if user.is_admin else 'removed admin from'
-    flash(f'Successfully {status} "{user.username}".', 'success')
+    flash(f'Role for "{user.username}" changed to {role}.', 'success')
     return redirect(url_for('auth.admin_users'))
 
 

@@ -9,7 +9,8 @@ from flask_login import login_required, current_user
 from models import (db, Project, Employee, Machine, DailyEntry, HiredMachine,
                     StandDown, Role, PlannedData, ProjectNonWorkDate,
                     ProjectBudgetedRole, ProjectMachine, ProjectWorkedSunday,
-                    PublicHoliday, CFMEUDate, AUSTRALIAN_STATES)
+                    PublicHoliday, CFMEUDate, AUSTRALIAN_STATES,
+                    User, UserProjectAccess)
 from utils.settings import load_settings, save_settings
 
 admin_bp = Blueprint('admin', __name__)
@@ -682,6 +683,66 @@ def admin_projects():
 
     projects = Project.query.order_by(Project.name).all()
     return render_template('admin/projects.html', projects=projects)
+
+
+@admin_bp.route('/admin/users/<int:user_id>/projects', methods=['GET', 'POST'])
+@login_required
+def admin_user_projects(user_id):
+    if current_user.role != 'admin':
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('main.index'))
+    user = User.query.get_or_404(user_id)
+    all_projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    if request.method == 'POST':
+        UserProjectAccess.query.filter_by(user_id=user_id).delete()
+        for pid in request.form.getlist('project_ids'):
+            try:
+                db.session.add(UserProjectAccess(
+                    user_id=user_id,
+                    project_id=int(pid),
+                    granted_by=current_user.id,
+                ))
+            except (ValueError, TypeError):
+                pass
+        db.session.commit()
+        flash(f'Project access updated for "{user.username}".', 'success')
+        return redirect(url_for('auth.admin_users'))
+
+    access_ids = {a.project_id for a in UserProjectAccess.query.filter_by(user_id=user_id).all()}
+    return render_template('admin/user_projects.html',
+                           user=user, all_projects=all_projects, access_ids=access_ids)
+
+
+@admin_bp.route('/admin/projects/<int:project_id>/users', methods=['GET', 'POST'])
+@login_required
+def admin_project_users(project_id):
+    if current_user.role != 'admin':
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('main.index'))
+    project = Project.query.get_or_404(project_id)
+    all_users = (User.query
+                 .filter(User.role.in_(['supervisor', 'site']), User.active == True)
+                 .order_by(User.username).all())
+
+    if request.method == 'POST':
+        UserProjectAccess.query.filter_by(project_id=project_id).delete()
+        for uid in request.form.getlist('user_ids'):
+            try:
+                db.session.add(UserProjectAccess(
+                    user_id=int(uid),
+                    project_id=project_id,
+                    granted_by=current_user.id,
+                ))
+            except (ValueError, TypeError):
+                pass
+        db.session.commit()
+        flash(f'User access updated for "{project.name}".', 'success')
+        return redirect(url_for('admin.admin_projects'))
+
+    access_ids = {a.user_id for a in UserProjectAccess.query.filter_by(project_id=project_id).all()}
+    return render_template('admin/project_users.html',
+                           project=project, all_users=all_users, access_ids=access_ids)
 
 
 @admin_bp.route('/admin/employees', methods=['GET', 'POST'])

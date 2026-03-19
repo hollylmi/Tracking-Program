@@ -19,6 +19,7 @@
               <th>Display Name</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Employee</th>
               <th>Status</th>
               <th>Joined</th>
               <th></th>
@@ -35,12 +36,15 @@
                 {% else %}—{% endif %}
               </td>
               <td>
-                {% if user.is_admin %}
+                {% if user.role == 'admin' %}
                   <span class="badge bg-primary">Admin</span>
+                {% elif user.role == 'supervisor' %}
+                  <span class="badge bg-success">Supervisor</span>
                 {% else %}
-                  <span class="badge bg-secondary">User</span>
+                  <span class="badge bg-secondary">Site</span>
                 {% endif %}
               </td>
+              <td class="small">{{ user.employee.name if user.employee else '—' }}</td>
               <td>
                 {% if user.active %}
                   <span class="badge bg-success">Active</span>
@@ -51,14 +55,20 @@
               <td class="small text-muted">{{ user.created_at.strftime('%d %b %Y') if user.created_at else '—' }}</td>
               <td class="text-end">
                 <div class="btn-group btn-group-sm">
-                  <!-- Toggle admin -->
+                  <!-- Project access (non-admin users only) -->
+                  {% if user.role != 'admin' %}
+                  <a href="{{ url_for('admin.admin_user_projects', user_id=user.id) }}"
+                     class="btn btn-outline-info" title="Manage Project Access">
+                    <i class="bi bi-folder-check"></i>
+                  </a>
+                  {% endif %}
+
+                  <!-- Change role -->
                   {% if user.id != current_user.id %}
-                  <form method="POST" action="{{ url_for('auth.admin_users_toggle_admin', user_id=user.id) }}"
-                        onsubmit="return confirm('Change admin status for {{ user.username }}?')">
-                    <button class="btn btn-outline-secondary" title="{{ 'Remove Admin' if user.is_admin else 'Make Admin' }}">
-                      <i class="bi bi-{{ 'shield-minus' if user.is_admin else 'shield-plus' }}"></i>
-                    </button>
-                  </form>
+                  <button class="btn btn-outline-secondary" data-bs-toggle="modal"
+                          data-bs-target="#roleModal{{ user.id }}" title="Change Role">
+                    <i class="bi bi-person-gear"></i>
+                  </button>
                   {% endif %}
 
                   <!-- Reset password -->
@@ -81,13 +91,40 @@
               </td>
             </tr>
 
+            <!-- Change role modal -->
+            {% if user.id != current_user.id %}
+            <div class="modal fade" id="roleModal{{ user.id }}" tabindex="-1">
+              <div class="modal-dialog modal-sm">
+                <form method="POST" action="{{ url_for('auth.admin_users_change_role', user_id=user.id) }}">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h6 class="modal-title fw-semibold">Change Role &mdash; {{ user.username }}</h6>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                      <select class="form-select" name="role">
+                        <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                        <option value="supervisor" {% if user.role == 'supervisor' %}selected{% endif %}>Supervisor</option>
+                        <option value="site" {% if user.role == 'site' %}selected{% endif %}>Site</option>
+                      </select>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                      <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+            {% endif %}
+
             <!-- Reset password modal -->
             <div class="modal fade" id="resetModal{{ user.id }}" tabindex="-1">
               <div class="modal-dialog modal-sm">
                 <form method="POST" action="{{ url_for('auth.admin_users_reset_password', user_id=user.id) }}">
                   <div class="modal-content">
                     <div class="modal-header">
-                      <h6 class="modal-title fw-semibold">Reset Password — {{ user.username }}</h6>
+                      <h6 class="modal-title fw-semibold">Reset Password &mdash; {{ user.username }}</h6>
                       <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
@@ -137,9 +174,23 @@
             <input type="password" class="form-control" name="password" required minlength="6"
                    autocomplete="new-password">
           </div>
-          <div class="mb-3 form-check">
-            <input type="checkbox" class="form-check-input" id="is_admin" name="is_admin">
-            <label class="form-check-label" for="is_admin">Admin (can manage users)</label>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" name="role">
+              <option value="admin">Admin</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="site" selected>Site</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Linked Employee</label>
+            <select class="form-select" name="employee_id">
+              <option value="">— No linked employee —</option>
+              {% for emp in employees %}
+              <option value="{{ emp.id }}">{{ emp.name }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Links this login to a crew member record.</div>
           </div>
           <div class="d-grid">
             <button type="submit" class="btn btn-primary">

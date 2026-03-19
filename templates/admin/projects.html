@@ -58,6 +58,10 @@
                      class="btn btn-sm btn-outline-primary" title="Progress Dashboard">
                     <i class="bi bi-graph-up"></i>
                   </a>
+                  <a href="{{ url_for('admin.admin_project_users', project_id=project.id) }}"
+                     class="btn btn-sm btn-outline-info" title="Manage User Access">
+                    <i class="bi bi-people"></i>
+                  </a>
                   <button class="btn btn-sm btn-outline-secondary" type="button"
                           onclick="openEditProject({{ project.id }},
                             '{{ project.name|replace("'", "\\'") }}',

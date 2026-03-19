@@ -13,9 +13,18 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     active = db.Column(db.Boolean, default=True)
+    role = db.Column(db.String(20), nullable=False, default='admin')
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     entries = db.relationship('DailyEntry', backref='submitted_by_user', lazy=True)
+    employee = db.relationship('Employee', foreign_keys=[employee_id], lazy=True)
+
+    def accessible_projects(self):
+        if self.role == 'admin':
+            return Project.query.filter_by(active=True).order_by(Project.name).all()
+        access = UserProjectAccess.query.filter_by(user_id=self.id).all()
+        return [a.project for a in access if a.project.active]
 
     @property
     def is_active(self):
@@ -67,6 +76,23 @@ class Project(db.Model):
 
     def __repr__(self):
         return f'<Project {self.name}>'
+
+
+class UserProjectAccess(db.Model):
+    __tablename__ = 'user_project_access'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    granted_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    granted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    project = db.relationship('Project', foreign_keys=[project_id])
+    granted_by_user = db.relationship('User', foreign_keys=[granted_by])
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'project_id'),
+    )
 
 
 class Role(db.Model):

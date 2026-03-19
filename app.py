@@ -95,6 +95,16 @@ with app.app_context():
         "ALTER TABLE diagram_layer ADD COLUMN canvas_bg_filename VARCHAR(500)",
         "ALTER TABLE diagram_layer ADD COLUMN canvas_bg_original_name VARCHAR(500)",
         "ALTER TABLE panel_install_record ADD COLUMN source VARCHAR(20)",
+        "ALTER TABLE user ADD COLUMN role VARCHAR(20) DEFAULT 'admin' NOT NULL",
+        "ALTER TABLE user ADD COLUMN employee_id INTEGER REFERENCES employee(id)",
+        """CREATE TABLE IF NOT EXISTS user_project_access (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES "user"(id),
+            project_id INTEGER NOT NULL REFERENCES project(id),
+            granted_by INTEGER REFERENCES "user"(id),
+            granted_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(user_id, project_id)
+        )""",
     ]:
         try:
             db.session.execute(db.text(stmt))
