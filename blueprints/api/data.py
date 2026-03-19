@@ -47,6 +47,19 @@ def _has_project_access(user, project_id, allowed_ids):
     return allowed_ids is None or project_id in allowed_ids
 
 
+def _parse_dt(value):
+    """Parse an ISO datetime string from the app. Returns datetime or None."""
+    if not value:
+        return None
+    s = str(value).strip().rstrip('Z')
+    for fmt in ('%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S'):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def _format_entry(entry, include_detail=False):
     """Serialise a DailyEntry. List view omits detail fields."""
     submitted_by = None
@@ -295,6 +308,7 @@ def create_entry():
         other_work_description=data.get('other_work_description') or None,
         user_id=user.id,
         local_id=local_id,
+        form_opened_at=_parse_dt(data.get('form_opened_at')),
     )
 
     db.session.add(entry)
@@ -844,6 +858,7 @@ def sync():
                 other_work_description=item.get('other_work_description') or None,
                 user_id=user.id,
                 local_id=local_id,
+                form_opened_at=_parse_dt(item.get('form_opened_at')),
             )
             db.session.add(entry)
             detail = {'local_id': local_id, 'status': 'created', 'server_id': None}
@@ -1225,3 +1240,37 @@ def send_reminders():
     count = send_entry_reminders()
 
     return {'message': 'Reminders sent', 'count': count}, 200
+
+
+@api_data_bp.route('/admin/beta-metrics', methods=['GET'])
+@jwt_required()
+def beta_metrics():
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role != 'admin':
+        return {'error': 'Admin only'}, 403
+
+    total_entries = DailyEntry.query.count()
+
+    timed = DailyEntry.query.filter(
+        DailyEntry.form_opened_at.isnot(None),
+        DailyEntry.created_at.isnot(None),
+    ).all()
+
+    # form_opened_at is sent as local time from the mobile app — using abs() to
+    # handle timezone offset differences until the mobile app sends UTC.
+    # TODO: update React Native app to send form_opened_at as UTC in Phase 3.
+    completion_seconds = [
+        abs((e.created_at - e.form_opened_at).total_seconds())
+        for e in timed
+    ]
+
+    avg = (sum(completion_seconds) / len(completion_seconds)
+           if completion_seconds else None)
+
+    return {
+        'total_entries': total_entries,
+        'entries_with_timing': len(timed),
+        'avg_completion_seconds': round(avg, 1) if avg is not None else None,
+    }, 200

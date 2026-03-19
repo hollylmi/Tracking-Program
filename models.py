@@ -158,6 +158,7 @@ class DailyEntry(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     local_id = db.Column(db.String(100), nullable=True, index=True)
+    form_opened_at = db.Column(db.DateTime, nullable=True)   # when user opened the form (mobile)
 
     employees = db.relationship(
         'Employee', secondary=entry_employees, lazy='subquery',

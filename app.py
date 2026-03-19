@@ -126,6 +126,7 @@ with app.app_context():
         "ALTER TABLE user ADD COLUMN email VARCHAR(200)",
         "ALTER TABLE daily_entry ADD COLUMN weather VARCHAR(200)",
         "ALTER TABLE daily_entry ADD COLUMN local_id VARCHAR(100)",
+        "ALTER TABLE daily_entry ADD COLUMN form_opened_at TIMESTAMP",
         "ALTER TABLE machine_breakdown ADD COLUMN local_id VARCHAR(100)",
         "ALTER TABLE diagram_layer ADD COLUMN canvas_bg_filename VARCHAR(500)",
         "ALTER TABLE diagram_layer ADD COLUMN canvas_bg_original_name VARCHAR(500)",
