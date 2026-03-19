@@ -729,3 +729,216 @@ def get_reference():
         'roles': roles,
         'projects': [_project_base(p) for p in projects],
     }, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SYNC (offline → online)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/sync', methods=['POST'])
+@jwt_required()
+def sync():
+    user, err = _get_user()
+    if err:
+        return err
+
+    data = request.get_json(silent=True)
+    if data is None:
+        return {'success': False, 'error': 'Invalid request body'}, 400
+
+    entries_in    = data.get('entries')    or []
+    breakdowns_in = data.get('breakdowns') or []
+
+    allowed_ids = _accessible_ids(user)
+
+    entry_details     = []
+    breakdown_details = []
+    # (obj, detail_dict) pairs — server_id filled in after commit
+    pending_entries    = []
+    pending_breakdowns = []
+
+    try:
+        # ── Entries ──────────────────────────────────────────────────────────
+        for item in entries_in:
+            local_id = (item.get('local_id') or '').strip() or None
+
+            # 1. Duplicate check
+            if local_id:
+                existing = DailyEntry.query.filter_by(local_id=local_id).first()
+                if existing:
+                    entry_details.append({
+                        'local_id': local_id,
+                        'status': 'skipped',
+                        'reason': 'duplicate',
+                        'server_id': existing.id,
+                    })
+                    continue
+
+            # 2a. Project exists
+            project_id = item.get('project_id')
+            if not project_id:
+                entry_details.append({
+                    'local_id': local_id,
+                    'status': 'failed',
+                    'reason': 'project access denied',
+                })
+                continue
+
+            project = Project.query.get(int(project_id))
+            if not project:
+                entry_details.append({
+                    'local_id': local_id,
+                    'status': 'failed',
+                    'reason': 'project not found',
+                })
+                continue
+
+            # 2b. Non-admin access check
+            if allowed_ids is not None and int(project_id) not in allowed_ids:
+                entry_details.append({
+                    'local_id': local_id,
+                    'status': 'failed',
+                    'reason': 'project access denied',
+                })
+                continue
+
+            # 3. Date validation
+            try:
+                entry_date = datetime.strptime(
+                    (item.get('entry_date') or '').strip(), '%Y-%m-%d'
+                ).date()
+            except ValueError:
+                entry_details.append({
+                    'local_id': local_id,
+                    'status': 'failed',
+                    'reason': 'invalid date',
+                })
+                continue
+
+            # 4. Create
+            delay_hours = float(item.get('delay_hours') or 0)
+            entry = DailyEntry(
+                project_id=int(project_id),
+                entry_date=entry_date,
+                lot_number=item.get('lot_number') or None,
+                location=item.get('location') or None,
+                material=item.get('material') or None,
+                num_people=(
+                    int(item['num_people'])
+                    if item.get('num_people') is not None else None
+                ),
+                install_hours=float(item.get('install_hours') or 0),
+                install_sqm=float(item.get('install_sqm') or 0),
+                delay_hours=delay_hours,
+                delay_billable=bool(item.get('delay_billable', True)),
+                delay_reason=(
+                    (item.get('delay_reason') or None) if delay_hours > 0 else None
+                ),
+                delay_description=item.get('delay_description') or None,
+                machines_stood_down=bool(item.get('machines_stood_down', False)),
+                weather=item.get('weather') or None,
+                notes=item.get('notes') or None,
+                other_work_description=item.get('other_work_description') or None,
+                user_id=user.id,
+                local_id=local_id,
+            )
+            db.session.add(entry)
+            detail = {'local_id': local_id, 'status': 'created', 'server_id': None}
+            entry_details.append(detail)
+            pending_entries.append((entry, detail))
+
+        # ── Breakdowns ───────────────────────────────────────────────────────
+        for item in breakdowns_in:
+            local_id = (item.get('local_id') or '').strip() or None
+
+            # 1. local_id is required
+            if not local_id:
+                breakdown_details.append({
+                    'local_id': None,
+                    'status': 'failed',
+                    'reason': 'local_id is required',
+                })
+                continue
+
+            # 2. Duplicate check
+            existing = MachineBreakdown.query.filter_by(local_id=local_id).first()
+            if existing:
+                breakdown_details.append({
+                    'local_id': local_id,
+                    'status': 'skipped',
+                    'reason': 'duplicate',
+                    'server_id': existing.id,
+                })
+                continue
+
+            # 3. Machine exists
+            machine_id = item.get('machine_id')
+            machine = Machine.query.get(int(machine_id)) if machine_id else None
+            if not machine:
+                breakdown_details.append({
+                    'local_id': local_id,
+                    'status': 'failed',
+                    'reason': 'machine not found',
+                })
+                continue
+
+            # 4. Date validation
+            try:
+                breakdown_date = datetime.strptime(
+                    (item.get('breakdown_date') or '').strip(), '%Y-%m-%d'
+                ).date()
+            except ValueError:
+                breakdown_details.append({
+                    'local_id': local_id,
+                    'status': 'failed',
+                    'reason': 'invalid date',
+                })
+                continue
+
+            # 5. Build description, appending resolution_notes if provided
+            description = (item.get('description') or '').strip()
+            resolution_notes = (item.get('resolution_notes') or '').strip()
+            if resolution_notes:
+                description = description + '\nResolution: ' + resolution_notes
+
+            # 6. Create
+            bd = MachineBreakdown(
+                machine_id=machine.id,
+                incident_date=breakdown_date,
+                description=description,
+                repair_status='completed' if item.get('resolved') else 'pending',
+                local_id=local_id,
+            )
+            db.session.add(bd)
+            detail = {'local_id': local_id, 'status': 'created', 'server_id': None}
+            breakdown_details.append(detail)
+            pending_breakdowns.append((bd, detail))
+
+        # Single commit for all new records
+        db.session.commit()
+
+        # Fill in server-assigned IDs now that the commit has flushed them
+        for obj, detail in pending_entries:
+            detail['server_id'] = obj.id
+        for obj, detail in pending_breakdowns:
+            detail['server_id'] = obj.id
+
+    except Exception as e:
+        db.session.rollback()
+        return {'success': False, 'error': 'Sync failed', 'detail': str(e)}, 500
+
+    def _summary(received, details):
+        return {
+            'received': received,
+            'created': sum(1 for d in details if d['status'] == 'created'),
+            'skipped': sum(1 for d in details if d['status'] == 'skipped'),
+            'failed':  sum(1 for d in details if d['status'] == 'failed'),
+            'details': details,
+        }
+
+    return {
+        'success': True,
+        'entries':    _summary(len(entries_in),    entry_details),
+        'breakdowns': _summary(len(breakdowns_in), breakdown_details),
+        'synced_at':  datetime.utcnow().isoformat(),
+    }, 200

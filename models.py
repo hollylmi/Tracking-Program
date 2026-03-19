@@ -478,6 +478,7 @@ class MachineBreakdown(db.Model):
     anticipated_return = db.Column(db.Date)
     resolved_date = db.Column(db.Date)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    local_id = db.Column(db.String(100), nullable=True, index=True)
 
     machine = db.relationship('Machine', backref='breakdowns')
     hired_machine = db.relationship('HiredMachine', backref='breakdowns')
