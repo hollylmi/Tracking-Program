@@ -1,7 +1,7 @@
 import os
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, request, url_for
+from flask import Blueprint, make_response, request, url_for
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from models import (
@@ -9,8 +9,11 @@ from models import (
     MachineBreakdown, ProjectDocument, ProjectMachine, ProjectAssignment,
     PlannedData, Role,
 )
-from utils.progress import compute_project_progress
-from utils.schedule import build_schedule_grid
+from utils.gantt import compute_gantt_data
+from utils.progress import compute_project_progress, compute_delay_summary, build_delay_report
+from utils.reports import generate_project_report_pdf, generate_weekly_report_pdf, generate_delay_pdf, generate_pdf
+from utils.schedule import build_schedule_grid, build_day_summary
+from utils.settings import load_settings
 
 api_data_bp = Blueprint('api_data', __name__)
 
@@ -942,3 +945,210 @@ def sync():
         'breakdowns': _summary(len(breakdowns_in), breakdown_details),
         'synced_at':  datetime.utcnow().isoformat(),
     }, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF REPORT ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/reports/project/<int:project_id>/progress', methods=['GET'])
+@jwt_required()
+def report_project_progress(project_id):
+    user, err = _get_user()
+    if err:
+        return err
+
+    if user.role == 'site':
+        return {'error': 'Access denied'}, 403
+
+    allowed_ids = _accessible_ids(user)
+    if not _has_project_access(user, project_id, allowed_ids):
+        return {'error': 'Access denied'}, 403
+
+    project = Project.query.get(project_id)
+    if not project:
+        return {'error': 'Project not found'}, 404
+
+    date_from_str = request.args.get('date_from', '').strip()
+    date_to_str = request.args.get('date_to', '').strip()
+    date_from = None
+    date_to = None
+    if date_from_str:
+        try:
+            date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        except ValueError:
+            return {'error': 'Invalid date_from. Use YYYY-MM-DD.'}, 400
+    if date_to_str:
+        try:
+            date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+        except ValueError:
+            return {'error': 'Invalid date_to. Use YYYY-MM-DD.'}, 400
+
+    progress = compute_project_progress(project_id)
+    delay_summary = compute_delay_summary(project_id)
+    gantt_data = compute_gantt_data(project_id)
+    settings = load_settings()
+
+    try:
+        pdf_bytes = generate_project_report_pdf(
+            project=project,
+            progress=progress,
+            delay_summary=delay_summary,
+            cost_estimate=None,
+            settings=settings,
+            date_from=date_from,
+            date_to=date_to,
+            gantt_data=gantt_data,
+        )
+    except Exception as e:
+        return {'error': 'PDF generation failed', 'detail': str(e)}, 500
+
+    filename = f"{project.name} Progress Report.pdf"
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@api_data_bp.route('/reports/project/<int:project_id>/weekly', methods=['GET'])
+@jwt_required()
+def report_project_weekly(project_id):
+    user, err = _get_user()
+    if err:
+        return err
+
+    if user.role == 'site':
+        return {'error': 'Access denied'}, 403
+
+    allowed_ids = _accessible_ids(user)
+    if not _has_project_access(user, project_id, allowed_ids):
+        return {'error': 'Access denied'}, 403
+
+    project = Project.query.get(project_id)
+    if not project:
+        return {'error': 'Project not found'}, 404
+
+    week_start_str = request.args.get('week_start', '').strip()
+    week_end_str = request.args.get('week_end', '').strip()
+    if not week_start_str or not week_end_str:
+        return {'error': 'week_start and week_end are required'}, 400
+    try:
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+        week_end = datetime.strptime(week_end_str, '%Y-%m-%d').date()
+    except ValueError:
+        return {'error': 'Invalid date. Use YYYY-MM-DD.'}, 400
+
+    entries = (DailyEntry.query
+               .filter_by(project_id=project_id)
+               .filter(DailyEntry.entry_date >= week_start)
+               .filter(DailyEntry.entry_date <= week_end)
+               .order_by(DailyEntry.entry_date)
+               .all())
+
+    settings = load_settings()
+
+    try:
+        pdf_bytes = generate_weekly_report_pdf(project, week_start, week_end, entries, settings)
+    except Exception as e:
+        return {'error': 'PDF generation failed', 'detail': str(e)}, 500
+
+    filename = f"{project.name} Weekly {week_start_str}.pdf"
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@api_data_bp.route('/reports/delays', methods=['GET'])
+@jwt_required()
+def report_delays():
+    user, err = _get_user()
+    if err:
+        return err
+
+    if user.role == 'site':
+        return {'error': 'Access denied'}, 403
+
+    project_id = request.args.get('project_id', '').strip()
+    billable_filter = request.args.get('billable_filter', 'all').strip()
+
+    if project_id:
+        try:
+            project_id_int = int(project_id)
+        except ValueError:
+            return {'error': 'Invalid project_id'}, 400
+        allowed_ids = _accessible_ids(user)
+        if not _has_project_access(user, project_id_int, allowed_ids):
+            return {'error': 'Access denied'}, 403
+
+    date_from_str = request.args.get('date_from', '').strip()
+    date_to_str = request.args.get('date_to', '').strip()
+    if not date_from_str or not date_to_str:
+        return {'error': 'date_from and date_to are required'}, 400
+    try:
+        date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        return {'error': 'Invalid date. Use YYYY-MM-DD.'}, 400
+
+    project_name = ''
+    if project_id:
+        p = Project.query.get(int(project_id))
+        project_name = p.name if p else ''
+
+    rows, summary = build_delay_report(project_id, date_from, date_to, billable_filter)
+    settings = load_settings()
+
+    try:
+        pdf_bytes = generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings)
+    except Exception as e:
+        return {'error': 'PDF generation failed', 'detail': str(e)}, 500
+
+    filename = f"Delay Report {date_from_str} to {date_to_str}.pdf"
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@api_data_bp.route('/reports/hire/<int:hired_machine_id>', methods=['GET'])
+@jwt_required()
+def report_hire(hired_machine_id):
+    user, err = _get_user()
+    if err:
+        return err
+
+    if user.role == 'site':
+        return {'error': 'Access denied'}, 403
+
+    hm = HiredMachine.query.get(hired_machine_id)
+    if not hm:
+        return {'error': 'Hired machine not found'}, 404
+
+    allowed_ids = _accessible_ids(user)
+    if not _has_project_access(user, hm.project_id, allowed_ids):
+        return {'error': 'Access denied'}, 403
+
+    date_from_str = request.args.get('date_from', '').strip()
+    date_to_str = request.args.get('date_to', '').strip()
+    if not date_from_str or not date_to_str:
+        return {'error': 'date_from and date_to are required'}, 400
+    try:
+        date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        return {'error': 'Invalid date. Use YYYY-MM-DD.'}, 400
+
+    days, summary = build_day_summary(hm, date_from, date_to)
+    settings = load_settings()
+
+    try:
+        pdf_bytes = generate_pdf(hm, date_from, date_to, days, summary, settings)
+    except Exception as e:
+        return {'error': 'PDF generation failed', 'detail': str(e)}, 500
+
+    filename = f"{hm.machine_name} Standdown {date_from_str}.pdf"
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
