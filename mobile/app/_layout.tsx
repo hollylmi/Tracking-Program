@@ -3,6 +3,7 @@ import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
+import { initDB } from '../lib/db'
 import { api } from '../lib/api'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 
@@ -23,6 +24,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     const init = async () => {
+      initDB()
       await loadStoredAuth()
       // If a token was restored, refresh the user object so
       // accessible_projects is always current on app start.

@@ -90,3 +90,48 @@ export interface RosterDay {
   project_name: string | null
   label: string
 }
+
+export interface LocalEntry {
+  local_id: string
+  server_id?: number
+  project_id: number
+  entry_date: string
+  lot_number?: string
+  location?: string
+  material?: string
+  num_people?: number
+  install_hours?: number
+  install_sqm?: number
+  delay_hours?: number
+  delay_billable?: boolean
+  delay_reason?: string
+  delay_description?: string
+  notes?: string
+  other_work_description?: string
+  machines_stood_down?: boolean
+  weather?: string
+  form_opened_at?: string
+  synced?: number
+  created_at?: string
+}
+
+export interface LocalBreakdown {
+  local_id: string
+  server_id?: number
+  machine_id: number
+  breakdown_date: string
+  description: string
+  resolved?: boolean
+  resolution_notes?: string
+  synced?: number
+  created_at?: string
+}
+
+export interface CachedProject {
+  id: number
+  name: string
+  start_date?: string
+  active?: number
+  quoted_days?: number
+  hours_per_day?: number
+}
