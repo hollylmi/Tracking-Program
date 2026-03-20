@@ -9,6 +9,7 @@ from models import (
     MachineBreakdown, ProjectDocument, ProjectMachine, ProjectAssignment,
     PlannedData, Role, DeviceToken,
 )
+import storage
 from utils.gantt import compute_gantt_data
 from utils.progress import compute_project_progress, compute_delay_summary, build_delay_report
 from utils.reports import generate_project_report_pdf, generate_weekly_report_pdf, generate_delay_pdf, generate_pdf
@@ -96,7 +97,7 @@ def _format_entry(entry, include_detail=False):
             {
                 'id': p.id,
                 'url': url_for(
-                    'entries.serve_entry_photo',
+                    'api_data.serve_photo',
                     filename=p.filename,
                     _external=True,
                 ),
@@ -106,6 +107,17 @@ def _format_entry(entry, include_detail=False):
         ]
 
     return base
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHOTOS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/photos/<filename>')
+@jwt_required()
+def serve_photo(filename):
+    local_path = os.path.join(UPLOAD_FOLDER, filename)
+    return storage.serve_file(f'photos/{filename}', local_path)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
