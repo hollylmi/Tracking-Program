@@ -32,7 +32,8 @@
       "expo-secure-store",
       "expo-camera",
       "expo-image-picker",
-      "expo-location"
+      "expo-location",
+      "@react-native-community/datetimepicker"
     ]
   }
 }

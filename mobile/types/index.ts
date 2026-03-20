@@ -135,3 +135,10 @@ export interface CachedProject {
   quoted_days?: number
   hours_per_day?: number
 }
+
+export interface ReferenceData {
+  lots: string[]
+  materials: string[]
+  roles: string[]
+  projects: { id: number; name: string }[]
+}

@@ -13,6 +13,8 @@ import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
+import Toast from '../../components/ui/Toast'
+import { useToastStore } from '../../store/toast'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { useEntries } from '../../hooks/useEntries'
 import { Entry } from '../../types'
@@ -135,6 +137,7 @@ export default function EntriesScreen() {
   const router = useRouter()
   const [activeFilter, setActiveFilter] = useState<Filter>('All')
   const [refreshing, setRefreshing] = useState(false)
+  const { visible: toastVisible, message: toastMessage, type: toastType, hide: hideToast } = useToastStore()
 
   const { data, isLoading, isError, refetch } = useEntries({ per_page: 200 })
   const allEntries = data?.entries ?? []
@@ -240,6 +243,8 @@ export default function EntriesScreen() {
           style={styles.list}
         />
       )}
+
+      <Toast visible={toastVisible} message={toastMessage} type={toastType} onHide={hideToast} />
     </SafeAreaView>
   )
 }

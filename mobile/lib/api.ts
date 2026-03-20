@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { API_BASE_URL } from '../constants/api'
 import { useAuthStore } from '../store/auth'
-import { User, Project, Entry, Machine, Breakdown, Document, RosterDay } from '../types'
+import { User, Project, Entry, Machine, Breakdown, Document, RosterDay, LocalEntry } from '../types'
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -102,7 +102,7 @@ export const api = {
         { params }
       ),
     detail: (id: number) => apiClient.get<Entry>(`/entries/${id}`),
-    create: (data: Partial<Entry>) => apiClient.post<Entry>('/entries', data),
+    create: (data: LocalEntry) => apiClient.post<Entry>('/entries', data),
     update: (id: number, data: Partial<Entry>) => apiClient.put<Entry>(`/entries/${id}`, data),
   },
 

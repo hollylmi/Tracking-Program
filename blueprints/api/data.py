@@ -2,6 +2,7 @@ import os
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, make_response, request, url_for
+from sqlalchemy import or_
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from models import (
@@ -731,6 +732,89 @@ def get_roster():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EMPLOYEES / MACHINES / HIRE
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _active_employees(allowed_ids):
+    """Return active employees, scoped to accessible projects for non-admin users."""
+    if allowed_ids is None:
+        return (Employee.query
+                .filter_by(active=True)
+                .order_by(Employee.role, Employee.name)
+                .all())
+    return (Employee.query
+            .join(ProjectAssignment, ProjectAssignment.employee_id == Employee.id)
+            .filter(
+                Employee.active == True,
+                ProjectAssignment.project_id.in_(allowed_ids),
+            )
+            .order_by(Employee.role, Employee.name)
+            .distinct()
+            .all())
+
+
+def _active_hire(allowed_ids):
+    """Return hired machines currently on site (delivery ≤ today ≤ return), scoped for non-admin."""
+    today = date.today()
+    query = HiredMachine.query.filter(
+        HiredMachine.active == True,
+        or_(HiredMachine.delivery_date == None, HiredMachine.delivery_date <= today),
+        or_(HiredMachine.return_date == None,   HiredMachine.return_date >= today),
+    )
+    if allowed_ids is not None:
+        query = query.filter(HiredMachine.project_id.in_(allowed_ids))
+    return query.order_by(HiredMachine.machine_name).all()
+
+
+@api_data_bp.route('/employees/active', methods=['GET'])
+@jwt_required()
+def get_active_employees():
+    user, err = _get_user()
+    if err:
+        return err
+
+    employees = _active_employees(_accessible_ids(user))
+    return {
+        'employees': [
+            {'id': e.id, 'name': e.name, 'role': e.role or ''}
+            for e in employees
+        ]
+    }, 200
+
+
+@api_data_bp.route('/machines/active', methods=['GET'])
+@jwt_required()
+def get_active_machines():
+    user, err = _get_user()
+    if err:
+        return err
+
+    machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
+    return {
+        'machines': [
+            {'id': m.id, 'name': m.name, 'type': m.machine_type or ''}
+            for m in machines
+        ]
+    }, 200
+
+
+@api_data_bp.route('/hire/active', methods=['GET'])
+@jwt_required()
+def get_active_hire():
+    user, err = _get_user()
+    if err:
+        return err
+
+    hired = _active_hire(_accessible_ids(user))
+    return {
+        'hired_machines': [
+            {'id': h.id, 'machine_name': h.machine_name, 'hire_company': h.hire_company or ''}
+            for h in hired
+        ]
+    }, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # REFERENCE DATA
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -752,11 +836,25 @@ def get_reference():
     roles = [r.name for r in Role.query.order_by(Role.name).all()]
     projects = user.accessible_projects()
 
+    machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
+
     return {
         'lots': lots,
         'materials': materials,
         'roles': roles,
         'projects': [_project_base(p) for p in projects],
+        'employees': [
+            {'id': e.id, 'name': e.name, 'role': e.role or ''}
+            for e in _active_employees(allowed_ids)
+        ],
+        'machines': [
+            {'id': m.id, 'name': m.name, 'type': m.machine_type or ''}
+            for m in machines
+        ],
+        'hired_machines': [
+            {'id': h.id, 'machine_name': h.machine_name, 'hire_company': h.hire_company or ''}
+            for h in _active_hire(allowed_ids)
+        ],
     }, 200
 
 
