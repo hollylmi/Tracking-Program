@@ -22,3 +22,7 @@ Thumbs.db
 # Editor
 .vscode/
 *.swp
+
+# Mobile App
+mobile/node_modules/
+mobile/.expo/
