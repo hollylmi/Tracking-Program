@@ -10,18 +10,78 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
-import Card from '../../components/ui/Card'
-import Badge from '../../components/ui/Badge'
-import LoadingSpinner from '../../components/ui/LoadingSpinner'
-import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
-import { api } from '../../lib/api'
-import { API_BASE_URL } from '../../constants/api'
-import { useAuthStore } from '../../store/auth'
+import Card from '../../../components/ui/Card'
+import Badge from '../../../components/ui/Badge'
+import LoadingSpinner from '../../../components/ui/LoadingSpinner'
+import { Colors, Typography, Spacing, BorderRadius } from '../../../constants/theme'
+import { api } from '../../../lib/api'
+import { API_BASE_URL } from '../../../constants/api'
+import { useAuthStore } from '../../../store/auth'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
+
+const SLATE = '#475569'
+
+// ─── Internal header ──────────────────────────────────────────────────────────
+
+function InternalHeader({
+  onBack,
+  onEdit,
+  canEdit,
+}: {
+  onBack: () => void
+  onEdit: () => void
+  canEdit: boolean
+}) {
+  return (
+    <View style={hdr.bar}>
+      <TouchableOpacity
+        onPress={onBack}
+        style={hdr.leftBtn}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="chevron-back" size={24} color={Colors.white} />
+      </TouchableOpacity>
+      <Text style={hdr.title}>Entry Detail</Text>
+      {canEdit ? (
+        <TouchableOpacity onPress={onEdit} style={hdr.rightBtn}>
+          <Text style={hdr.editText}>Edit</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={hdr.rightBtn} />
+      )}
+    </View>
+  )
+}
+
+const hdr = StyleSheet.create({
+  bar: {
+    backgroundColor: SLATE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 13,
+  },
+  leftBtn: { width: 40, alignItems: 'flex-start' },
+  rightBtn: { width: 40, alignItems: 'flex-end' },
+  title: {
+    flex: 1,
+    textAlign: 'center',
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  editText: {
+    color: Colors.primary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,11 +93,6 @@ function formatDateLong(dateStr: string): string {
     month: 'long',
     year: 'numeric',
   })
-}
-
-function formatDateShort(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 function getPhotoUrl(url: string): string {
@@ -114,6 +169,7 @@ export default function EntryDetailScreen() {
   const [photoIndex, setPhotoIndex] = useState<number | null>(null)
   const [modalStatus, setModalStatus] = useState<'loading' | 'ok' | 'error'>('loading')
   const token = useAuthStore((s) => s.accessToken)
+  const user = useAuthStore((s) => s.user)
 
   const { data: entry, isLoading, isError } = useQuery({
     queryKey: ['entry', id],
@@ -121,28 +177,36 @@ export default function EntryDetailScreen() {
     enabled: !!id,
   })
 
+  const canEdit = !!user && !!entry && (
+    user.role === 'admin' ||
+    user.role === 'supervisor' ||
+    entry.submitted_by_user_id === user.id
+  )
+
   // ── Loading ──
   if (isLoading) {
     return (
-      <>
-        <Stack.Screen options={{ title: 'Entry Detail' }} />
-        <LoadingSpinner fullScreen />
-      </>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <InternalHeader onBack={() => router.back()} onEdit={() => {}} canEdit={false} />
+        <View style={styles.loadingBody}>
+          <LoadingSpinner fullScreen />
+        </View>
+      </SafeAreaView>
     )
   }
 
   // ── Error ──
   if (isError || !entry) {
     return (
-      <>
-        <Stack.Screen options={{ title: 'Entry Detail' }} />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <InternalHeader onBack={() => router.back()} onEdit={() => {}} canEdit={false} />
         <View style={styles.errorBody}>
           <Text style={styles.errorText}>Could not load entry.</Text>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
             <Text style={styles.backBtnText}>Go Back</Text>
           </TouchableOpacity>
         </View>
-      </>
+      </SafeAreaView>
     )
   }
 
@@ -157,17 +221,11 @@ export default function EntryDetailScreen() {
     .join(' — ')
 
   return (
-    <>
-      {/* Dynamic Stack header with date subtitle */}
-      <Stack.Screen
-        options={{
-          headerTitle: () => (
-            <View>
-              <Text style={styles.stackTitle}>Entry Detail</Text>
-              <Text style={styles.stackSubtitle}>{formatDateShort(entry.date)}</Text>
-            </View>
-          ),
-        }}
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <InternalHeader
+        onBack={() => router.back()}
+        onEdit={() => router.push(`/entry/${id}/edit` as any)}
+        canEdit={canEdit}
       />
 
       <ScrollView
@@ -175,7 +233,7 @@ export default function EntryDetailScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Section 1: Basic info ── */}
+        {/* ── Basic info ── */}
         <SectionHeader title="BASIC INFO" />
         <Card>
           <BasicRow label="Date" value={formatDateLong(entry.date)} />
@@ -195,7 +253,7 @@ export default function EntryDetailScreen() {
           )}
         </Card>
 
-        {/* ── Section 2: Production ── */}
+        {/* ── Production ── */}
         <SectionHeader title="PRODUCTION" />
         <Card>
           <InfoRow icon="time-outline" label="Install Hours" value={`${entry.install_hours} hrs`} />
@@ -205,7 +263,37 @@ export default function EntryDetailScreen() {
           <InfoRow icon="people-outline" label="Crew Size" value={`${entry.num_people} people`} />
         </Card>
 
-        {/* ── Section 3: Delays ── */}
+        {/* ── Crew on site ── */}
+        {entry.employees && entry.employees.length > 0 && (
+          <>
+            <SectionHeader title={`CREW ON SITE (${entry.employees.length})`} />
+            <Card>
+              {entry.employees.map((emp, i) => (
+                <View key={emp.id}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <BasicRow label={emp.name} value={emp.role} />
+                </View>
+              ))}
+            </Card>
+          </>
+        )}
+
+        {/* ── Equipment used ── */}
+        {entry.machines && entry.machines.length > 0 && (
+          <>
+            <SectionHeader title="EQUIPMENT USED" />
+            <Card>
+              {entry.machines.map((m, i) => (
+                <View key={m.id}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <BasicRow label={m.name} value={m.type} />
+                </View>
+              ))}
+            </Card>
+          </>
+        )}
+
+        {/* ── Delays ── */}
         {entry.delay_hours > 0 && (
           <>
             <SectionHeader title="DELAYS" />
@@ -232,7 +320,25 @@ export default function EntryDetailScreen() {
           </>
         )}
 
-        {/* ── Section 4: Photos ── */}
+        {/* ── Hired machines stood down ── */}
+        {entry.standdown_machines && entry.standdown_machines.length > 0 && (
+          <>
+            <SectionHeader title="HIRED MACHINES STOOD DOWN" />
+            <Card>
+              {entry.standdown_machines.map((m, i) => (
+                <View key={m.id}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <View style={styles.standdownRow}>
+                    <Ionicons name="alert-circle-outline" size={16} color={Colors.warning} />
+                    <Text style={styles.standdownText}>{m.machine_name}</Text>
+                  </View>
+                </View>
+              ))}
+            </Card>
+          </>
+        )}
+
+        {/* ── Photos ── */}
         {photos.length > 0 && (
           <>
             <SectionHeader title={`PHOTOS (${photos.length})`} />
@@ -252,7 +358,7 @@ export default function EntryDetailScreen() {
           </>
         )}
 
-        {/* ── Section 5: Notes ── */}
+        {/* ── Notes ── */}
         {entry.notes && (
           <>
             <SectionHeader title="NOTES" />
@@ -310,25 +416,21 @@ export default function EntryDetailScreen() {
           </View>
         </Modal>
       )}
-    </>
+    </SafeAreaView>
   )
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  // Stack header
-  stackTitle: {
-    ...Typography.h4,
-    color: Colors.textPrimary,
+  safeArea: {
+    flex: 1,
+    backgroundColor: SLATE,
   },
-  stackSubtitle: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    marginTop: 1,
+  loadingBody: {
+    flex: 1,
+    backgroundColor: Colors.background,
   },
-
-  // Scroll body
   scroll: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -338,8 +440,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xxl,
     gap: Spacing.xs,
   },
-
-  // Section header
   sectionHeader: {
     ...Typography.label,
     color: Colors.textSecondary,
@@ -349,14 +449,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
     paddingHorizontal: 2,
   },
-
-  // Shared divider
   divider: {
     height: 1,
     backgroundColor: Colors.border,
   },
-
-  // Basic info rows
   basicRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -376,8 +472,6 @@ const styles = StyleSheet.create({
     flex: 2,
     textAlign: 'right',
   },
-
-  // Production info rows
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -398,8 +492,17 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontWeight: '600',
   },
-
-  // Delay card
+  standdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+  },
+  standdownText: {
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
   delayCard: {
     borderLeftWidth: 4,
     borderLeftColor: Colors.warning,
@@ -414,8 +517,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.textPrimary,
   },
-
-  // Photos
   photoRow: {
     gap: Spacing.sm,
     paddingVertical: Spacing.xs,
@@ -432,8 +533,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // Notes
   notesCard: {
     backgroundColor: Colors.surface,
   },
@@ -442,8 +541,6 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontStyle: 'italic',
   },
-
-  // Error state
   errorBody: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -466,8 +563,6 @@ const styles = StyleSheet.create({
     color: Colors.dark,
     fontWeight: '600',
   },
-
-  // Photo modal
   modalContainer: {
     flex: 1,
     backgroundColor: '#000',

@@ -125,7 +125,8 @@ export const api = {
   },
 
   reference: {
-    get: () => apiClient.get('/reference'),
+    get: (projectId?: number) =>
+      apiClient.get('/reference', projectId ? { params: { project_id: projectId } } : undefined),
   },
 
   sync: {

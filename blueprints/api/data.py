@@ -84,6 +84,7 @@ def _format_entry(entry, include_detail=False):
         'delay_billable': entry.delay_billable,
         'notes': entry.notes,
         'submitted_by': submitted_by,
+        'submitted_by_user_id': entry.user_id,
         'photo_count': len(entry.photos),
         'created_at': entry.created_at.isoformat() if entry.created_at else None,
     }
@@ -106,6 +107,27 @@ def _format_entry(entry, include_detail=False):
             }
             for p in entry.photos
         ]
+        base['employees'] = [
+            {'id': e.id, 'name': e.name, 'role': e.role or ''}
+            for e in entry.employees
+        ]
+        base['machines'] = [
+            {'id': m.id, 'name': m.name, 'type': m.machine_type or ''}
+            for m in entry.machines
+        ]
+        sd_ids = [sd.hired_machine_id for sd in entry.stand_downs if sd.hired_machine_id]
+        if sd_ids:
+            hm_map = {
+                hm.id: hm.machine_name
+                for hm in HiredMachine.query.filter(HiredMachine.id.in_(sd_ids)).all()
+            }
+            base['standdown_machines'] = [
+                {'id': hm_id, 'machine_name': hm_map[hm_id]}
+                for hm_id in sd_ids
+                if hm_id in hm_map
+            ]
+        else:
+            base['standdown_machines'] = []
 
     return base
 
@@ -831,8 +853,66 @@ def get_reference():
         planned_q = planned_q.filter(PlannedData.project_id.in_(allowed_ids))
     planned_rows = planned_q.all()
 
-    lots = sorted({r.lot for r in planned_rows if r.lot})
+    def _lot_sort_key(s):
+        try:
+            return (0, int(s), s)
+        except (ValueError, TypeError):
+            return (1, 0, s)
+
+    lots = sorted({r.lot for r in planned_rows if r.lot}, key=_lot_sort_key)
     materials = sorted({r.material for r in planned_rows if r.material})
+
+    lot_materials_raw: dict = {}
+    for r in planned_rows:
+        if r.lot and r.material:
+            lot_materials_raw.setdefault(r.lot, set()).add(r.material)
+    lot_materials = {lot: sorted(mats) for lot, mats in lot_materials_raw.items()}
+
+    # ── Lot+material progress ─────────────────────────────────────────────────
+    prog_pid = request.args.get('project_id', type=int)
+    if prog_pid and not (allowed_ids is None or prog_pid in allowed_ids):
+        prog_pid = None  # caller doesn't have access to that project
+
+    planned_totals: dict = {}
+    for r in planned_rows:
+        if prog_pid and r.project_id != prog_pid:
+            continue
+        if r.lot and r.material and r.planned_sqm:
+            planned_totals.setdefault(r.lot, {}).setdefault(r.material, 0.0)
+            planned_totals[r.lot][r.material] += r.planned_sqm
+
+    lot_progress: dict = {}
+    if planned_totals:
+        aq = (db.session.query(
+            DailyEntry.lot_number,
+            DailyEntry.material,
+            db.func.sum(DailyEntry.install_sqm).label('actual'),
+        ).filter(
+            DailyEntry.lot_number.isnot(None),
+            DailyEntry.material.isnot(None),
+            DailyEntry.install_sqm.isnot(None),
+        ))
+        if prog_pid:
+            aq = aq.filter(DailyEntry.project_id == prog_pid)
+        elif allowed_ids is not None:
+            aq = aq.filter(DailyEntry.project_id.in_(allowed_ids))
+        actuals = {
+            (r.lot_number, r.material): float(r.actual or 0)
+            for r in aq.group_by(DailyEntry.lot_number, DailyEntry.material).all()
+        }
+        for lot, mats in planned_totals.items():
+            lot_progress[lot] = {}
+            for mat, planned_sqm in mats.items():
+                actual_sqm = actuals.get((lot, mat), 0.0)
+                remaining_sqm = max(0.0, planned_sqm - actual_sqm)
+                pct = round(actual_sqm / planned_sqm * 100, 1) if planned_sqm > 0 else 0.0
+                lot_progress[lot][mat] = {
+                    'planned_sqm': round(planned_sqm, 1),
+                    'actual_sqm': round(actual_sqm, 1),
+                    'remaining_sqm': round(remaining_sqm, 1),
+                    'pct_complete': pct,
+                }
+
     roles = [r.name for r in Role.query.order_by(Role.name).all()]
     projects = user.accessible_projects()
 
@@ -841,6 +921,8 @@ def get_reference():
     return {
         'lots': lots,
         'materials': materials,
+        'lot_materials': lot_materials,
+        'lot_progress': lot_progress,
         'roles': roles,
         'projects': [_project_base(p) for p in projects],
         'employees': [

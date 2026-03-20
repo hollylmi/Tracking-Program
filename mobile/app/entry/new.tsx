@@ -1,6 +1,6 @@
 import 'react-native-get-random-values'
 import { v4 as uuidv4 } from 'uuid'
-import { useState, useRef } from 'react'
+import { useState, useRef, forwardRef } from 'react'
 import {
   View,
   Text,
@@ -17,7 +17,6 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import ScreenHeader from '../../components/layout/ScreenHeader'
 import Button from '../../components/ui/Button'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme'
 import { useReference } from '../../hooks/useReference'
@@ -26,9 +25,11 @@ import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
 import { api } from '../../lib/api'
 import { saveEntry, markEntrySynced } from '../../lib/db'
-import { LocalEntry } from '../../types'
+import { LocalEntry, LotMaterialProgress } from '../../types'
 
-// ── Constants ─────────────────────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+const SLATE = '#475569'
 
 const WEATHER_OPTIONS = [
   'Clear', 'Cloudy', 'Overcast', 'Light Rain',
@@ -45,26 +46,83 @@ const DELAY_REASONS = [
   'Other',
 ]
 
-const STEP_LABELS = ['Basic Info', 'Production', 'Delays', 'Notes']
+// Step indicator labels (short, for dots)
+const STEP_INDICATOR_LABELS = ['Details', 'Production', 'Crew', 'Equipment', 'Delays']
 
-// ── Helpers ───────────────────────────────────────────────────────────────────────────────
+// Internal header titles per step
+const STEP_HEADER_TITLES: Record<number, string> = {
+  1: 'Entry Details',
+  2: 'Production',
+  3: 'Crew',
+  4: 'Equipment',
+  5: 'Delays & Notes',
+}
+
+const TOTAL_STEPS = 5
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString('en-AU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
 }
 
-// ── StepIndicator ───────────────────────────────────────────────────────────────────────────
+// ── InternalHeader ─────────────────────────────────────────────────────────────
+
+interface InternalHeaderProps {
+  step: number
+  onBack: () => void
+}
+
+function InternalHeader({ step, onBack }: InternalHeaderProps) {
+  return (
+    <View style={ih.bar}>
+      <TouchableOpacity style={ih.backBtn} onPress={onBack} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Ionicons name="chevron-back" size={24} color={Colors.white} />
+      </TouchableOpacity>
+      <Text style={ih.title} numberOfLines={1}>{STEP_HEADER_TITLES[step]}</Text>
+      <Text style={ih.counter}>Step {step} of {TOTAL_STEPS}</Text>
+    </View>
+  )
+}
+
+const ih = StyleSheet.create({
+  bar: {
+    backgroundColor: SLATE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 13,
+  },
+  backBtn: {
+    width: 32,
+    alignItems: 'flex-start',
+  },
+  title: {
+    flex: 1,
+    textAlign: 'center',
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  counter: {
+    width: 72,
+    textAlign: 'right',
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    fontWeight: '400',
+  },
+})
+
+// ── StepIndicator ──────────────────────────────────────────────────────────────
 
 function StepIndicator({ current }: { current: number }) {
   return (
     <View style={si.container}>
       <View style={si.row}>
-        {STEP_LABELS.map((label, i) => {
+        {STEP_INDICATOR_LABELS.map((label, i) => {
           const step = i + 1
           const done = step < current
           const active = step === current
@@ -93,14 +151,10 @@ const si = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   item: { flex: 1, alignItems: 'center', gap: 5 },
   dot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: Colors.border,
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: Colors.border,
     backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   dotDone: { backgroundColor: Colors.dark, borderColor: Colors.dark },
   dotActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
@@ -108,7 +162,7 @@ const si = StyleSheet.create({
   labelActive: { color: Colors.primaryDark, fontWeight: '600' },
 })
 
-// ── SelectField ─────────────────────────────────────────────────────────────────────────────
+// ── SelectField ────────────────────────────────────────────────────────────────
 
 interface SelectFieldProps {
   label: string
@@ -186,33 +240,19 @@ function SelectField({ label, value, options, onChange, placeholder = 'Select...
 const sf = StyleSheet.create({
   group: { marginBottom: Spacing.md },
   label: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
+    ...Typography.label, color: Colors.textSecondary,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
   },
   input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
-    ...Typography.body,
-    color: Colors.textPrimary,
-    backgroundColor: Colors.white,
+    borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md, paddingVertical: 12,
+    ...Typography.body, color: Colors.textPrimary, backgroundColor: Colors.white,
   },
   inputError: { borderColor: Colors.error },
   select: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
-    backgroundColor: Colors.white,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md, paddingVertical: 12, backgroundColor: Colors.white,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   selectText: { ...Typography.body, color: Colors.textPrimary },
   placeholder: { color: Colors.textLight },
@@ -220,36 +260,26 @@ const sf = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: Colors.white,
-    borderTopLeftRadius: BorderRadius.lg,
-    borderTopRightRadius: BorderRadius.lg,
-    maxHeight: '60%',
-    paddingBottom: Spacing.xl,
+    borderTopLeftRadius: BorderRadius.lg, borderTopRightRadius: BorderRadius.lg,
+    maxHeight: '60%', paddingBottom: Spacing.xl,
   },
   sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   sheetTitle: { ...Typography.h4, color: Colors.textPrimary },
   option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.surface,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: Colors.surface,
   },
   optionSelected: { backgroundColor: '#FFF5F7' },
   optionText: { ...Typography.body, color: Colors.textPrimary },
   optionTextSelected: { color: Colors.primary, fontWeight: '600' },
 })
 
-// ── FieldInput ──────────────────────────────────────────────────────────────────────────────
+// ── FieldInput ─────────────────────────────────────────────────────────────────
 
 interface FieldInputProps {
   label: string
@@ -261,16 +291,23 @@ interface FieldInputProps {
   optional?: boolean
   minHeight?: number
   error?: string
+  returnKeyType?: 'next' | 'done' | 'default'
+  onSubmitEditing?: () => void
 }
 
-function FieldInput({
-  label, value, onChangeText, placeholder,
-  keyboardType = 'default', multiline, optional, minHeight, error,
-}: FieldInputProps) {
+const FieldInput = forwardRef<TextInput, FieldInputProps>(function FieldInput(
+  {
+    label, value, onChangeText, placeholder,
+    keyboardType = 'default', multiline, optional, minHeight, error,
+    returnKeyType = 'default', onSubmitEditing,
+  },
+  ref,
+) {
   return (
     <View style={fi.group}>
       <Text style={fi.label}>{label}{!optional && ' *'}</Text>
       <TextInput
+        ref={ref}
         style={[
           fi.input,
           multiline && { minHeight: minHeight ?? 80, textAlignVertical: 'top', paddingTop: 12 },
@@ -282,36 +319,31 @@ function FieldInput({
         placeholderTextColor={Colors.textLight}
         keyboardType={keyboardType}
         multiline={multiline}
+        returnKeyType={multiline ? 'default' : returnKeyType}
+        onSubmitEditing={multiline ? undefined : onSubmitEditing}
+        blurOnSubmit={multiline ? false : returnKeyType === 'done'}
       />
       {error && <Text style={fi.error}>{error}</Text>}
     </View>
   )
-}
+})
 
 const fi = StyleSheet.create({
   group: { marginBottom: Spacing.md },
   label: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
+    ...Typography.label, color: Colors.textSecondary,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
   },
   input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
-    ...Typography.body,
-    color: Colors.textPrimary,
-    backgroundColor: Colors.white,
+    borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md, paddingVertical: 12,
+    ...Typography.body, color: Colors.textPrimary, backgroundColor: Colors.white,
   },
   inputError: { borderColor: Colors.error },
   error: { ...Typography.bodySmall, color: Colors.error, marginTop: 4 },
 })
 
-// ── YesNoToggle ─────────────────────────────────────────────────────────────────────────────
+// ── YesNoToggle ────────────────────────────────────────────────────────────────
 
 function YesNoToggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -331,21 +363,198 @@ function YesNoToggle({ label, value, onChange }: { label: string; value: boolean
 
 const yn = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.md,
-    paddingVertical: 2,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: Spacing.md, paddingVertical: 2,
   },
   label: { ...Typography.body, color: Colors.textPrimary, flex: 1, marginRight: Spacing.md },
-  toggle: { flexDirection: 'row', borderWidth: 1.5, borderColor: Colors.border, borderRadius: BorderRadius.md, overflow: 'hidden' },
+  toggle: {
+    flexDirection: 'row', borderWidth: 1.5, borderColor: Colors.border,
+    borderRadius: BorderRadius.md, overflow: 'hidden',
+  },
   btn: { paddingVertical: 8, paddingHorizontal: Spacing.md, backgroundColor: Colors.surface },
   btnActive: { backgroundColor: Colors.primary },
   btnText: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '600' },
   btnTextActive: { color: Colors.dark },
 })
 
-// ── Main Screen ─────────────────────────────────────────────────────────────────────────────
+// ── ChecklistSection ───────────────────────────────────────────────────────────
+
+interface ChecklistItem {
+  id: number
+  label: string
+  sublabel?: string
+}
+
+interface ChecklistSectionProps {
+  title: string
+  items: ChecklistItem[]
+  selectedIds: number[]
+  onToggle: (id: number) => void
+  emptyMessage: string
+}
+
+function ChecklistSection({ title, items, selectedIds, onToggle, emptyMessage }: ChecklistSectionProps) {
+  const selectedCount = selectedIds.length
+
+  return (
+    <View style={cl.container}>
+      <View style={cl.header}>
+        <Text style={cl.title}>{title}</Text>
+        {selectedCount > 0 && (
+          <View style={cl.badge}>
+            <Text style={cl.badgeText}>{selectedCount}</Text>
+          </View>
+        )}
+      </View>
+
+      {items.length === 0 ? (
+        <Text style={cl.empty}>{emptyMessage}</Text>
+      ) : (
+        items.map((item) => {
+          const selected = selectedIds.includes(item.id)
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={[cl.row, selected && cl.rowSelected]}
+              onPress={() => onToggle(item.id)}
+              activeOpacity={0.7}
+            >
+              <View style={[cl.check, selected && cl.checkSelected]}>
+                {selected && <Ionicons name="checkmark" size={13} color={Colors.white} />}
+              </View>
+              <View style={cl.rowText}>
+                <Text style={[cl.rowLabel, selected && cl.rowLabelSelected]}>{item.label}</Text>
+                {item.sublabel ? <Text style={cl.rowSublabel}>{item.sublabel}</Text> : null}
+              </View>
+            </TouchableOpacity>
+          )
+        })
+      )}
+    </View>
+  )
+}
+
+const cl = StyleSheet.create({
+  container: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
+    backgroundColor: Colors.white, marginBottom: Spacing.md, overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  title: { ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  badge: {
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.full,
+    minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: { ...Typography.label, color: Colors.dark, fontWeight: '700' },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingHorizontal: Spacing.md, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.surface,
+  },
+  rowSelected: { backgroundColor: '#FFF5F7' },
+  check: {
+    width: 22, height: 22, borderRadius: 4, borderWidth: 2,
+    borderColor: Colors.border, backgroundColor: 'transparent',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  rowText: { flex: 1 },
+  rowLabel: { ...Typography.body, color: Colors.textPrimary },
+  rowLabelSelected: { color: Colors.primaryDark, fontWeight: '600' },
+  rowSublabel: { ...Typography.bodySmall, color: Colors.textSecondary, marginTop: 1 },
+  empty: { ...Typography.bodySmall, color: Colors.textSecondary, padding: Spacing.md },
+})
+
+// ── LotProgressCard ────────────────────────────────────────────────────────────
+
+function LotProgressCard({ data }: { data: LotMaterialProgress }) {
+  const pct = Math.min(100, Math.max(0, data.pct_complete))
+  const fmt = (n: number) => n.toLocaleString('en-AU', { maximumFractionDigits: 1 })
+  return (
+    <View style={lp.card}>
+      <View style={lp.barBg}>
+        <View style={[lp.barFill, { width: `${pct}%` as any }]} />
+      </View>
+      <View style={lp.stats}>
+        <View style={lp.stat}>
+          <Text style={lp.statVal}>{fmt(data.planned_sqm)} m²</Text>
+          <Text style={lp.statLabel}>Planned</Text>
+        </View>
+        <View style={[lp.stat, lp.statCenter]}>
+          <Text style={[lp.statVal, lp.statInstalled]}>{fmt(data.actual_sqm)} m²</Text>
+          <Text style={lp.statLabel}>Installed</Text>
+        </View>
+        <View style={[lp.stat, lp.statRight]}>
+          <Text style={lp.statVal}>{fmt(data.remaining_sqm)} m²</Text>
+          <Text style={lp.statLabel}>Remaining</Text>
+        </View>
+      </View>
+      <Text style={lp.pctLabel}>{pct}% complete</Text>
+    </View>
+  )
+}
+
+const lp = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  barBg: {
+    height: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: Spacing.sm,
+  },
+  barFill: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: 4,
+  },
+  stats: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  stat: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  statCenter: {
+    alignItems: 'center',
+  },
+  statRight: {
+    alignItems: 'flex-end',
+  },
+  statVal: {
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
+  statInstalled: {
+    color: Colors.primaryDark,
+  },
+  statLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+  },
+  pctLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    textAlign: 'right',
+  },
+})
+
+// ── Main Screen ────────────────────────────────────────────────────────────────
 
 export default function NewEntryScreen() {
   const router = useRouter()
@@ -356,45 +565,69 @@ export default function NewEntryScreen() {
   const refQuery = useReference()
   const lots = refQuery.data?.lots ?? []
   const materials = refQuery.data?.materials ?? []
+  const lotMaterials = refQuery.data?.lot_materials ?? {}
+  const lotProgress = refQuery.data?.lot_progress ?? {}
+  const allEmployees = refQuery.data?.employees ?? []
+  const allMachines = refQuery.data?.machines ?? []
+  const allHiredMachines = refQuery.data?.hired_machines ?? []
 
   const formOpenedAt = useRef(new Date().toISOString()).current
 
   const [step, setStep] = useState(1)
 
-  // Step 1
+  // Step 1 — Entry Details
   const [date, setDate] = useState(new Date())
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [lotNumber, setLotNumber] = useState('')
   const [material, setMaterial] = useState('')
   const [location, setLocation] = useState('')
-
-  // Step 2
-  const [installHours, setInstallHours] = useState('')
-  const [installSqm, setInstallSqm] = useState('')
-  const [numPeople, setNumPeople] = useState('')
   const [weather, setWeather] = useState('')
 
-  // Step 3
+  // Step 2 — Production
+  const [installHours, setInstallHours] = useState('')
+  const [installSqm, setInstallSqm] = useState('')
+
+  // Step 3 — Crew
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([])
+
+  // Step 4 — Equipment
+  const [selectedMachineIds, setSelectedMachineIds] = useState<number[]>([])
+
+  // Step 5 — Delays & Notes
   const [hasDelays, setHasDelays] = useState(false)
   const [delayHours, setDelayHours] = useState('')
   const [delayReason, setDelayReason] = useState('')
   const [delayBillable, setDelayBillable] = useState(true)
   const [delayDescription, setDelayDescription] = useState('')
-  const [machinesStoodDown, setMachinesStoodDown] = useState(false)
-
-  // Step 4
+  const [selectedStanddownIds, setSelectedStanddownIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
   const [otherWork, setOtherWork] = useState('')
 
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // ── Keyboard refs ────────────────────────────────────────────────────────────
+  // Step 1 — location is the only freetext input; lot/material/weather are selects
+  const locationRef = useRef<TextInput>(null)
+  // Step 2
+  const installHoursRef = useRef<TextInput>(null)
+  const installSqmRef = useRef<TextInput>(null)
+  // Step 5
+  const delayHoursRef = useRef<TextInput>(null)
+  const delayDescRef = useRef<TextInput>(null)
+  const notesRef = useRef<TextInput>(null)
+  const otherWorkRef = useRef<TextInput>(null)
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function toggleId(ids: number[], id: number): number[] {
+    return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
+  }
+
   function validateStep(): boolean {
     const errs: Record<string, string> = {}
-    if (step === 1 && !date) {
-      errs.date = 'Date is required'
-    }
-    if (step === 3 && hasDelays) {
+    if (step === 1 && !date) errs.date = 'Date is required'
+    if (step === 5 && hasDelays) {
       if (!delayHours) errs.delayHours = 'Delay hours required'
       if (!delayReason) errs.delayReason = 'Delay reason required'
     }
@@ -411,6 +644,15 @@ export default function NewEntryScreen() {
   function handleBack() {
     setErrors({})
     setStep((s) => s - 1)
+  }
+
+  // Step 1 header back exits the screen; all other steps go to previous step
+  function handleHeaderBack() {
+    if (step === 1) {
+      router.back()
+    } else {
+      handleBack()
+    }
   }
 
   function onDateChange(_event: DateTimePickerEvent, selected?: Date) {
@@ -431,7 +673,7 @@ export default function NewEntryScreen() {
       lot_number: lotNumber || undefined,
       location: location || undefined,
       material: material || undefined,
-      num_people: numPeople ? parseInt(numPeople, 10) : undefined,
+      num_people: selectedEmployeeIds.length > 0 ? selectedEmployeeIds.length : undefined,
       install_hours: installHours ? parseFloat(installHours) : undefined,
       install_sqm: installSqm ? parseFloat(installSqm) : undefined,
       weather: weather || undefined,
@@ -439,7 +681,7 @@ export default function NewEntryScreen() {
       delay_reason: hasDelays ? delayReason || undefined : undefined,
       delay_billable: hasDelays ? delayBillable : undefined,
       delay_description: hasDelays ? delayDescription || undefined : undefined,
-      machines_stood_down: hasDelays ? machinesStoodDown : undefined,
+      machines_stood_down: hasDelays ? selectedStanddownIds.length > 0 : undefined,
       notes: notes || undefined,
       other_work_description: otherWork || undefined,
       form_opened_at: formOpenedAt,
@@ -450,7 +692,12 @@ export default function NewEntryScreen() {
 
     if (isOnline) {
       try {
-        const response = await api.entries.create(entryData)
+        const response = await api.entries.create({
+          ...entryData,
+          employee_ids: selectedEmployeeIds,
+          machine_ids: selectedMachineIds,
+          standdown_machine_ids: hasDelays ? selectedStanddownIds : [],
+        } as LocalEntry & { employee_ids: number[]; machine_ids: number[]; standdown_machine_ids: number[] })
         markEntrySynced(localId, response.data.id)
         showToast('Entry saved and synced', 'success')
       } catch {
@@ -463,9 +710,25 @@ export default function NewEntryScreen() {
     router.replace('/(tabs)/entries')
   }
 
+  // ── Derived checklist items ──────────────────────────────────────────────────
+
+  const employeeItems: ChecklistItem[] = allEmployees.map((e) => ({
+    id: e.id, label: e.name, sublabel: e.role || undefined,
+  }))
+
+  const machineItems: ChecklistItem[] = allMachines.map((m) => ({
+    id: m.id, label: m.name, sublabel: m.type || undefined,
+  }))
+
+  const hiredMachineItems: ChecklistItem[] = allHiredMachines.map((h) => ({
+    id: h.id, label: h.machine_name, sublabel: h.hire_company || undefined,
+  }))
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScreenHeader title="New Entry" showBack />
+      <InternalHeader step={step} onBack={handleHeaderBack} />
       <StepIndicator current={step} />
 
       <KeyboardAvoidingView
@@ -478,11 +741,9 @@ export default function NewEntryScreen() {
           keyboardShouldPersistTaps="handled"
         >
 
-          {/* Step 1: Basic Info */}
+          {/* ── Step 1: Entry Details ── */}
           {step === 1 && (
             <View>
-              <Text style={styles.stepTitle}>Basic Info</Text>
-
               <View style={sf.group}>
                 <Text style={sf.label}>Date *</Text>
                 <TouchableOpacity
@@ -517,59 +778,15 @@ export default function NewEntryScreen() {
                 </View>
               )}
 
-              <SelectField
-                label="Lot Number"
-                value={lotNumber}
-                options={lots}
-                onChange={setLotNumber}
-                placeholder="Select lot..."
-                optional
-              />
-              <SelectField
-                label="Material"
-                value={material}
-                options={materials}
-                onChange={setMaterial}
-                placeholder="Select material..."
-                optional
-              />
+              {/* Location is the only freetext input on this step */}
               <FieldInput
+                ref={locationRef}
                 label="Location"
                 value={location}
                 onChangeText={setLocation}
                 placeholder="e.g. Cell 3 North"
                 optional
-              />
-            </View>
-          )}
-
-          {/* Step 2: Production */}
-          {step === 2 && (
-            <View>
-              <Text style={styles.stepTitle}>Production</Text>
-              <FieldInput
-                label="Install Hours"
-                value={installHours}
-                onChangeText={setInstallHours}
-                placeholder="0.0"
-                keyboardType="decimal-pad"
-                optional
-              />
-              <FieldInput
-                label="Area Installed (m²)"
-                value={installSqm}
-                onChangeText={setInstallSqm}
-                placeholder="0.0"
-                keyboardType="decimal-pad"
-                optional
-              />
-              <FieldInput
-                label="Number of Crew"
-                value={numPeople}
-                onChangeText={setNumPeople}
-                placeholder="0"
-                keyboardType="number-pad"
-                optional
+                returnKeyType="done"
               />
               <SelectField
                 label="Weather"
@@ -582,26 +799,112 @@ export default function NewEntryScreen() {
             </View>
           )}
 
-          {/* Step 3: Delays */}
-          {step === 3 && (
+          {/* ── Step 2: Production ── */}
+          {step === 2 && (
             <View>
-              <Text style={styles.stepTitle}>Delays</Text>
+              <SelectField
+                label="Lot Number"
+                value={lotNumber}
+                options={lots}
+                onChange={(v) => {
+                  setLotNumber(v)
+                  if (v && lotMaterials[v] && material && !lotMaterials[v].includes(material)) {
+                    setMaterial('')
+                  }
+                }}
+                placeholder="Select lot..."
+                optional
+              />
+              <SelectField
+                label="Material"
+                value={material}
+                options={lotNumber && lotMaterials[lotNumber] ? lotMaterials[lotNumber] : materials}
+                onChange={setMaterial}
+                placeholder="Select material..."
+                optional
+              />
+              {lotNumber && lotMaterials[lotNumber] && (
+                <Text style={styles.filterHint}>
+                  Showing materials for Lot {lotNumber}
+                </Text>
+              )}
+              {lotNumber && material && lotProgress[lotNumber]?.[material] && (
+                <LotProgressCard data={lotProgress[lotNumber][material]} />
+              )}
+              <FieldInput
+                ref={installHoursRef}
+                label="Install Hours"
+                value={installHours}
+                onChangeText={setInstallHours}
+                placeholder="0.0"
+                keyboardType="decimal-pad"
+                optional
+                returnKeyType="next"
+                onSubmitEditing={() => installSqmRef.current?.focus()}
+              />
+              <FieldInput
+                ref={installSqmRef}
+                label="Area Installed (m²)"
+                value={installSqm}
+                onChangeText={setInstallSqm}
+                placeholder="0.0"
+                keyboardType="decimal-pad"
+                optional
+                returnKeyType="done"
+              />
+            </View>
+          )}
 
-              <YesNoToggle label="Any delays today?" value={hasDelays} onChange={setHasDelays} />
+          {/* ── Step 3: Crew ── */}
+          {step === 3 && (
+            <ChecklistSection
+              title="Crew Members"
+              items={employeeItems}
+              selectedIds={selectedEmployeeIds}
+              onToggle={(id) => setSelectedEmployeeIds((prev) => toggleId(prev, id))}
+              emptyMessage="No active employees found."
+            />
+          )}
 
-              {!hasDelays ? (
-                <View style={styles.noDelays}>
-                  <Ionicons name="checkmark-circle-outline" size={40} color={Colors.success} />
-                  <Text style={styles.noDelaysText}>No delays recorded</Text>
-                </View>
-              ) : (
+          {/* ── Step 4: Equipment ── */}
+          {step === 4 && (
+            <ChecklistSection
+              title="Machines Used"
+              items={machineItems}
+              selectedIds={selectedMachineIds}
+              onToggle={(id) => setSelectedMachineIds((prev) => toggleId(prev, id))}
+              emptyMessage="No active machines found."
+            />
+          )}
+
+          {/* ── Step 5: Delays & Notes ── */}
+          {step === 5 && (
+            <View>
+              <YesNoToggle
+                label="Any delays today?"
+                value={hasDelays}
+                onChange={(v) => {
+                  setHasDelays(v)
+                  if (!v) {
+                    setDelayHours('')
+                    setDelayReason('')
+                    setDelayDescription('')
+                    setSelectedStanddownIds([])
+                  }
+                }}
+              />
+
+              {hasDelays && (
                 <View>
                   <FieldInput
+                    ref={delayHoursRef}
                     label="Delay Hours"
                     value={delayHours}
                     onChangeText={setDelayHours}
                     placeholder="0.0"
                     keyboardType="decimal-pad"
+                    returnKeyType="next"
+                    onSubmitEditing={() => delayDescRef.current?.focus()}
                     error={errors.delayHours}
                   />
                   <SelectField
@@ -614,6 +917,7 @@ export default function NewEntryScreen() {
                   />
                   <YesNoToggle label="Charged to client?" value={delayBillable} onChange={setDelayBillable} />
                   <FieldInput
+                    ref={delayDescRef}
                     label="Delay Description"
                     value={delayDescription}
                     onChangeText={setDelayDescription}
@@ -621,17 +925,20 @@ export default function NewEntryScreen() {
                     multiline
                     optional
                   />
-                  <YesNoToggle label="Hired machines stood down?" value={machinesStoodDown} onChange={setMachinesStoodDown} />
+                  {allHiredMachines.length > 0 && (
+                    <ChecklistSection
+                      title="Stand Down Hired Machines"
+                      items={hiredMachineItems}
+                      selectedIds={selectedStanddownIds}
+                      onToggle={(id) => setSelectedStanddownIds((prev) => toggleId(prev, id))}
+                      emptyMessage="No active hired machines."
+                    />
+                  )}
                 </View>
               )}
-            </View>
-          )}
 
-          {/* Step 4: Notes */}
-          {step === 4 && (
-            <View>
-              <Text style={styles.stepTitle}>Notes</Text>
               <FieldInput
+                ref={notesRef}
                 label="Notes"
                 value={notes}
                 onChangeText={setNotes}
@@ -641,6 +948,7 @@ export default function NewEntryScreen() {
                 optional
               />
               <FieldInput
+                ref={otherWorkRef}
                 label="Other Work Description"
                 value={otherWork}
                 onChangeText={setOtherWork}
@@ -669,7 +977,7 @@ export default function NewEntryScreen() {
           <View style={styles.navBtn} />
         )}
 
-        {step < 4 ? (
+        {step < TOTAL_STEPS ? (
           <Button
             title="NEXT →"
             onPress={handleNext}
@@ -691,31 +999,28 @@ export default function NewEntryScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.dark },
+  root: { flex: 1, backgroundColor: SLATE },
   scroll: { flex: 1, backgroundColor: Colors.background },
   scrollContent: { padding: Spacing.lg, paddingBottom: Spacing.xxl },
-  stepTitle: { ...Typography.h2, color: Colors.textPrimary, marginBottom: Spacing.lg },
-  datePicker: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  filterHint: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+    marginTop: -Spacing.sm,
     marginBottom: Spacing.md,
-    overflow: 'hidden',
+    paddingHorizontal: 2,
+  },
+  datePicker: {
+    backgroundColor: Colors.white, borderRadius: BorderRadius.md,
+    borderWidth: 1, borderColor: Colors.border,
+    marginBottom: Spacing.md, overflow: 'hidden',
   },
   datePickerDone: { alignItems: 'flex-end', paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm },
   datePickerDoneText: { ...Typography.body, color: Colors.primary, fontWeight: '600' },
-  noDelays: { alignItems: 'center', paddingVertical: Spacing.xxl, gap: Spacing.sm },
-  noDelaysText: { ...Typography.body, color: Colors.textSecondary },
   nav: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: Spacing.md,
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    ...Shadows.sm,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: Spacing.md, backgroundColor: Colors.white,
+    borderTopWidth: 1, borderTopColor: Colors.border, ...Shadows.sm,
   },
   navBtn: { minWidth: 130 },
 })

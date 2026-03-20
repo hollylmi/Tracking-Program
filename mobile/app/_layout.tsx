@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/auth'
 import { initDB } from '../lib/db'
 import { api } from '../lib/api'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { useBackgroundSync } from '../hooks/useBackgroundSync'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,6 +22,8 @@ export default function RootLayout() {
   // Stays true until both loadStoredAuth and the /me refresh are done,
   // so the spinner never flickers off between the two async steps.
   const [initializing, setInitializing] = useState(true)
+
+  useBackgroundSync()
 
   useEffect(() => {
     const init = async () => {
@@ -55,11 +58,15 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="entry/new"
-          options={{ headerShown: true, title: 'New Entry', headerBackTitle: '' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
-          name="entry/[id]"
-          options={{ headerShown: true, title: 'Entry Detail', headerBackTitle: '' }}
+          name="entry/[id]/index"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="entry/[id]/edit"
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="breakdown/new"

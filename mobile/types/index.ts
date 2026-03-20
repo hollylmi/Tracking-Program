@@ -48,9 +48,14 @@ export interface Entry {
   delay_billable: boolean | null
   notes: string | null
   submitted_by: string | null
+  submitted_by_user_id: number | null
   photo_count: number
   created_at: string
   photos?: Photo[]
+  // detail-only fields
+  employees?: { id: number; name: string; role: string }[]
+  machines?: { id: number; name: string; type: string }[]
+  standdown_machines?: { id: number; machine_name: string }[]
 }
 
 export interface Photo {
@@ -136,9 +141,21 @@ export interface CachedProject {
   hours_per_day?: number
 }
 
+export interface LotMaterialProgress {
+  planned_sqm: number
+  actual_sqm: number
+  remaining_sqm: number
+  pct_complete: number
+}
+
 export interface ReferenceData {
   lots: string[]
   materials: string[]
+  lot_materials: Record<string, string[]>
+  lot_progress: Record<string, Record<string, LotMaterialProgress>>
   roles: string[]
   projects: { id: number; name: string }[]
+  employees: { id: number; name: string; role: string }[]
+  machines: { id: number; name: string; type: string }[]
+  hired_machines: { id: number; machine_name: string; hire_company: string }[]
 }
