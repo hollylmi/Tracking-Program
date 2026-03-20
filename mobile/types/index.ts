@@ -4,7 +4,7 @@ export interface User {
   display_name: string
   role: 'admin' | 'supervisor' | 'site'
   employee_id: number | null
-  accessible_projects: Project[]
+  accessible_projects: { id: number; name: string }[]
 }
 
 export interface Project {

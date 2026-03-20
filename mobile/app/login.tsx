@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -13,16 +13,20 @@ import {
 import { useRouter } from 'expo-router'
 import { api } from '../lib/api'
 import { useAuthStore } from '../store/auth'
+import { useProjectStore } from '../store/project'
 import { Colors, Typography, Spacing, BorderRadius } from '../constants/theme'
 
 export default function LoginScreen() {
   const router = useRouter()
   const { login } = useAuthStore()
+  const { setActiveProject } = useProjectStore()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const passwordRef = useRef<TextInput>(null)
 
   const handleLogin = async () => {
     if (!username.trim() || !password) {
@@ -32,14 +36,42 @@ export default function LoginScreen() {
     setError(null)
     setLoading(true)
     try {
-      const { data } = await api.auth.login(username.trim(), password)
-      await login(data.access_token, data.refresh_token, data.user)
+      // Step 1: get tokens
+      const { data: tokenData } = await api.auth.login(username.trim(), password)
+
+      // Step 2: set token in store so the interceptor can attach it to the /me call
+      await login(tokenData.access_token, tokenData.refresh_token, {
+        ...tokenData.user,
+        accessible_projects: [],
+      })
+
+      // Step 3: fetch full user with accessible_projects
+      const { data: fullUser } = await api.auth.me()
+
+      // Step 4: overwrite store with complete user object
+      await login(tokenData.access_token, tokenData.refresh_token, fullUser)
+
+      // Step 5: auto-select project if user has exactly one
+      if (fullUser.accessible_projects.length === 1) {
+        const p = fullUser.accessible_projects[0]
+        setActiveProject({
+          id: p.id,
+          name: p.name,
+          start_date: null,
+          active: true,
+          quoted_days: null,
+          hours_per_day: null,
+        })
+      }
+
       router.replace('/(tabs)')
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
         'Login failed. Please try again.'
       setError(message)
+      // Clear any partial auth state so the user isn't stuck half-authenticated
+      await useAuthStore.getState().logout()
     } finally {
       setLoading(false)
     }
@@ -57,7 +89,7 @@ export default function LoginScreen() {
         {/* Brand header */}
         <View style={styles.header}>
           <Text style={styles.symbol}>P/</Text>
-          <Text style={styles.brand}>Plytrack</Text>
+          <Text style={styles.brand}>PLYTRACK</Text>
           <Text style={styles.tagline}>Construction Site Management</Text>
         </View>
 
@@ -76,12 +108,15 @@ export default function LoginScreen() {
               placeholder="Enter username"
               placeholderTextColor={Colors.textLight}
               returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              editable={!loading}
             />
           </View>
 
           <View style={styles.field}>
             <Text style={styles.label}>Password</Text>
             <TextInput
+              ref={passwordRef}
               style={styles.input}
               value={password}
               onChangeText={setPassword}
@@ -90,10 +125,9 @@ export default function LoginScreen() {
               placeholderTextColor={Colors.textLight}
               returnKeyType="done"
               onSubmitEditing={handleLogin}
+              editable={!loading}
             />
           </View>
-
-          {error && <Text style={styles.error}>{error}</Text>}
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
@@ -107,6 +141,8 @@ export default function LoginScreen() {
               <Text style={styles.buttonText}>SIGN IN</Text>
             )}
           </TouchableOpacity>
+
+          {error && <Text style={styles.error}>{error}</Text>}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -134,10 +170,10 @@ const styles = StyleSheet.create({
     lineHeight: 54,
   },
   brand: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '700',
-    color: Colors.white,
-    letterSpacing: 2,
+    color: Colors.primary,
+    letterSpacing: 4,
     marginTop: Spacing.xs,
   },
   tagline: {
@@ -150,6 +186,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
   cardTitle: {
     ...Typography.h3,
@@ -171,17 +212,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.sm + 4,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm + 2,
     ...Typography.body,
     color: Colors.textPrimary,
-  },
-  error: {
-    ...Typography.bodySmall,
-    color: Colors.error,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
   },
   button: {
     backgroundColor: Colors.primary,
@@ -197,5 +232,11 @@ const styles = StyleSheet.create({
     ...Typography.h4,
     color: Colors.dark,
     letterSpacing: 1,
+  },
+  error: {
+    ...Typography.bodySmall,
+    color: Colors.error,
+    textAlign: 'center',
+    marginTop: Spacing.md,
   },
 })

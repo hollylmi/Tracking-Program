@@ -9,21 +9,31 @@ import {
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 
 interface Props {
-  label: string
+  title: string
   onPress: () => void
-  variant?: 'primary' | 'secondary' | 'ghost'
+  variant?: 'primary' | 'outline' | 'ghost'
+  size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   disabled?: boolean
+  fullWidth?: boolean
   style?: ViewStyle
   textStyle?: TextStyle
 }
 
+const paddingMap = {
+  sm: { paddingVertical: Spacing.xs + 2, paddingHorizontal: Spacing.sm },
+  md: { paddingVertical: Spacing.sm + 2, paddingHorizontal: Spacing.md },
+  lg: { paddingVertical: Spacing.md, paddingHorizontal: Spacing.lg },
+}
+
 export default function Button({
-  label,
+  title,
   onPress,
   variant = 'primary',
+  size = 'md',
   loading = false,
   disabled = false,
+  fullWidth = true,
   style,
   textStyle,
 }: Props) {
@@ -31,7 +41,14 @@ export default function Button({
 
   return (
     <TouchableOpacity
-      style={[styles.base, styles[variant], isDisabled && styles.disabled, style]}
+      style={[
+        styles.base,
+        styles[variant],
+        paddingMap[size],
+        fullWidth && styles.fullWidth,
+        isDisabled && styles.disabled,
+        style,
+      ]}
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={0.85}
@@ -42,7 +59,7 @@ export default function Button({
           size="small"
         />
       ) : (
-        <Text style={[styles.text, styles[`${variant}Text`], textStyle]}>{label}</Text>
+        <Text style={[styles.text, styles[`${variant}Text`], textStyle]}>{title}</Text>
       )}
     </TouchableOpacity>
   )
@@ -51,18 +68,19 @@ export default function Button({
 const styles = StyleSheet.create({
   base: {
     borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.sm + 2,
-    paddingHorizontal: Spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fullWidth: {
+    alignSelf: 'stretch',
   },
   primary: {
     backgroundColor: Colors.primary,
   },
-  secondary: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  outline: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -77,8 +95,8 @@ const styles = StyleSheet.create({
   primaryText: {
     color: Colors.dark,
   },
-  secondaryText: {
-    color: Colors.textPrimary,
+  outlineText: {
+    color: Colors.primary,
   },
   ghostText: {
     color: Colors.primary,
