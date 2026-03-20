@@ -97,14 +97,17 @@ export const api = {
 
   entries: {
     list: (params?: Record<string, string | number | undefined>) =>
-      apiClient.get<Entry[]>('/entries', { params }),
+      apiClient.get<{ entries: Entry[]; total: number; page: number; pages: number }>(
+        '/entries',
+        { params }
+      ),
     detail: (id: number) => apiClient.get<Entry>(`/entries/${id}`),
     create: (data: Partial<Entry>) => apiClient.post<Entry>('/entries', data),
     update: (id: number, data: Partial<Entry>) => apiClient.put<Entry>(`/entries/${id}`, data),
   },
 
   equipment: {
-    list: () => apiClient.get<Machine[]>('/machines'),
+    list: () => apiClient.get<Machine[]>('/equipment'),
     breakdowns: () => apiClient.get<Breakdown[]>('/breakdowns'),
     createBreakdown: (data: Partial<Breakdown>) =>
       apiClient.post<Breakdown>('/breakdowns', data),
@@ -126,7 +129,7 @@ export const api = {
   },
 
   sync: {
-    push: (data: unknown) => apiClient.post('/sync/push', data),
+    push: (data: unknown) => apiClient.post('/sync', data),
   },
 }
 
