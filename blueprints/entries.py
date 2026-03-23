@@ -260,6 +260,13 @@ def serve_entry_photo(filename):
     return storage.serve_file(f'photos/{filename}', os.path.join(UPLOAD_FOLDER, filename))
 
 
+@entries_bp.route('/entry/<int:entry_id>')
+@require_role('admin', 'supervisor', 'site')
+def view_entry(entry_id):
+    entry = DailyEntry.query.get_or_404(entry_id)
+    return render_template('entry_detail.html', entry=entry)
+
+
 @entries_bp.route('/entries')
 @require_role('admin', 'supervisor', 'site')
 def entries():

@@ -355,6 +355,104 @@
     </div>
     {% endif %}{# end if gantt_data #}
 
+    <!-- ── Productivity by Material ──────────────────────────────── -->
+    {% if productivity %}
+    {% set ov = productivity.overall %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-speedometer2 me-2 text-primary"></i>Productivity</h5>
+        <button class="btn btn-sm btn-outline-secondary" type="button"
+                data-bs-toggle="collapse" data-bs-target="#productivityBody">
+          <i class="bi bi-chevron-down me-1"></i>Toggle
+        </button>
+      </div>
+      <div class="collapse show" id="productivityBody">
+      <div class="card-body">
+
+        <!-- Overall summary row -->
+        <div class="row g-3 mb-3 text-center">
+          <div class="col-4">
+            <div class="p-3 rounded" style="background:#f8f9fa;">
+              <div class="fs-4 fw-bold text-primary">
+                {% if ov.planned_rate %}{{ ov.planned_rate }}{% else %}—{% endif %}
+              </div>
+              <div class="small text-muted">Planned m²/day</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-3 rounded" style="background:#f8f9fa;">
+              <div class="fs-4 fw-bold
+                {% if ov.pct_of_target is not none %}
+                  {% if ov.pct_of_target >= 100 %}text-success
+                  {% elif ov.pct_of_target >= 85 %}text-warning
+                  {% else %}text-danger{% endif %}
+                {% endif %}">
+                {% if ov.actual_rate %}{{ ov.actual_rate }}{% else %}—{% endif %}
+              </div>
+              <div class="small text-muted">Actual m²/day</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-3 rounded" style="background:#f8f9fa;">
+              <div class="fs-4 fw-bold
+                {% if ov.pct_of_target is not none %}
+                  {% if ov.pct_of_target >= 100 %}text-success
+                  {% elif ov.pct_of_target >= 85 %}text-warning
+                  {% else %}text-danger{% endif %}
+                {% endif %}">
+                {% if ov.pct_of_target is not none %}{{ ov.pct_of_target | int }}%{% else %}—{% endif %}
+              </div>
+              <div class="small text-muted">vs Plan</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Per-material breakdown -->
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Material</th>
+              <th class="text-end">Planned m²</th>
+              <th class="text-end">Actual m²</th>
+              <th class="text-end">Plan Rate<br><small class="text-muted fw-normal">m²/day</small></th>
+              <th class="text-end">Actual Rate<br><small class="text-muted fw-normal">m²/day</small></th>
+              <th class="text-end">vs Plan</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in productivity.materials %}
+            {% set pct = row.pct_of_target %}
+            <tr>
+              <td class="fw-semibold">{{ row.material }}</td>
+              <td class="text-end">{{ row.planned_sqm | int }} m²</td>
+              <td class="text-end">{{ row.actual_sqm | int }} m²</td>
+              <td class="text-end">
+                {% if row.planned_rate %}{{ row.planned_rate }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end">
+                {% if row.actual_rate %}{{ row.actual_rate }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end fw-bold
+                {% if pct is not none %}
+                  {% if pct >= 100 %}text-success
+                  {% elif pct >= 85 %}text-warning
+                  {% else %}text-danger{% endif %}
+                {% endif %}">
+                {% if pct is not none %}{{ pct | int }}%{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div class="pt-2 text-muted small fst-italic">
+          Plan rate = total planned m² ÷ planned days for that material.
+          Actual rate = total installed m² ÷ working days with entries for that material.
+        </div>
+      </div>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- ── Delay Summary ──────────────────────────────────────────── -->
     {% if delay_summary %}
     <div class="card border-0 shadow-sm mb-4">

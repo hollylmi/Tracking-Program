@@ -9,12 +9,121 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { api } from '../lib/api'
 import { useAuthStore } from '../store/auth'
 import { useProjectStore } from '../store/project'
 import { Colors, Typography, Spacing, BorderRadius } from '../constants/theme'
+import Logo from '../assets/logo.svg'
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
+
+// ─── Focused input wrapper ────────────────────────────────────────────────────
+
+function Field({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  secureTextEntry,
+  returnKeyType,
+  onSubmitEditing,
+  editable,
+  inputRef,
+}: {
+  label: string
+  value: string
+  onChangeText: (v: string) => void
+  placeholder: string
+  secureTextEntry?: boolean
+  returnKeyType?: 'next' | 'done'
+  onSubmitEditing?: () => void
+  editable?: boolean
+  inputRef?: React.RefObject<TextInput>
+}) {
+  const [focused, setFocused] = useState(false)
+  const [hidden, setHidden] = useState(secureTextEntry ?? false)
+
+  return (
+    <View style={fieldSt.wrap}>
+      <Text style={fieldSt.label}>{label}</Text>
+      <View style={[fieldSt.row, focused && fieldSt.rowFocused]}>
+        <TextInput
+          ref={inputRef}
+          style={fieldSt.input}
+          value={value}
+          onChangeText={onChangeText}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder={placeholder}
+          placeholderTextColor={Colors.textLight}
+          secureTextEntry={hidden}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          editable={editable}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        />
+        {secureTextEntry && (
+          <TouchableOpacity
+            onPress={() => setHidden(h => !h)}
+            style={fieldSt.eye}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name={hidden ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color={focused ? Colors.primary : Colors.textLight}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  )
+}
+
+const fieldSt = StyleSheet.create({
+  wrap: { marginBottom: Spacing.md },
+  label: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+  },
+  rowFocused: {
+    borderColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  input: {
+    flex: 1,
+    ...Typography.body,
+    color: Colors.textPrimary,
+    paddingVertical: Spacing.sm + 4,
+  },
+  eye: {
+    paddingLeft: Spacing.sm,
+  },
+})
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function LoginScreen() {
   const router = useRouter()
@@ -36,23 +145,15 @@ export default function LoginScreen() {
     setError(null)
     setLoading(true)
     try {
-      // Step 1: get tokens
       const { data: tokenData } = await api.auth.login(username.trim(), password)
-
-      // Step 2: set token in store so the interceptor can attach it to the /me call
       await login(tokenData.access_token, tokenData.refresh_token, {
         ...tokenData.user,
         accessible_projects: [],
       })
-
-      // Step 3: fetch full user with accessible_projects
       const { data: fullUser } = await api.auth.me()
-
-      // Step 4: overwrite store with complete user object
       await login(tokenData.access_token, tokenData.refresh_token, fullUser)
 
-      // Step 5: auto-select project if user has exactly one
-      if (fullUser.accessible_projects.length === 1) {
+      if (fullUser.accessible_projects.length > 0) {
         const p = fullUser.accessible_projects[0]
         setActiveProject({
           id: p.id,
@@ -61,16 +162,16 @@ export default function LoginScreen() {
           active: true,
           quoted_days: null,
           hours_per_day: null,
+          site_address: null,
+          site_contact: null,
         })
       }
-
       router.replace('/(tabs)')
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Login failed. Please try again.'
+        'Invalid username or password.'
       setError(message)
-      // Clear any partial auth state so the user isn't stuck half-authenticated
       await useAuthStore.getState().logout()
     } finally {
       setLoading(false)
@@ -82,161 +183,267 @@ export default function LoginScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* ── Background shading layers ── */}
+      <View style={styles.glowTop} />
+      <View style={styles.glowBottom} />
+
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        {/* Brand header */}
-        <View style={styles.header}>
-          <Text style={styles.symbol}>P/</Text>
-          <Text style={styles.brand}>PLYTRACK</Text>
-          <Text style={styles.tagline}>Construction Site Management</Text>
+        {/* ── Brand ── */}
+        <View style={styles.brand}>
+          <View style={styles.logoHalo}>
+            <Logo width={180} height={96} />
+          </View>
+          <Text style={styles.wordmark}>PLYTRACK</Text>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <View style={styles.dividerDot} />
+            <View style={styles.dividerLine} />
+          </View>
+          <Text style={styles.tagline}>Geosynthetic Installation Management</Text>
         </View>
 
-        {/* Login card */}
+        {/* ── Card ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Sign In</Text>
+          {/* Card top accent bar */}
+          <View style={styles.cardAccent} />
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Username</Text>
-            <TextInput
-              style={styles.input}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="Enter username"
-              placeholderTextColor={Colors.textLight}
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
-              editable={!loading}
-            />
-          </View>
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle}>Sign In</Text>
+            <Text style={styles.cardSub}>Enter your credentials to continue</Text>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              ref={passwordRef}
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholder="Enter password"
-              placeholderTextColor={Colors.textLight}
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-              editable={!loading}
-            />
-          </View>
+            <View style={styles.fields}>
+              <Field
+                label="Username"
+                value={username}
+                onChangeText={setUsername}
+                placeholder="Enter your username"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                editable={!loading}
+              />
+              <Field
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
+                secureTextEntry
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                editable={!loading}
+                inputRef={passwordRef}
+              />
+            </View>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color={Colors.dark} size="small" />
-            ) : (
-              <Text style={styles.buttonText}>SIGN IN</Text>
+            {error && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={15} color={Colors.error} style={{ marginRight: 6 }} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
             )}
-          </TouchableOpacity>
 
-          {error && <Text style={styles.error}>{error}</Text>}
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.88}
+            >
+              {loading ? (
+                <ActivityIndicator color={Colors.dark} size="small" />
+              ) : (
+                <>
+                  <Text style={styles.buttonText}>SIGN IN</Text>
+                  <Ionicons name="arrow-forward" size={16} color={Colors.dark} style={{ marginLeft: 8 }} />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* ── Footer ── */}
+        <Text style={styles.footer}>© Plytrack · LMI Group Pty Ltd</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   )
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.dark,
+    backgroundColor: Colors.background,
   },
+
+  // Background glow blobs
+  glowTop: {
+    position: 'absolute',
+    top: -SCREEN_H * 0.15,
+    left: SCREEN_W * 0.5 - SCREEN_H * 0.35,
+    width: SCREEN_H * 0.7,
+    height: SCREEN_H * 0.7,
+    borderRadius: SCREEN_H * 0.35,
+    backgroundColor: Colors.primary,
+    opacity: 0.07,
+  },
+  glowBottom: {
+    position: 'absolute',
+    bottom: -SCREEN_H * 0.2,
+    right: -SCREEN_W * 0.2,
+    width: SCREEN_H * 0.55,
+    height: SCREEN_H * 0.55,
+    borderRadius: SCREEN_H * 0.275,
+    backgroundColor: '#A6E6FC',
+    opacity: 0.05,
+  },
+
   scroll: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: Spacing.lg,
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xxl,
   },
-  header: {
+
+  // Brand block
+  brand: {
     alignItems: 'center',
     marginBottom: Spacing.xl,
+    width: '100%',
   },
-  symbol: {
-    fontSize: 48,
-    fontWeight: '700',
+  logoHalo: {
+    width: 180,
+    height: 62,
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
+    marginBottom: Spacing.sm,
+  },
+  wordmark: {
+    fontSize: 30,
+    fontWeight: '800',
     color: Colors.primary,
-    lineHeight: 54,
-  },
-  brand: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: Colors.primary,
-    letterSpacing: 4,
-    marginTop: Spacing.xs,
-  },
-  tagline: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
-    letterSpacing: 0.5,
-  },
-  card: {
-    backgroundColor: Colors.background,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  cardTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.lg,
-    textAlign: 'center',
-  },
-  field: {
+    letterSpacing: 8,
     marginBottom: Spacing.md,
   },
-  label: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 120,
+    marginBottom: Spacing.md,
   },
-  input: {
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.primary,
+    opacity: 0.3,
+  },
+  dividerDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.primary,
+    opacity: 0.5,
+    marginHorizontal: 6,
+  },
+  tagline: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: Colors.textSecondary,
+    letterSpacing: 0.8,
+    textAlign: 'center',
+  },
+
+  // Card
+  card: {
+    width: '100%',
     backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: BorderRadius.sm + 4,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm + 2,
-    ...Typography.body,
-    color: Colors.textPrimary,
+    overflow: 'hidden',
+    shadowColor: Colors.primaryDark,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
   },
+  cardAccent: {
+    height: 3,
+    backgroundColor: Colors.primary,
+    opacity: 0.8,
+  },
+  cardBody: {
+    padding: Spacing.lg,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  cardSub: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+  },
+  fields: {
+    marginBottom: Spacing.sm,
+  },
+
+  // Error
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(244,67,54,0.1)',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(244,67,54,0.2)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  errorText: {
+    ...Typography.bodySmall,
+    color: Colors.error,
+    flex: 1,
+  },
+
+  // Button
   button: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: Spacing.sm,
+    justifyContent: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 5,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.65,
   },
   buttonText: {
-    ...Typography.h4,
+    fontSize: 14,
+    fontWeight: '700',
     color: Colors.dark,
-    letterSpacing: 1,
+    letterSpacing: 2.5,
   },
-  error: {
-    ...Typography.bodySmall,
-    color: Colors.error,
+
+  // Footer
+  footer: {
+    ...Typography.caption,
+    color: Colors.textLight,
     textAlign: 'center',
-    marginTop: Spacing.md,
+    marginTop: Spacing.xl,
+    letterSpacing: 0.5,
   },
 })

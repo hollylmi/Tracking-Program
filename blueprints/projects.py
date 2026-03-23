@@ -7,7 +7,7 @@ from models import (db, Project, Machine, DailyEntry, HiredMachine, PlannedData,
                     ProjectNonWorkDate, ProjectBudgetedRole, ProjectMachine,
                     ProjectWorkedSunday, ProjectDocument, Role, PublicHoliday,
                     CFMEUDate, ProjectEquipmentRequirement, ProjectEquipmentAssignment)
-from utils.progress import compute_project_progress, compute_delay_summary
+from utils.progress import compute_project_progress, compute_delay_summary, compute_material_productivity
 from utils.gantt import compute_gantt_data
 from utils.reports import generate_project_report_pdf, generate_weekly_report_pdf
 from utils.settings import load_settings
@@ -117,6 +117,7 @@ def project_dashboard(project_id):
     progress = compute_project_progress(project_id)
     gantt_data = compute_gantt_data(project_id)
     delay_summary = compute_delay_summary(project_id)
+    productivity = compute_material_productivity(project_id)
     non_work_dates = ProjectNonWorkDate.query.filter_by(project_id=project_id).order_by(ProjectNonWorkDate.date).all()
     has_openpyxl = HAS_OPENPYXL
 
@@ -275,6 +276,7 @@ def project_dashboard(project_id):
                            project=project, progress=progress,
                            gantt_data=gantt_data,
                            delay_summary=delay_summary,
+                           productivity=productivity,
                            non_work_dates=non_work_dates,
                            has_openpyxl=has_openpyxl,
                            budgeted_roles=budgeted_roles,

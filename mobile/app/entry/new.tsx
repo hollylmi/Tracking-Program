@@ -9,10 +9,13 @@ import {
   TouchableOpacity,
   Modal,
   FlatList,
+  Image,
   StyleSheet,
   Platform,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native'
+import * as ImagePicker from 'expo-image-picker'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'
 import { useRouter } from 'expo-router'
@@ -29,7 +32,7 @@ import { LocalEntry, LotMaterialProgress } from '../../types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const SLATE = '#475569'
+const SLATE = Colors.dark
 
 const WEATHER_OPTIONS = [
   'Clear', 'Cloudy', 'Overcast', 'Light Rain',
@@ -142,7 +145,7 @@ function StepIndicator({ current }: { current: number }) {
 
 const si = StyleSheet.create({
   container: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.background,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     borderBottomWidth: 1,
@@ -156,10 +159,10 @@ const si = StyleSheet.create({
     backgroundColor: 'transparent',
     alignItems: 'center', justifyContent: 'center',
   },
-  dotDone: { backgroundColor: Colors.dark, borderColor: Colors.dark },
+  dotDone: { backgroundColor: Colors.textSecondary, borderColor: Colors.textSecondary },
   dotActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   label: { ...Typography.caption, color: Colors.textSecondary, textAlign: 'center' },
-  labelActive: { color: Colors.primaryDark, fontWeight: '600' },
+  labelActive: { color: Colors.primary, fontWeight: '600' },
 })
 
 // ── SelectField ────────────────────────────────────────────────────────────────
@@ -172,10 +175,24 @@ interface SelectFieldProps {
   placeholder?: string
   optional?: boolean
   error?: string
+  loading?: boolean
 }
 
-function SelectField({ label, value, options, onChange, placeholder = 'Select...', optional, error }: SelectFieldProps) {
+function SelectField({ label, value, options, onChange, placeholder = 'Select...', optional, error, loading }: SelectFieldProps) {
   const [open, setOpen] = useState(false)
+
+  // While reference data is loading, show a disabled dropdown-style placeholder
+  if (loading) {
+    return (
+      <View style={sf.group}>
+        <Text style={sf.label}>{label}{!optional && ' *'}</Text>
+        <View style={[sf.select, { opacity: 0.5 }]}>
+          <Text style={sf.placeholder}>Loading…</Text>
+          <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
+        </View>
+      </View>
+    )
+  }
 
   if (options.length === 0) {
     return (
@@ -197,7 +214,7 @@ function SelectField({ label, value, options, onChange, placeholder = 'Select...
     <View style={sf.group}>
       <Text style={sf.label}>{label}{!optional && ' *'}</Text>
       <TouchableOpacity
-        style={[sf.select, !!error && sf.inputError]}
+        style={[sf.select, open && sf.selectOpen, !!error && sf.inputError]}
         onPress={() => setOpen(true)}
         activeOpacity={0.7}
       >
@@ -246,21 +263,30 @@ const sf = StyleSheet.create({
   input: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md, paddingVertical: 12,
-    ...Typography.body, color: Colors.textPrimary, backgroundColor: Colors.white,
+    ...Typography.body, color: Colors.textPrimary, backgroundColor: Colors.surface,
   },
   inputError: { borderColor: Colors.error },
   select: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md, paddingVertical: 12, backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.md, paddingVertical: 12, backgroundColor: Colors.surface,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  selectOpen: {
+    borderColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   selectText: { ...Typography.body, color: Colors.textPrimary },
   placeholder: { color: Colors.textLight },
   error: { ...Typography.bodySmall, color: Colors.error, marginTop: 4 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.background,
     borderTopLeftRadius: BorderRadius.lg, borderTopRightRadius: BorderRadius.lg,
+    borderTopWidth: 1, borderColor: Colors.border,
     maxHeight: '60%', paddingBottom: Spacing.xl,
   },
   sheetHeader: {
@@ -272,9 +298,9 @@ const sf = StyleSheet.create({
   option: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: Colors.surface,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  optionSelected: { backgroundColor: '#FFF5F7' },
+  optionSelected: { backgroundColor: 'rgba(255,183,197,0.12)' },
   optionText: { ...Typography.body, color: Colors.textPrimary },
   optionTextSelected: { color: Colors.primary, fontWeight: '600' },
 })
@@ -303,6 +329,7 @@ const FieldInput = forwardRef<TextInput, FieldInputProps>(function FieldInput(
   },
   ref,
 ) {
+  const [focused, setFocused] = useState(false)
   return (
     <View style={fi.group}>
       <Text style={fi.label}>{label}{!optional && ' *'}</Text>
@@ -310,6 +337,7 @@ const FieldInput = forwardRef<TextInput, FieldInputProps>(function FieldInput(
         ref={ref}
         style={[
           fi.input,
+          focused && fi.inputFocused,
           multiline && { minHeight: minHeight ?? 80, textAlignVertical: 'top', paddingTop: 12 },
           !!error && fi.inputError,
         ]}
@@ -322,6 +350,8 @@ const FieldInput = forwardRef<TextInput, FieldInputProps>(function FieldInput(
         returnKeyType={multiline ? 'default' : returnKeyType}
         onSubmitEditing={multiline ? undefined : onSubmitEditing}
         blurOnSubmit={multiline ? false : returnKeyType === 'done'}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
       />
       {error && <Text style={fi.error}>{error}</Text>}
     </View>
@@ -337,7 +367,15 @@ const fi = StyleSheet.create({
   input: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md, paddingVertical: 12,
-    ...Typography.body, color: Colors.textPrimary, backgroundColor: Colors.white,
+    ...Typography.body, color: Colors.textPrimary, backgroundColor: Colors.surface,
+  },
+  inputFocused: {
+    borderColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   inputError: { borderColor: Colors.error },
   error: { ...Typography.bodySmall, color: Colors.error, marginTop: 4 },
@@ -373,7 +411,7 @@ const yn = StyleSheet.create({
   },
   btn: { paddingVertical: 8, paddingHorizontal: Spacing.md, backgroundColor: Colors.surface },
   btnActive: { backgroundColor: Colors.primary },
-  btnText: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '600' },
+  btnText: { ...Typography.bodySmall, color: Colors.textPrimary, fontWeight: '600' },
   btnTextActive: { color: Colors.dark },
 })
 
@@ -437,13 +475,13 @@ function ChecklistSection({ title, items, selectedIds, onToggle, emptyMessage }:
 const cl = StyleSheet.create({
   container: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
-    backgroundColor: Colors.white, marginBottom: Spacing.md, overflow: 'hidden',
+    backgroundColor: Colors.surface, marginBottom: Spacing.md, overflow: 'hidden',
   },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.background,
   },
   title: { ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   badge: {
@@ -455,9 +493,9 @@ const cl = StyleSheet.create({
   row: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     paddingHorizontal: Spacing.md, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: Colors.surface,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  rowSelected: { backgroundColor: '#FFF5F7' },
+  rowSelected: { backgroundColor: 'rgba(255,183,197,0.1)' },
   check: {
     width: 22, height: 22, borderRadius: 4, borderWidth: 2,
     borderColor: Colors.border, backgroundColor: 'transparent',
@@ -466,7 +504,7 @@ const cl = StyleSheet.create({
   checkSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   rowText: { flex: 1 },
   rowLabel: { ...Typography.body, color: Colors.textPrimary },
-  rowLabelSelected: { color: Colors.primaryDark, fontWeight: '600' },
+  rowLabelSelected: { color: Colors.primary, fontWeight: '600' },
   rowSublabel: { ...Typography.bodySmall, color: Colors.textSecondary, marginTop: 1 },
   empty: { ...Typography.bodySmall, color: Colors.textSecondary, padding: Spacing.md },
 })
@@ -502,7 +540,7 @@ function LotProgressCard({ data }: { data: LotMaterialProgress }) {
 
 const lp = StyleSheet.create({
   card: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: BorderRadius.md,
@@ -563,6 +601,8 @@ export default function NewEntryScreen() {
   const showToast = useToastStore((s) => s.show)
 
   const refQuery = useReference()
+  // isPending covers both "fetching" and "no-data-yet" states, unlike isLoading
+  const refLoading = refQuery.isPending || refQuery.isFetching
   const lots = refQuery.data?.lots ?? []
   const materials = refQuery.data?.materials ?? []
   const lotMaterials = refQuery.data?.lot_materials ?? {}
@@ -603,6 +643,9 @@ export default function NewEntryScreen() {
   const [notes, setNotes] = useState('')
   const [otherWork, setOtherWork] = useState('')
 
+  // Photos
+  const [photos, setPhotos] = useState<{ uri: string; filename: string }[]>([])
+
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -622,6 +665,55 @@ export default function NewEntryScreen() {
 
   function toggleId(ids: number[], id: number): number[] {
     return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
+  }
+
+  async function takePhoto() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Camera access is needed to take photos.')
+      return
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: false,
+    })
+    if (!result.canceled && result.assets.length > 0) {
+      const asset = result.assets[0]
+      setPhotos((prev) => [...prev, { uri: asset.uri, filename: `photo_${Date.now()}.jpg` }])
+    }
+  }
+
+  async function pickFromLibrary() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Photo library access is needed.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsMultipleSelection: true,
+    })
+    if (!result.canceled) {
+      const picked = result.assets.map((a) => ({
+        uri: a.uri,
+        filename: `photo_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`,
+      }))
+      setPhotos((prev) => [...prev, ...picked])
+    }
+  }
+
+  function addPhoto() {
+    Alert.alert('Add Photo', 'Choose a source', [
+      { text: 'Take Photo', onPress: takePhoto },
+      { text: 'Choose from Library', onPress: pickFromLibrary },
+      { text: 'Cancel', style: 'cancel' },
+    ])
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((prev) => prev.filter((_, i) => i !== index))
   }
 
   function validateStep(): boolean {
@@ -669,7 +761,7 @@ export default function NewEntryScreen() {
     const entryData: LocalEntry = {
       local_id: localId,
       project_id: activeProject.id,
-      entry_date: date.toISOString().split('T')[0],
+      entry_date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
       lot_number: lotNumber || undefined,
       location: location || undefined,
       material: material || undefined,
@@ -698,8 +790,24 @@ export default function NewEntryScreen() {
           machine_ids: selectedMachineIds,
           standdown_machine_ids: hasDelays ? selectedStanddownIds : [],
         } as LocalEntry & { employee_ids: number[]; machine_ids: number[]; standdown_machine_ids: number[] })
-        markEntrySynced(localId, response.data.id)
-        showToast('Entry saved and synced', 'success')
+        const serverId = response.data.id
+        markEntrySynced(localId, serverId)
+
+        // Upload any photos taken
+        let photosFailed = 0
+        for (const photo of photos) {
+          try {
+            await api.photos.upload(serverId, photo.uri, photo.filename)
+          } catch {
+            photosFailed++
+          }
+        }
+
+        if (photosFailed > 0) {
+          showToast(`Entry saved — ${photosFailed} photo(s) failed to upload`, 'warning')
+        } else {
+          showToast('Entry saved and synced', 'success')
+        }
       } catch {
         showToast('Saved locally — sync failed, will retry', 'warning')
       }
@@ -733,7 +841,8 @@ export default function NewEntryScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
           style={styles.scroll}
@@ -814,6 +923,7 @@ export default function NewEntryScreen() {
                 }}
                 placeholder="Select lot..."
                 optional
+                loading={refLoading}
               />
               <SelectField
                 label="Material"
@@ -822,6 +932,7 @@ export default function NewEntryScreen() {
                 onChange={setMaterial}
                 placeholder="Select material..."
                 optional
+                loading={refLoading}
               />
               {lotNumber && lotMaterials[lotNumber] && (
                 <Text style={styles.filterHint}>
@@ -957,6 +1068,27 @@ export default function NewEntryScreen() {
                 minHeight={100}
                 optional
               />
+
+              {/* ── Photos ── */}
+              <View style={ph.group}>
+                <Text style={ph.label}>PHOTOS</Text>
+                {photos.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={ph.row}>
+                    {photos.map((p, i) => (
+                      <View key={i} style={ph.thumb}>
+                        <Image source={{ uri: p.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                        <TouchableOpacity style={ph.remove} onPress={() => removePhoto(i)}>
+                          <Ionicons name="close-circle" size={22} color={Colors.white} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+                <TouchableOpacity style={ph.btn} onPress={addPhoto} activeOpacity={0.7}>
+                  <Ionicons name="camera-outline" size={20} color={Colors.primary} />
+                  <Text style={ph.btnText}>Add Photo</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -998,6 +1130,30 @@ export default function NewEntryScreen() {
   )
 }
 
+const ph = StyleSheet.create({
+  group: { marginBottom: Spacing.md },
+  label: {
+    ...Typography.label, color: Colors.textSecondary,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+  },
+  row: { marginBottom: Spacing.sm },
+  thumb: {
+    width: 90, height: 90, borderRadius: BorderRadius.md,
+    overflow: 'hidden', backgroundColor: Colors.surface, marginRight: Spacing.sm,
+  },
+  remove: {
+    position: 'absolute', top: 4, right: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 11,
+  },
+  btn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    borderWidth: 1.5, borderColor: Colors.primary,
+    borderRadius: BorderRadius.md, paddingVertical: 14,
+    justifyContent: 'center', backgroundColor: 'rgba(255,183,197,0.08)',
+  },
+  btnText: { ...Typography.body, color: Colors.primary, fontWeight: '600' },
+})
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: SLATE },
   scroll: { flex: 1, backgroundColor: Colors.background },
@@ -1011,7 +1167,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   datePicker: {
-    backgroundColor: Colors.white, borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
     borderWidth: 1, borderColor: Colors.border,
     marginBottom: Spacing.md, overflow: 'hidden',
   },
@@ -1019,8 +1175,8 @@ const styles = StyleSheet.create({
   datePickerDoneText: { ...Typography.body, color: Colors.primary, fontWeight: '600' },
   nav: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: Spacing.md, backgroundColor: Colors.white,
-    borderTopWidth: 1, borderTopColor: Colors.border, ...Shadows.sm,
+    padding: Spacing.md, backgroundColor: Colors.background,
+    borderTopWidth: 1, borderTopColor: Colors.border,
   },
   navBtn: { minWidth: 130 },
 })

@@ -74,6 +74,91 @@ def compute_project_progress(project_id):
     }
 
 
+def compute_material_productivity(project_id):
+    """Return m²/day productivity by material: planned rate vs actual rate."""
+    planned = PlannedData.query.filter_by(project_id=project_id).all()
+    if not planned:
+        return []
+
+    # Group planned by material
+    mat_planned = {}
+    for p in planned:
+        mat = p.material or 'Unknown'
+        if mat not in mat_planned:
+            mat_planned[mat] = {'sqm': 0.0, 'day_numbers': set()}
+        mat_planned[mat]['sqm'] += p.planned_sqm or 0
+        if p.day_number:
+            mat_planned[mat]['day_numbers'].add(p.day_number)
+
+    entries = (DailyEntry.query
+               .filter_by(project_id=project_id)
+               .filter(DailyEntry.install_sqm > 0)
+               .all())
+
+    # Group actuals by material
+    mat_actual = {}
+    for e in entries:
+        mat = e.material or 'Unknown'
+        if mat not in mat_actual:
+            mat_actual[mat] = {'sqm': 0.0, 'dates': set()}
+        mat_actual[mat]['sqm'] += e.install_sqm or 0
+        if e.entry_date:
+            mat_actual[mat]['dates'].add(e.entry_date)
+
+    # Overall totals
+    total_planned_sqm = sum(v['sqm'] for v in mat_planned.values())
+    all_planned_days = len({dn for v in mat_planned.values() for dn in v['day_numbers']})
+    overall_planned_rate = round(total_planned_sqm / all_planned_days, 1) if all_planned_days > 0 else None
+
+    all_actual_dates = {d for v in mat_actual.values() for d in v['dates']}
+    total_actual_sqm = sum(v['sqm'] for v in mat_actual.values())
+    all_actual_days = len(all_actual_dates)
+    overall_actual_rate = round(total_actual_sqm / all_actual_days, 1) if all_actual_days > 0 else None
+
+    overall_pct = None
+    if overall_planned_rate and overall_actual_rate:
+        overall_pct = round(overall_actual_rate / overall_planned_rate * 100, 0)
+
+    overall = {
+        'planned_sqm': round(total_planned_sqm, 0),
+        'actual_sqm': round(total_actual_sqm, 0),
+        'planned_days': all_planned_days,
+        'actual_days': all_actual_days,
+        'planned_rate': overall_planned_rate,
+        'actual_rate': overall_actual_rate,
+        'pct_of_target': overall_pct,
+    }
+
+    materials = []
+    for mat in sorted(mat_planned.keys(), key=_natural_key):
+        plan = mat_planned[mat]
+        planned_sqm = plan['sqm']
+        planned_days = len(plan['day_numbers'])
+        planned_rate = round(planned_sqm / planned_days, 1) if planned_days > 0 else None
+
+        act = mat_actual.get(mat, {'sqm': 0.0, 'dates': set()})
+        actual_sqm = act['sqm']
+        actual_days = len(act['dates'])
+        actual_rate = round(actual_sqm / actual_days, 1) if actual_days > 0 else None
+
+        pct_of_target = None
+        if planned_rate and actual_rate:
+            pct_of_target = round(actual_rate / planned_rate * 100, 0)
+
+        materials.append({
+            'material': mat,
+            'planned_sqm': round(planned_sqm, 0),
+            'actual_sqm': round(actual_sqm, 0),
+            'planned_days': planned_days,
+            'actual_days': actual_days,
+            'planned_rate': planned_rate,
+            'actual_rate': actual_rate,
+            'pct_of_target': pct_of_target,
+        })
+
+    return {'overall': overall, 'materials': materials}
+
+
 def compute_delay_summary(project_id):
     """Return a delay summary grouped by (reason, billable) for the project dashboard."""
     entries = (DailyEntry.query

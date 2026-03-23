@@ -7,6 +7,25 @@ export interface User {
   accessible_projects: { id: number; name: string }[]
 }
 
+export interface ProductivityRow {
+  planned_sqm: number
+  actual_sqm: number
+  planned_days: number
+  actual_days: number
+  planned_rate: number | null
+  actual_rate: number | null
+  pct_of_target: number | null
+}
+
+export interface MaterialProductivity extends ProductivityRow {
+  material: string
+}
+
+export interface Productivity {
+  overall: ProductivityRow
+  materials: MaterialProductivity[]
+}
+
 export interface Project {
   id: number
   name: string
@@ -14,7 +33,22 @@ export interface Project {
   active: boolean
   quoted_days: number | null
   hours_per_day: number | null
+  site_address: string | null
+  site_contact: string | null
   progress?: ProjectProgress
+  productivity?: Productivity
+}
+
+export interface ProjectCosts {
+  has_rates: boolean
+  daily_cost: number
+  target_cost: number | null
+  forecast_cost: number | null
+  cost_variance: number | null
+  forecast_working_days: number | null
+  variance_days: number | null
+  est_finish: string | null    // 'DD/MM/YYYY'
+  target_finish: string | null // 'DD/MM/YYYY'
 }
 
 export interface ProjectProgress {
@@ -39,14 +73,18 @@ export interface Entry {
   project_id: number
   project_name: string
   lot_number: string | null
+  location: string | null
   material: string | null
+  weather: string | null
   install_hours: number
   install_sqm: number
   num_people: number
   delay_hours: number
   delay_reason: string | null
   delay_billable: boolean | null
+  delay_description: string | null
   notes: string | null
+  other_work_description: string | null
   submitted_by: string | null
   submitted_by_user_id: number | null
   photo_count: number
@@ -80,11 +118,36 @@ export interface Breakdown {
   resolved: boolean
 }
 
+export interface BreakdownDetail {
+  id: number
+  machine_id: number
+  date: string | null
+  incident_time: string | null
+  description: string
+  repair_status: 'pending' | 'in_progress' | 'completed'
+  repairing_by: string | null
+  anticipated_return: string | null
+  resolved_date: string | null
+  photos?: { id: number; url: string; filename: string }[]
+}
+
+export interface MachineDetail {
+  id: number
+  name: string
+  plant_id: string | null
+  type: string | null
+  description: string | null
+  delay_rate: number | null
+  active: boolean
+  breakdowns: BreakdownDetail[]
+}
+
 export interface Document {
   id: number
   project_id: number
   project_name: string
   filename: string
+  doc_type?: string
   uploaded_at: string
   download_url: string
 }

@@ -24,7 +24,7 @@ import { useAuthStore } from '../../../store/auth'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 
-const SLATE = '#475569'
+const SLATE = Colors.dark
 
 // ─── Internal header ──────────────────────────────────────────────────────────
 
@@ -245,6 +245,18 @@ export default function EntryDetailScreen() {
               <BasicRow label="Lot / Material" value={lotMatLabel} />
             </>
           )}
+          {entry.location && (
+            <>
+              <View style={styles.divider} />
+              <BasicRow label="Location" value={entry.location} />
+            </>
+          )}
+          {entry.weather && (
+            <>
+              <View style={styles.divider} />
+              <BasicRow label="Weather" value={entry.weather} />
+            </>
+          )}
           {entry.submitted_by && (
             <>
               <View style={styles.divider} />
@@ -316,6 +328,9 @@ export default function EntryDetailScreen() {
               {entry.delay_reason && (
                 <Text style={styles.delayReason}>{entry.delay_reason}</Text>
               )}
+              {entry.delay_description && (
+                <Text style={styles.delayDescription}>{entry.delay_description}</Text>
+              )}
             </Card>
           </>
         )}
@@ -364,6 +379,16 @@ export default function EntryDetailScreen() {
             <SectionHeader title="NOTES" />
             <Card style={styles.notesCard}>
               <Text style={styles.notesText}>{entry.notes}</Text>
+            </Card>
+          </>
+        )}
+
+        {/* ── Other work ── */}
+        {entry.other_work_description && (
+          <>
+            <SectionHeader title="OTHER WORK" />
+            <Card style={styles.notesCard}>
+              <Text style={styles.notesText}>{entry.other_work_description}</Text>
             </Card>
           </>
         )}
@@ -516,6 +541,12 @@ const styles = StyleSheet.create({
   delayReason: {
     ...Typography.body,
     color: Colors.textPrimary,
+  },
+  delayDescription: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+    fontStyle: 'italic',
   },
   photoRow: {
     gap: Spacing.sm,

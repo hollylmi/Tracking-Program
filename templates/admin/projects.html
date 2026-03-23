@@ -69,7 +69,9 @@
                             '{{ project.start_date.strftime("%Y-%m-%d") if project.start_date else "" }}',
                             '{{ project.planned_crew or "" }}',
                             '{{ project.hours_per_day or "" }}',
-                            '{{ project.quoted_days or "" }}')"
+                            '{{ project.quoted_days or "" }}',
+                            '{{ (project.site_address or '')|replace("'", "\\'") }}',
+                            '{{ (project.site_contact or '')|replace("'", "\\'") }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -165,6 +167,19 @@
             </div>
           </div>
 
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Site Address <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" name="site_address" id="projectSiteAddress" class="form-control"
+                   placeholder="e.g. 123 Industrial Rd, Hazelwood VIC 3840">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Site Contact <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" name="site_contact" id="projectSiteContact" class="form-control"
+                   placeholder="e.g. John Smith — 0412 345 678">
+            <div class="form-text">Name and/or phone number for the on-site contact.</div>
+          </div>
+
           <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary" id="submitBtn">Add Project</button>
             <button type="button" class="btn btn-outline-secondary d-none" id="cancelEditBtn"
@@ -180,7 +195,7 @@
 
 {% block scripts %}
 <script>
-  function openEditProject(id, name, description, startDate, plannedCrew, hoursPerDay, quotedDays) {
+  function openEditProject(id, name, description, startDate, plannedCrew, hoursPerDay, quotedDays, siteAddress, siteContact) {
     document.getElementById('formTitle').textContent = 'Edit Project';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
@@ -190,6 +205,8 @@
     document.getElementById('projectPlannedCrew').value = plannedCrew;
     document.getElementById('projectHoursPerDay').value = hoursPerDay;
     document.getElementById('projectQuotedDays').value = quotedDays;
+    document.getElementById('projectSiteAddress').value = siteAddress || '';
+    document.getElementById('projectSiteContact').value = siteContact || '';
     document.getElementById('submitBtn').textContent = 'Save Changes';
     document.getElementById('cancelEditBtn').classList.remove('d-none');
     document.getElementById('projectName').focus();
@@ -206,6 +223,8 @@
     document.getElementById('projectPlannedCrew').value = '';
     document.getElementById('projectHoursPerDay').value = '';
     document.getElementById('projectQuotedDays').value = '';
+    document.getElementById('projectSiteAddress').value = '';
+    document.getElementById('projectSiteContact').value = '';
     document.getElementById('submitBtn').textContent = 'Add Project';
     document.getElementById('cancelEditBtn').classList.add('d-none');
   }

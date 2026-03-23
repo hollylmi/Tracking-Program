@@ -35,7 +35,7 @@ export default function Card({ children, style, shadow = 'sm', padding = 'md' }:
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,

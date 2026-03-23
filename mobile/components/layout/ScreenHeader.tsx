@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors, Typography, Spacing } from '../../constants/theme'
+import Logo from '../../assets/logo.svg'
 
 interface Props {
   title: string
@@ -20,12 +21,16 @@ export default function ScreenHeader({ title, subtitle, showBack = false, right 
             <Ionicons name="chevron-back" size={24} color={Colors.white} />
           </TouchableOpacity>
         )}
-        <View>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+        <View style={styles.brand}>
+          <Logo width={72} height={38} />
+          <Text style={styles.brandName}>PLYTRACK</Text>
         </View>
       </View>
-      {right && <View>{right}</View>}
+      <View style={styles.titleWrap}>
+        <Text style={styles.title}>{title}</Text>
+        {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+      </View>
+      {right ? <View>{right}</View> : <View style={styles.rightPlaceholder} />}
     </View>
   )
 }
@@ -34,7 +39,7 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.dark,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -42,18 +47,37 @@ const styles = StyleSheet.create({
   left: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.xs,
+    minWidth: 90,
   },
   backBtn: {
     marginRight: Spacing.xs,
   },
+  brand: {
+    alignItems: 'center',
+    gap: 1,
+  },
+  brandName: {
+    ...Typography.caption,
+    color: Colors.primary,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    fontSize: 8,
+  },
+  titleWrap: {
+    flex: 1,
+    alignItems: 'center',
+  },
   title: {
-    ...Typography.h3,
+    ...Typography.h4,
     color: Colors.white,
   },
   subtitle: {
     ...Typography.caption,
-    color: Colors.textSecondary,
+    color: 'rgba(255,255,255,0.6)',
     marginTop: 2,
+  },
+  rightPlaceholder: {
+    minWidth: 90,
   },
 })

@@ -7,7 +7,7 @@ export function useDocuments() {
 
   return useQuery({
     queryKey: ['documents', activeProject?.id],
-    queryFn: () => api.documents.list(activeProject?.id).then((r) => r.data),
+    queryFn: () => api.documents.list(activeProject?.id).then((r) => r.data.documents),
     enabled: !!activeProject,
     staleTime: 10 * 60 * 1000,
   })

@@ -1,7 +1,9 @@
+import json
 from datetime import timedelta
 
 from flask import Flask, request, redirect, url_for, session
 from flask_login import LoginManager, current_user
+from markupsafe import Markup
 from models import db, User, Project
 import os
 
@@ -21,6 +23,8 @@ app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32 MB upload limit
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-change-in-prod')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=12)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+app.config['JWT_TOKEN_LOCATION'] = ['headers', 'query_string']
+app.config['JWT_QUERY_STRING_NAME'] = 'token'
 # TODO: Set up Railway cron job to call
 # POST /api/admin/send-reminders at 4pm
 # daily after beta launch
@@ -70,6 +74,35 @@ app.register_blueprint(api_auth_bp, url_prefix='/api')
 
 from blueprints.api.data import api_data_bp
 app.register_blueprint(api_data_bp, url_prefix='/api')
+
+@app.template_filter('breakdown_json')
+def breakdown_json_filter(bd):
+    """Serialize a MachineBreakdown model to HTML-attribute-safe JSON.
+    Double quotes are encoded as &quot; so the output can be used in data-* attributes.
+    The browser automatically decodes &quot; back to " before JSON.parse() sees it.
+    """
+    photos = []
+    for p in (bd.photos or []):
+        photos.append({
+            'url': url_for('equipment.serve_breakdown_photo', filename=p.filename),
+            'name': p.original_name or p.filename,
+        })
+    data = {
+        'id': bd.id,
+        'date': bd.incident_date.isoformat() if bd.incident_date else None,
+        'incident_time': bd.incident_time,
+        'description': bd.description or '',
+        'repair_status': bd.repair_status or 'pending',
+        'repairing_by': bd.repairing_by,
+        'anticipated_return': bd.anticipated_return.isoformat() if bd.anticipated_return else None,
+        'resolved_date': bd.resolved_date.isoformat() if bd.resolved_date else None,
+        'photos': photos,
+    }
+    raw = json.dumps(data)
+    # Encode for safe embedding in an HTML double-quoted attribute value
+    safe = raw.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+    return Markup(safe)
+
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'auth.login'

@@ -66,12 +66,11 @@
             <th class="text-center">Install Hrs</th>
             <th class="text-center">Delay Hrs</th>
             <th>Delay Reason</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
           {% for entry in entries %}
-          <tr>
+          <tr style="cursor:pointer;" onclick="window.location='{{ url_for('entries.view_entry', entry_id=entry.id) }}'">
             <td class="fw-semibold text-nowrap">{{ entry.entry_date.strftime('%m/%d/%Y') }}</td>
             <td class="text-muted text-nowrap">{{ entry.day_name }}</td>
             <td>
@@ -124,12 +123,6 @@
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}
-            </td>
-            <td class="text-end text-nowrap">
-              <a href="{{ url_for('entries.edit_entry', entry_id=entry.id) }}" class="btn btn-sm btn-outline-secondary"
-                 title="Edit">
-                <i class="bi bi-pencil"></i>
-              </a>
             </td>
           </tr>
           {% endfor %}

@@ -6,6 +6,8 @@ import { useAuthStore } from '../store/auth'
 import { initDB } from '../lib/db'
 import { api } from '../lib/api'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import Toast from '../components/ui/Toast'
+import { useToastStore } from '../store/toast'
 import { useBackgroundSync } from '../hooks/useBackgroundSync'
 
 const queryClient = new QueryClient({
@@ -16,6 +18,11 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+function GlobalToast() {
+  const { visible, message, type, hide } = useToastStore()
+  return <Toast visible={visible} message={message} type={type} onHide={hide} />
+}
 
 export default function RootLayout() {
   const { isLoading, loadStoredAuth, updateUser } = useAuthStore()
@@ -53,6 +60,7 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <StatusBar style="light" />
+      <GlobalToast />
       <Stack screenOptions={{ headerShown: false }} initialRouteName="index">
         <Stack.Screen name="login" />
         <Stack.Screen name="(tabs)" />
@@ -69,8 +77,16 @@ export default function RootLayout() {
           options={{ headerShown: false }}
         />
         <Stack.Screen
+          name="lot-entries"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="machine/[id]"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
           name="breakdown/new"
-          options={{ headerShown: true, title: 'Log Breakdown', headerBackTitle: '' }}
+          options={{ headerShown: false }}
         />
       </Stack>
     </QueryClientProvider>

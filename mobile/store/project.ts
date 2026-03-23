@@ -9,8 +9,9 @@ interface AvailableProject {
 interface ProjectState {
   activeProject: Project | null
   availableProjects: AvailableProject[]
-  setActiveProject: (project: Project) => void
+  setActiveProject: (project: Project | null) => void
   setAvailableProjects: (projects: AvailableProject[]) => void
+  clearProject: () => void
 }
 
 export const useProjectStore = create<ProjectState>((set) => ({
@@ -18,4 +19,5 @@ export const useProjectStore = create<ProjectState>((set) => ({
   availableProjects: [],
   setActiveProject: (project) => set({ activeProject: project }),
   setAvailableProjects: (projects) => set({ availableProjects: projects }),
+  clearProject: () => set({ activeProject: null, availableProjects: [] }),
 }))

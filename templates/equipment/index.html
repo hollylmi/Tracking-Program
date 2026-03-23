@@ -182,39 +182,16 @@
               <td class="small">
                 {% if bd %}
                 <div>
-                  <strong>{{ bd.incident_date.strftime('%d/%m/%Y') }}{% if bd.incident_time %} {{ bd.incident_time }}{% endif %}</strong>
-                  {% if bd.description %}<br><span class="text-muted">{{ bd.description }}</span>{% endif %}
-                  {% if bd.repairing_by %}<br><i class="bi bi-person me-1"></i>{{ bd.repairing_by }}{% endif %}
-                  {% if bd.anticipated_return %}<br><i class="bi bi-calendar me-1"></i>Est. return: {{ bd.anticipated_return.strftime('%d/%m/%Y') }}{% endif %}
+                  <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
+                    <i class="bi bi-tools me-1"></i>{{ bd.incident_date.strftime('%d/%m/%Y') }}{% if bd.incident_time %} {{ bd.incident_time }}{% endif %}
+                  </span>
+                  {% if bd.description %}<span class="text-muted">{{ bd.description | truncate(60) }}</span>{% endif %}
                   <br>
-                  <form method="POST" action="{{ url_for('equipment.breakdown_update', bd_id=bd.id) }}"
-                        class="d-flex flex-wrap gap-1 mt-1 align-items-center">
-                    <select name="repair_status" class="form-select form-select-sm" style="width:150px;">
-                      <option value="pending" {{ 'selected' if bd.repair_status == 'pending' }}>Pending</option>
-                      <option value="in_progress" {{ 'selected' if bd.repair_status == 'in_progress' }}>In Progress</option>
-                      <option value="completed" {{ 'selected' if bd.repair_status == 'completed' }}>Completed</option>
-                    </select>
-                    <input type="text" name="repairing_by" value="{{ bd.repairing_by or '' }}"
-                           class="form-control form-control-sm" style="width:140px;" placeholder="Repairing by">
-                    <input type="date" name="anticipated_return" value="{{ bd.anticipated_return.isoformat() if bd.anticipated_return else '' }}"
-                           class="form-control form-control-sm" style="width:140px;">
-                    <button type="submit" class="btn btn-sm btn-outline-warning">Update</button>
-                  </form>
-                  <form method="POST" action="{{ url_for('equipment.breakdown_delete', bd_id=bd.id) }}"
-                        class="d-inline mt-1" onsubmit="return confirm('Delete this breakdown record?')">
-                    <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete record</button>
-                  </form>
-                  {% if bd.photos %}
-                  <div class="d-flex flex-wrap gap-1 mt-1">
-                    {% for photo in bd.photos %}
-                    <a href="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}" target="_blank">
-                      <img src="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}"
-                           alt="{{ photo.original_name or 'Photo' }}"
-                           style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
-                    </a>
-                    {% endfor %}
-                  </div>
-                  {% endif %}
+                  <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 mt-1"
+                          data-bd="{{ bd | breakdown_json }}"
+                          onclick="openBreakdownDetail(JSON.parse(this.dataset.bd))">
+                    <i class="bi bi-eye me-1"></i>View Details
+                  </button>
                 </div>
                 {% else %}
                 <span class="text-muted small">—</span>
@@ -234,17 +211,11 @@
                     {% if h.description %}<div class="text-muted">{{ h.description }}</div>{% endif %}
                     {% if h.repairing_by %}<div><i class="bi bi-person me-1"></i>{{ h.repairing_by }}</div>{% endif %}
                     {% if h.resolved_date %}<div class="text-success"><i class="bi bi-check-circle me-1"></i>Resolved {{ h.resolved_date.strftime('%d/%m/%Y') }}</div>{% endif %}
-                    {% if h.photos %}
-                    <div class="d-flex flex-wrap gap-1 mt-1">
-                      {% for photo in h.photos %}
-                      <a href="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}" target="_blank">
-                        <img src="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}"
-                             alt="{{ photo.original_name or 'Photo' }}"
-                             style="width:36px;height:36px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
-                      </a>
-                      {% endfor %}
-                    </div>
-                    {% endif %}
+                    <button type="button" class="btn btn-sm btn-link p-0 text-secondary"
+                            data-bd="{{ h | breakdown_json }}"
+                            onclick="openBreakdownDetail(JSON.parse(this.dataset.bd))">
+                      <i class="bi bi-eye me-1"></i>View
+                    </button>
                   </div>
                   {% endfor %}
                 </div>
@@ -409,39 +380,16 @@
               <td class="small">
                 {% if bd %}
                 <div>
-                  <strong>{{ bd.incident_date.strftime('%d/%m/%Y') }}{% if bd.incident_time %} {{ bd.incident_time }}{% endif %}</strong>
-                  {% if bd.description %}<br><span class="text-muted">{{ bd.description }}</span>{% endif %}
-                  {% if bd.repairing_by %}<br><i class="bi bi-person me-1"></i>{{ bd.repairing_by }}{% endif %}
-                  {% if bd.anticipated_return %}<br><i class="bi bi-calendar me-1"></i>Est. return: {{ bd.anticipated_return.strftime('%d/%m/%Y') }}{% endif %}
+                  <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
+                    <i class="bi bi-tools me-1"></i>{{ bd.incident_date.strftime('%d/%m/%Y') }}{% if bd.incident_time %} {{ bd.incident_time }}{% endif %}
+                  </span>
+                  {% if bd.description %}<span class="text-muted">{{ bd.description | truncate(60) }}</span>{% endif %}
                   <br>
-                  <form method="POST" action="{{ url_for('equipment.breakdown_update', bd_id=bd.id) }}"
-                        class="d-flex flex-wrap gap-1 mt-1 align-items-center">
-                    <select name="repair_status" class="form-select form-select-sm" style="width:150px;">
-                      <option value="pending" {{ 'selected' if bd.repair_status == 'pending' }}>Pending</option>
-                      <option value="in_progress" {{ 'selected' if bd.repair_status == 'in_progress' }}>In Progress</option>
-                      <option value="completed" {{ 'selected' if bd.repair_status == 'completed' }}>Completed</option>
-                    </select>
-                    <input type="text" name="repairing_by" value="{{ bd.repairing_by or '' }}"
-                           class="form-control form-control-sm" style="width:140px;" placeholder="Repairing by">
-                    <input type="date" name="anticipated_return" value="{{ bd.anticipated_return.isoformat() if bd.anticipated_return else '' }}"
-                           class="form-control form-control-sm" style="width:140px;">
-                    <button type="submit" class="btn btn-sm btn-outline-warning">Update</button>
-                  </form>
-                  <form method="POST" action="{{ url_for('equipment.breakdown_delete', bd_id=bd.id) }}"
-                        class="d-inline mt-1" onsubmit="return confirm('Delete this breakdown record?')">
-                    <button type="submit" class="btn btn-sm btn-link text-danger p-0">Delete record</button>
-                  </form>
-                  {% if bd.photos %}
-                  <div class="d-flex flex-wrap gap-1 mt-1">
-                    {% for photo in bd.photos %}
-                    <a href="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}" target="_blank">
-                      <img src="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}"
-                           alt="{{ photo.original_name or 'Photo' }}"
-                           style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
-                    </a>
-                    {% endfor %}
-                  </div>
-                  {% endif %}
+                  <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 mt-1"
+                          data-bd="{{ bd | breakdown_json }}"
+                          onclick="openBreakdownDetail(JSON.parse(this.dataset.bd))">
+                    <i class="bi bi-eye me-1"></i>View Details
+                  </button>
                 </div>
                 {% else %}
                 <span class="text-muted">—</span>
@@ -461,17 +409,11 @@
                     {% if h.description %}<div class="text-muted">{{ h.description }}</div>{% endif %}
                     {% if h.repairing_by %}<div><i class="bi bi-person me-1"></i>{{ h.repairing_by }}</div>{% endif %}
                     {% if h.resolved_date %}<div class="text-success"><i class="bi bi-check-circle me-1"></i>Resolved {{ h.resolved_date.strftime('%d/%m/%Y') }}</div>{% endif %}
-                    {% if h.photos %}
-                    <div class="d-flex flex-wrap gap-1 mt-1">
-                      {% for photo in h.photos %}
-                      <a href="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}" target="_blank">
-                        <img src="{{ url_for('equipment.serve_breakdown_photo', filename=photo.filename) }}"
-                             alt="{{ photo.original_name or 'Photo' }}"
-                             style="width:36px;height:36px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;">
-                      </a>
-                      {% endfor %}
-                    </div>
-                    {% endif %}
+                    <button type="button" class="btn btn-sm btn-link p-0 text-secondary"
+                            data-bd="{{ h | breakdown_json }}"
+                            onclick="openBreakdownDetail(JSON.parse(this.dataset.bd))">
+                      <i class="bi bi-eye me-1"></i>View
+                    </button>
                   </div>
                   {% endfor %}
                 </div>
@@ -498,6 +440,79 @@
     </div>
   </div>
 
+</div>
+
+<!-- Breakdown Detail Modal -->
+<div class="modal fade" id="breakdownDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold"><i class="bi bi-tools me-2"></i>Breakdown Report</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Status badge -->
+        <div id="bd-status-wrap" class="mb-3"></div>
+
+        <!-- Detail table -->
+        <table class="table table-sm table-bordered align-middle mb-3" id="bd-detail-table">
+          <tbody>
+            <tr><th style="width:140px">Date</th><td id="bd-date"></td></tr>
+            <tr id="bd-time-row"><th>Time</th><td id="bd-time"></td></tr>
+            <tr><th>Description</th><td id="bd-description" style="white-space:pre-wrap"></td></tr>
+            <tr id="bd-repairing-row"><th>Repairing By</th><td id="bd-repairing"></td></tr>
+            <tr id="bd-return-row"><th>Est. Return</th><td id="bd-return"></td></tr>
+            <tr id="bd-resolved-row"><th>Resolved</th><td id="bd-resolved" class="text-success"></td></tr>
+          </tbody>
+        </table>
+
+        <!-- Photos -->
+        <div id="bd-photos-wrap" class="mb-3 d-none">
+          <h6 class="fw-semibold small mb-2"><i class="bi bi-images me-1"></i>Photos</h6>
+          <div id="bd-photos" class="d-flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Edit form (admin/supervisor only) -->
+        {% if current_user.role in ('admin', 'supervisor') %}
+        <hr>
+        <div id="bd-edit-wrap">
+          <h6 class="fw-semibold small mb-2"><i class="bi bi-pencil me-1"></i>Update Breakdown</h6>
+          <form method="POST" id="bd-edit-form" class="row g-2 align-items-end">
+            <input type="hidden" name="bd_id_hidden" id="bd-edit-id">
+            <div class="col-sm-3">
+              <label class="form-label small fw-semibold mb-1">Status</label>
+              <select name="repair_status" id="bd-edit-status" class="form-select form-select-sm">
+                <option value="pending">Pending repair</option>
+                <option value="in_progress">In progress</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small fw-semibold mb-1">Repairing By</label>
+              <input type="text" name="repairing_by" id="bd-edit-repairing" class="form-control form-control-sm" placeholder="Workshop / technician">
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small fw-semibold mb-1">Anticipated Return</label>
+              <input type="date" name="anticipated_return" id="bd-edit-return" class="form-control form-control-sm">
+            </div>
+            <div class="col-sm-2">
+              <button type="submit" class="btn btn-sm btn-warning w-100">Update</button>
+            </div>
+          </form>
+        </div>
+        <div class="mt-2">
+          <form method="POST" id="bd-delete-form" onsubmit="return confirm('Delete this breakdown record? This cannot be undone.')">
+            <button type="submit" class="btn btn-sm btn-outline-danger">
+              <i class="bi bi-trash me-1"></i>Delete Record
+            </button>
+          </form>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Edit Machine Modal -->
@@ -572,6 +587,93 @@
     document.getElementById('editMachineDesc').value = description;
     document.getElementById('editMachineRate').value = rate || '';
     new bootstrap.Modal(document.getElementById('editMachineModal')).show();
+  }
+
+  const STATUS_LABELS = { pending: 'Pending Repair', in_progress: 'Repair In Progress', completed: 'Resolved' };
+  const STATUS_CLASSES = { pending: 'bg-warning-subtle text-warning border border-warning-subtle',
+                           in_progress: 'bg-info-subtle text-info border border-info-subtle',
+                           completed: 'bg-success-subtle text-success border border-success-subtle' };
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  function openBreakdownDetail(bd) {
+    const status = bd.repair_status || 'pending';
+
+    // Status badge
+    document.getElementById('bd-status-wrap').innerHTML =
+      `<span class="badge ${STATUS_CLASSES[status] || ''} fs-6 px-3 py-2">
+         <i class="bi bi-${status === 'completed' ? 'check-circle' : 'tools'} me-1"></i>
+         ${STATUS_LABELS[status] || status}
+       </span>`;
+
+    // Date / time
+    document.getElementById('bd-date').textContent = fmtDate(bd.date);
+    const timeRow = document.getElementById('bd-time-row');
+    if (bd.incident_time) {
+      document.getElementById('bd-time').textContent = bd.incident_time;
+      timeRow.classList.remove('d-none');
+    } else {
+      timeRow.classList.add('d-none');
+    }
+
+    // Description
+    document.getElementById('bd-description').textContent = bd.description || '—';
+
+    // Repairing by
+    const repRow = document.getElementById('bd-repairing-row');
+    if (bd.repairing_by) {
+      document.getElementById('bd-repairing').textContent = bd.repairing_by;
+      repRow.classList.remove('d-none');
+    } else { repRow.classList.add('d-none'); }
+
+    // Anticipated return
+    const retRow = document.getElementById('bd-return-row');
+    if (bd.anticipated_return && status !== 'completed') {
+      document.getElementById('bd-return').textContent = fmtDate(bd.anticipated_return);
+      retRow.classList.remove('d-none');
+    } else { retRow.classList.add('d-none'); }
+
+    // Resolved date
+    const resRow = document.getElementById('bd-resolved-row');
+    if (bd.resolved_date) {
+      document.getElementById('bd-resolved').textContent = 'Resolved ' + fmtDate(bd.resolved_date);
+      resRow.classList.remove('d-none');
+    } else { resRow.classList.add('d-none'); }
+
+    // Photos
+    const photosWrap = document.getElementById('bd-photos-wrap');
+    const photosDiv = document.getElementById('bd-photos');
+    if (bd.photos && bd.photos.length) {
+      photosDiv.innerHTML = bd.photos.map(p =>
+        `<a href="${p.url}" target="_blank">
+           <img src="${p.url}" alt="${p.name || 'Photo'}"
+                style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;">
+         </a>`
+      ).join('');
+      photosWrap.classList.remove('d-none');
+    } else {
+      photosWrap.classList.add('d-none');
+    }
+
+    // Edit / delete forms (admin/supervisor only — elements may not exist for site role)
+    const editForm = document.getElementById('bd-edit-form');
+    const deleteForm = document.getElementById('bd-delete-form');
+    if (editForm) {
+      document.getElementById('bd-edit-id').value = bd.id;
+      editForm.action = `/equipment/breakdown/${bd.id}/update`;
+      document.getElementById('bd-edit-status').value = status;
+      document.getElementById('bd-edit-repairing').value = bd.repairing_by || '';
+      document.getElementById('bd-edit-return').value = bd.anticipated_return || '';
+    }
+    if (deleteForm) {
+      deleteForm.action = `/equipment/breakdown/${bd.id}/delete`;
+    }
+
+    new bootstrap.Modal(document.getElementById('breakdownDetailModal')).show();
   }
 </script>
 {% endblock %}

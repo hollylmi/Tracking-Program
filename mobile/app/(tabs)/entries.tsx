@@ -11,10 +11,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import ScreenHeader from '../../components/layout/ScreenHeader'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
-import Toast from '../../components/ui/Toast'
-import { useToastStore } from '../../store/toast'
+
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { useEntries } from '../../hooks/useEntries'
 import { Entry } from '../../types'
@@ -137,7 +137,6 @@ export default function EntriesScreen() {
   const router = useRouter()
   const [activeFilter, setActiveFilter] = useState<Filter>('All')
   const [refreshing, setRefreshing] = useState(false)
-  const { visible: toastVisible, message: toastMessage, type: toastType, hide: hideToast } = useToastStore()
 
   const { data, isLoading, isError, refetch } = useEntries({ per_page: 200 })
   const allEntries = data?.entries ?? []
@@ -166,16 +165,17 @@ export default function EntriesScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Entries</Text>
-        <TouchableOpacity
-          onPress={() => router.push('/entry/new')}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={styles.newBtn}>+ New</Text>
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Entries"
+        right={
+          <TouchableOpacity
+            onPress={() => router.push('/entry/new')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.newBtn}>+ New</Text>
+          </TouchableOpacity>
+        }
+      />
 
       {/* Filter chips */}
       <View style={styles.filterBar}>
@@ -244,7 +244,6 @@ export default function EntriesScreen() {
         />
       )}
 
-      <Toast visible={toastVisible} message={toastMessage} type={toastType} onHide={hideToast} />
     </SafeAreaView>
   )
 }
@@ -254,19 +253,7 @@ export default function EntriesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.dark },
 
-  // Header
-  header: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-  },
-  headerTitle: {
-    ...Typography.h3,
-    color: Colors.white,
-    fontFamily: 'Montserrat_700Bold',
-  },
+  // New button
   newBtn: {
     ...Typography.body,
     color: Colors.primary,
@@ -366,7 +353,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   delayBadge: {
-    backgroundColor: '#FFF3E0',
+    backgroundColor: 'rgba(255,152,0,0.15)',
     borderRadius: BorderRadius.sm,
     paddingHorizontal: 6,
     paddingVertical: 2,

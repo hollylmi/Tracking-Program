@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 export function useRoster() {
   return useQuery({
     queryKey: ['roster'],
-    queryFn: () => api.roster.get().then((r) => r.data),
+    queryFn: () => api.roster.get().then((r) => r.data.schedule),
     staleTime: 5 * 60 * 1000,
   })
 }
