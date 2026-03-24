@@ -1,0 +1,12 @@
+# Ensure node_modules is never uploaded to EAS
+node_modules/
+
+# Ignore backend files
+../instance/
+../venv/
+../__pycache__/
+../blueprints/
+../templates/
+../static/
+../*.py
+../*.bat

@@ -1,21 +1,45 @@
 {
   "cli": {
-    "version": ">= 18.4.0",
-    "appVersionSource": "remote"
+    "version": ">= 16.0.0",
+    "requireCommit": true
   },
   "build": {
+    "base": {
+      "node": "20.19.4",
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
+    },
     "development": {
+      "inherits": "base",
       "developmentClient": true,
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "inherits": "base",
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      }
     },
     "production": {
-      "autoIncrement": true
+      "inherits": "base",
+      "autoIncrement": true,
+      "ios": {
+        "credentialsSource": "remote"
+      },
+      "android": {
+        "credentialsSource": "remote"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "your-apple-id@email.com",
+        "ascAppId": "your-app-store-connect-app-id",
+        "appleTeamId": "your-team-id"
+      }
+    }
   }
 }
