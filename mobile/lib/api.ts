@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { API_BASE_URL } from '../constants/api'
 import { useAuthStore } from '../store/auth'
-import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts } from '../types'
+import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine } from '../types'
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -141,6 +141,11 @@ export const api = {
       if (!res.ok) throw new Error(`Photo upload failed: ${res.status}`)
       return res.json()
     },
+  },
+
+  hire: {
+    list: (projectId?: number) =>
+      apiClient.get<{ hired_machines: HiredMachine[] }>('/hire', projectId ? { params: { project_id: projectId } } : undefined),
   },
 
   documents: {

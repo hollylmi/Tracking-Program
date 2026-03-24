@@ -214,6 +214,22 @@ export interface LotMaterialProgress {
   pct_complete: number
 }
 
+export interface HiredMachine {
+  id: number
+  machine_name: string
+  machine_type: string | null
+  hire_company: string | null
+  plant_id: string | null
+  delivery_date: string | null
+  return_date: string | null
+  cost_per_day: number | null
+  cost_per_week: number | null
+  project_id: number
+  project_name: string | null
+  active: boolean
+  stand_downs: { id: number; date: string; reason: string }[]
+}
+
 export interface ReferenceData {
   lots: string[]
   materials: string[]

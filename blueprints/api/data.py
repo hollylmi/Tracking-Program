@@ -1084,15 +1084,22 @@ def get_hire():
     if err:
         return err
 
+    project_id_filter = request.args.get('project_id', type=int)
+    allowed_ids = _accessible_ids(user)
+
     if user.role == 'admin':
-        hired = HiredMachine.query.order_by(HiredMachine.machine_name).all()
+        q = HiredMachine.query
     else:
-        allowed_ids = _accessible_ids(user)
         if not allowed_ids:
             return {'hired_machines': []}, 200
-        hired = (HiredMachine.query
-                 .filter(HiredMachine.project_id.in_(allowed_ids))
-                 .order_by(HiredMachine.machine_name).all())
+        q = HiredMachine.query.filter(HiredMachine.project_id.in_(allowed_ids))
+
+    if project_id_filter:
+        if allowed_ids is not None and project_id_filter not in allowed_ids:
+            return {'hired_machines': []}, 200
+        q = q.filter(HiredMachine.project_id == project_id_filter)
+
+    hired = q.order_by(HiredMachine.machine_name).all()
 
     return {
         'hired_machines': [
@@ -1101,10 +1108,22 @@ def get_hire():
                 'machine_name': hm.machine_name,
                 'machine_type': hm.machine_type,
                 'hire_company': hm.hire_company,
+                'plant_id': hm.plant_id,
                 'delivery_date': hm.delivery_date.isoformat() if hm.delivery_date else None,
                 'return_date': hm.return_date.isoformat() if hm.return_date else None,
+                'cost_per_day': hm.cost_per_day,
+                'cost_per_week': hm.cost_per_week,
                 'project_id': hm.project_id,
                 'project_name': hm.project.name if hm.project else None,
+                'active': hm.active,
+                'stand_downs': [
+                    {
+                        'id': sd.id,
+                        'date': sd.stand_down_date.isoformat(),
+                        'reason': sd.reason,
+                    }
+                    for sd in (hm.stand_downs or [])
+                ],
             }
             for hm in hired
         ]

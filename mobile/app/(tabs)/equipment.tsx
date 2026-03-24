@@ -18,7 +18,10 @@ import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme
 import { api } from '../../lib/api'
 import { cachedQuery } from '../../lib/cachedQuery'
 import { useProjectStore } from '../../store/project'
-import { Machine, Breakdown } from '../../types'
+import { useHire } from '../../hooks/useHire'
+import { Machine, Breakdown, HiredMachine } from '../../types'
+
+// ── Fleet machine card (existing) ────────────────────────────────────────────
 
 function MachineCard({
   machine,
@@ -32,9 +35,7 @@ function MachineCard({
   const myBreakdowns = breakdowns.filter(b => b.machine_id === machine.id)
   const openCount = myBreakdowns.filter(b => !b.resolved).length
   const isDown = machine.active && openCount > 0
-  const isWorking = machine.active && openCount === 0
 
-  // Colour the left border by status
   const borderColor = !machine.active
     ? Colors.textLight
     : isDown
@@ -54,7 +55,6 @@ function MachineCard({
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
       <Card padding="none" style={{ overflow: 'hidden' }}>
-        {/* Coloured left accent bar */}
         <View style={[styles.accentBar, { backgroundColor: borderColor }]} />
         <View style={styles.row}>
           <View style={[styles.iconWrap, { backgroundColor: iconColor + '20' }]}>
@@ -84,12 +84,135 @@ function MachineCard({
   )
 }
 
+// ── Hired machine card ────────────────────────────────────────────────────────
+
+function getHireStatus(hm: HiredMachine): { label: string; color: string; bg: string; icon: string } {
+  const today = new Date().toISOString().slice(0, 10)
+
+  // Check if returned (past return date)
+  if (hm.return_date && hm.return_date < today) {
+    return {
+      label: 'Returned',
+      color: Colors.textLight,
+      bg: Colors.surface,
+      icon: 'log-out-outline',
+    }
+  }
+
+  // Check for active stand-down today
+  const stoodDownToday = hm.stand_downs?.some(sd => sd.date === today)
+  if (stoodDownToday) {
+    return {
+      label: 'Stood Down',
+      color: Colors.warning,
+      bg: 'rgba(255,152,0,0.15)',
+      icon: 'pause-circle-outline',
+    }
+  }
+
+  return {
+    label: 'Active',
+    color: Colors.success,
+    bg: 'rgba(76,175,80,0.15)',
+    icon: 'checkmark-circle-outline',
+  }
+}
+
+function HiredMachineCard({ machine }: { machine: HiredMachine }) {
+  const status = getHireStatus(machine)
+
+  return (
+    <Card padding="none" style={{ overflow: 'hidden' }}>
+      <View style={[styles.accentBar, { backgroundColor: status.color }]} />
+      <View style={styles.row}>
+        <View style={[styles.iconWrap, { backgroundColor: status.color + '20' }]}>
+          <Ionicons name={status.icon as any} size={22} color={status.color} />
+        </View>
+        <View style={styles.info}>
+          <Text style={styles.name}>{machine.machine_name}</Text>
+          {machine.hire_company ? (
+            <Text style={styles.type}>{machine.hire_company}</Text>
+          ) : null}
+          {machine.plant_id ? (
+            <Text style={styles.type}>Plant ID: {machine.plant_id}</Text>
+          ) : null}
+        </View>
+        <View style={styles.right}>
+          <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+          </View>
+        </View>
+      </View>
+    </Card>
+  )
+}
+
+// ── Tab selector ──────────────────────────────────────────────────────────────
+
+type TabKey = 'fleet' | 'hired'
+
+function TabSelector({ active, onChange }: { active: TabKey; onChange: (t: TabKey) => void }) {
+  return (
+    <View style={tabStyles.container}>
+      {(['fleet', 'hired'] as const).map((key) => (
+        <TouchableOpacity
+          key={key}
+          style={[tabStyles.tab, active === key && tabStyles.tabActive]}
+          onPress={() => onChange(key)}
+          activeOpacity={0.7}
+        >
+          <Text style={[tabStyles.label, active === key && tabStyles.labelActive]}>
+            {key === 'fleet' ? 'Fleet' : 'Hired'}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  )
+}
+
+const tabStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    backgroundColor: Colors.background,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  tabActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  label: {
+    ...Typography.label,
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontWeight: '600',
+  },
+  labelActive: {
+    color: Colors.dark,
+  },
+})
+
+// ── Main screen ───────────────────────────────────────────────────────────────
+
 export default function EquipmentScreen() {
   const router = useRouter()
   const [refreshing, setRefreshing] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabKey>('fleet')
   const activeProject = useProjectStore((s) => s.activeProject)
   const projectId = activeProject?.id
 
+  // Fleet data
   const { data: machines = [], isLoading: machinesLoading, refetch: refetchMachines } =
     useQuery({
       queryKey: ['machines', projectId],
@@ -112,7 +235,12 @@ export default function EquipmentScreen() {
       staleTime: 2 * 60 * 1000,
     })
 
-  const isLoading = machinesLoading || breakdownsLoading
+  // Hired data
+  const { data: hiredMachines = [], isLoading: hireLoading, refetch: refetchHire } =
+    useHire(projectId)
+
+  const fleetLoading = machinesLoading || breakdownsLoading
+  const isLoading = activeTab === 'fleet' ? fleetLoading : hireLoading
 
   const openCount = breakdowns.filter(b => !b.resolved).length
   const active = machines.filter(m => m.active)
@@ -121,51 +249,73 @@ export default function EquipmentScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([refetchMachines(), refetchBreakdowns()])
+    if (activeTab === 'fleet') {
+      await Promise.all([refetchMachines(), refetchBreakdowns()])
+    } else {
+      await refetchHire()
+    }
     setRefreshing(false)
   }
 
+  const subtitle = activeTab === 'fleet'
+    ? (openCount > 0 ? `${openCount} open breakdown${openCount > 1 ? 's' : ''}` : undefined)
+    : (hiredMachines.length > 0 ? `${hiredMachines.length} hired machine${hiredMachines.length !== 1 ? 's' : ''}` : undefined)
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScreenHeader
-        title="Equipment"
-        subtitle={openCount > 0 ? `${openCount} open breakdown${openCount > 1 ? 's' : ''}` : undefined}
-      />
+      <ScreenHeader title="Equipment" subtitle={subtitle} />
+      <TabSelector active={activeTab} onChange={setActiveTab} />
 
       {isLoading ? (
         <View style={styles.body}>
           {[0, 1, 2, 3].map(i => <View key={i} style={styles.skeleton} />)}
         </View>
-      ) : machines.length === 0 ? (
-        <EmptyState icon="🔧" title="No equipment" subtitle="No machines assigned to your projects" />
+      ) : activeTab === 'fleet' ? (
+        machines.length === 0 ? (
+          <EmptyState icon="🔧" title="No equipment" subtitle="No machines assigned to your projects" />
+        ) : (
+          <FlatList
+            data={sorted}
+            keyExtractor={m => String(m.id)}
+            renderItem={({ item, index }) => (
+              <>
+                {index === 0 && active.length > 0 && inactive.length > 0 && (
+                  <Text style={styles.sectionLabel}>Active ({active.length})</Text>
+                )}
+                {index === active.length && inactive.length > 0 && (
+                  <Text style={[styles.sectionLabel, { marginTop: Spacing.md }]}>
+                    Inactive ({inactive.length})
+                  </Text>
+                )}
+                <MachineCard
+                  machine={item}
+                  breakdowns={breakdowns}
+                  onPress={() => router.push({ pathname: '/machine/[id]', params: { id: item.id } })}
+                />
+              </>
+            )}
+            contentContainerStyle={styles.list}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        )
       ) : (
-        <FlatList
-          data={sorted}
-          keyExtractor={m => String(m.id)}
-          renderItem={({ item, index }) => (
-            <>
-              {/* Section labels */}
-              {index === 0 && active.length > 0 && inactive.length > 0 && (
-                <Text style={styles.sectionLabel}>Active ({active.length})</Text>
-              )}
-              {index === active.length && inactive.length > 0 && (
-                <Text style={[styles.sectionLabel, { marginTop: Spacing.md }]}>
-                  Inactive ({inactive.length})
-                </Text>
-              )}
-              <MachineCard
-                machine={item}
-                breakdowns={breakdowns}
-                onPress={() => router.push({ pathname: '/machine/[id]', params: { id: item.id } })}
-              />
-            </>
-          )}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
-          }
-          showsVerticalScrollIndicator={false}
-        />
+        hiredMachines.length === 0 ? (
+          <EmptyState icon="📋" title="No hired machines" subtitle="No hired equipment for this project" />
+        ) : (
+          <FlatList
+            data={hiredMachines}
+            keyExtractor={m => String(m.id)}
+            renderItem={({ item }) => <HiredMachineCard machine={item} />}
+            contentContainerStyle={styles.list}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        )
       )}
     </SafeAreaView>
   )

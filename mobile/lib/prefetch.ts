@@ -70,6 +70,10 @@ async function prefetchProject(projectId: number): Promise<void> {
     fetchAndCache(`machines_project_${projectId}`, () =>
       api.equipment.list(projectId).then((r) => r.data.machines)
     ),
+    // Hired machines for the Equipment > Hired tab
+    fetchAndCache(`hire_${projectId}`, () =>
+      api.hire.list(projectId).then((r) => r.data.hired_machines)
+    ),
     // Machine detail pages — cache each machine
     (async () => {
       try {

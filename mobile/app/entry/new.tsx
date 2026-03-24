@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons'
 import Button from '../../components/ui/Button'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme'
 import { useReference } from '../../hooks/useReference'
+import { useHire } from '../../hooks/useHire'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
@@ -609,7 +610,15 @@ export default function NewEntryScreen() {
   const lotProgress = refQuery.data?.lot_progress ?? {}
   const allEmployees = refQuery.data?.employees ?? []
   const allMachines = refQuery.data?.machines ?? []
-  const allHiredMachines = refQuery.data?.hired_machines ?? []
+  const allHiredMachinesRef = refQuery.data?.hired_machines ?? []
+
+  // Fetch full hired machine data (with stand-down info) for the active project
+  const hireQuery = useHire(activeProject?.id)
+  const allHiredMachines = hireQuery.data ?? allHiredMachinesRef.map((h) => ({
+    ...h, plant_id: null, delivery_date: null, return_date: null,
+    cost_per_day: null, cost_per_week: null, project_id: activeProject?.id ?? 0,
+    project_name: null, active: true, stand_downs: [],
+  }))
 
   const formOpenedAt = useRef(new Date().toISOString()).current
 
@@ -773,13 +782,13 @@ export default function NewEntryScreen() {
       delay_reason: hasDelays ? delayReason || undefined : undefined,
       delay_billable: hasDelays ? delayBillable : undefined,
       delay_description: hasDelays ? delayDescription || undefined : undefined,
-      machines_stood_down: hasDelays ? selectedStanddownIds.length > 0 : undefined,
+      machines_stood_down: selectedStanddownIds.length > 0 ? true : undefined,
       notes: notes || undefined,
       other_work_description: otherWork || undefined,
       form_opened_at: formOpenedAt,
       employee_ids: selectedEmployeeIds.length > 0 ? selectedEmployeeIds : undefined,
       machine_ids: selectedMachineIds.length > 0 ? selectedMachineIds : undefined,
-      standdown_machine_ids: hasDelays && selectedStanddownIds.length > 0 ? selectedStanddownIds : undefined,
+      standdown_machine_ids: selectedStanddownIds.length > 0 ? selectedStanddownIds : undefined,
       synced: 0,
     }
 
@@ -796,7 +805,7 @@ export default function NewEntryScreen() {
           ...entryData,
           employee_ids: selectedEmployeeIds,
           machine_ids: selectedMachineIds,
-          standdown_machine_ids: hasDelays ? selectedStanddownIds : [],
+          standdown_machine_ids: selectedStanddownIds,
         } as any)
         const serverId = response.data.id
         markEntrySynced(localId, serverId)
@@ -843,7 +852,9 @@ export default function NewEntryScreen() {
   }))
 
   const hiredMachineItems: ChecklistItem[] = allHiredMachines.map((h) => ({
-    id: h.id, label: h.machine_name, sublabel: h.hire_company || undefined,
+    id: h.id,
+    label: h.machine_name,
+    sublabel: h.hire_company || undefined,
   }))
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -1014,7 +1025,6 @@ export default function NewEntryScreen() {
                     setDelayHours('')
                     setDelayReason('')
                     setDelayDescription('')
-                    setSelectedStanddownIds([])
                   }
                 }}
               />
@@ -1050,15 +1060,29 @@ export default function NewEntryScreen() {
                     multiline
                     optional
                   />
-                  {allHiredMachines.length > 0 && (
-                    <ChecklistSection
-                      title="Stand Down Hired Machines"
-                      items={hiredMachineItems}
-                      selectedIds={selectedStanddownIds}
-                      onToggle={(id) => setSelectedStanddownIds((prev) => toggleId(prev, id))}
-                      emptyMessage="No active hired machines."
-                    />
+                </View>
+              )}
+
+              {hiredMachineItems.length > 0 && (
+                <View>
+                  {hasDelays && selectedStanddownIds.length === 0 && (
+                    <View style={styles.hireHelper}>
+                      <Ionicons name="information-circle-outline" size={16} color={Colors.warning} />
+                      <Text style={styles.hireHelperText}>
+                        Don't forget to mark which machines below
+                      </Text>
+                    </View>
                   )}
+                  <Text style={styles.standdownLabel}>
+                    Mark any hired machines that were stood down today
+                  </Text>
+                  <ChecklistSection
+                    title="Hired Equipment Stand-Downs"
+                    items={hiredMachineItems}
+                    selectedIds={selectedStanddownIds}
+                    onToggle={(id) => setSelectedStanddownIds((prev) => toggleId(prev, id))}
+                    emptyMessage="No hired machines for this project."
+                  />
                 </View>
               )}
 
@@ -1179,6 +1203,27 @@ const styles = StyleSheet.create({
     marginTop: -Spacing.sm,
     marginBottom: Spacing.md,
     paddingHorizontal: 2,
+  },
+  hireHelper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,152,0,0.1)',
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
+    marginBottom: Spacing.sm,
+  },
+  hireHelperText: {
+    ...Typography.bodySmall,
+    color: Colors.warning,
+    fontWeight: '500',
+    flex: 1,
+  },
+  standdownLabel: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
   },
   datePicker: {
     backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
