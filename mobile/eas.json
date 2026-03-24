@@ -40,9 +40,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "your-apple-id@email.com",
-        "ascAppId": "your-app-store-connect-app-id",
-        "appleTeamId": "your-team-id"
+        "appleId": "hollypriorlmi@outlook.com",
+        "ascAppId": "6761041570",
+        "appleTeamId": "M8NXJMFDNB"
       }
     }
   }
