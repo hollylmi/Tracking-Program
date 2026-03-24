@@ -183,6 +183,46 @@ with app.app_context():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, token)
         )""",
+        # ── 2026-03-24: catch-up migrations for columns added to models ──
+        "ALTER TABLE project ADD COLUMN site_address VARCHAR(500)",
+        "ALTER TABLE project ADD COLUMN site_contact VARCHAR(200)",
+        # DailyEntry — columns added after initial table creation
+        "ALTER TABLE daily_entry ADD COLUMN location VARCHAR(200)",
+        "ALTER TABLE daily_entry ADD COLUMN install_sqm FLOAT DEFAULT 0",
+        "ALTER TABLE daily_entry ADD COLUMN delay_billable BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE daily_entry ADD COLUMN delay_description TEXT",
+        "ALTER TABLE daily_entry ADD COLUMN machines_stood_down BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE daily_entry ADD COLUMN other_work_description TEXT",
+        "ALTER TABLE daily_entry ADD COLUMN updated_at TIMESTAMP",
+        "ALTER TABLE daily_entry ADD COLUMN user_id INTEGER REFERENCES \"user\"(id)",
+        # HiredMachine — newer columns
+        "ALTER TABLE hired_machine ADD COLUMN hire_company_email VARCHAR(200)",
+        "ALTER TABLE hired_machine ADD COLUMN hire_company_phone VARCHAR(50)",
+        "ALTER TABLE hired_machine ADD COLUMN cost_per_day FLOAT",
+        "ALTER TABLE hired_machine ADD COLUMN cost_per_week FLOAT",
+        "ALTER TABLE hired_machine ADD COLUMN count_saturdays BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE hired_machine ADD COLUMN invoice_filename VARCHAR(500)",
+        "ALTER TABLE hired_machine ADD COLUMN invoice_original_name VARCHAR(500)",
+        "ALTER TABLE hired_machine ADD COLUMN notes TEXT",
+        "ALTER TABLE hired_machine ADD COLUMN active BOOLEAN DEFAULT TRUE",
+        # PanelInstallRecord — as-built canvas columns
+        "ALTER TABLE panel_install_record ADD COLUMN roll_number VARCHAR(100)",
+        "ALTER TABLE panel_install_record ADD COLUMN install_time VARCHAR(10)",
+        "ALTER TABLE panel_install_record ADD COLUMN width_m FLOAT",
+        "ALTER TABLE panel_install_record ADD COLUMN length_m FLOAT",
+        "ALTER TABLE panel_install_record ADD COLUMN area_sqm FLOAT",
+        "ALTER TABLE panel_install_record ADD COLUMN panel_type VARCHAR(100)",
+        "ALTER TABLE panel_install_record ADD COLUMN canvas_x FLOAT",
+        "ALTER TABLE panel_install_record ADD COLUMN canvas_y FLOAT",
+        "ALTER TABLE panel_install_record ADD COLUMN canvas_w FLOAT",
+        "ALTER TABLE panel_install_record ADD COLUMN canvas_h FLOAT",
+        "ALTER TABLE panel_install_record ADD COLUMN canvas_points TEXT",
+        "ALTER TABLE panel_install_record ADD COLUMN recorded_by_id INTEGER REFERENCES \"user\"(id)",
+        "ALTER TABLE panel_install_record ADD COLUMN updated_at TIMESTAMP",
+        # ProjectAssignment — scheduled_role_id
+        "ALTER TABLE project_assignment ADD COLUMN scheduled_role_id INTEGER REFERENCES role(id)",
+        # MachineBreakdown — hired_machine support
+        "ALTER TABLE machine_breakdown ADD COLUMN hired_machine_id INTEGER REFERENCES hired_machine(id)",
     ]:
         try:
             db.session.execute(db.text(stmt))
