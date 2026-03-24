@@ -2177,17 +2177,25 @@ def remove_device_token():
 # ─────────────────────────────────────────────────────────────────────────────
 
 @api_data_bp.route('/admin/send-reminders', methods=['POST'])
-@jwt_required(optional=True)
 def send_reminders():
     # Allow cron jobs to authenticate with CRON_SECRET bearer token
+    # NOTE: no @jwt_required decorator — it rejects non-JWT bearer tokens
+    # before the function body runs, so we handle auth manually here.
     auth_header = request.headers.get('Authorization', '')
     cron_secret = os.environ.get('CRON_SECRET')
     is_cron = (
         cron_secret
-        and auth_header == f'Bearer {cron_secret}'
+        and auth_header.startswith('Bearer ')
+        and auth_header[7:] == cron_secret
     )
 
     if not is_cron:
+        # Fall back to JWT admin auth
+        from flask_jwt_extended import verify_jwt_in_request
+        try:
+            verify_jwt_in_request()
+        except Exception:
+            return {'error': 'Invalid token'}, 401
         user, err = _get_user()
         if err:
             return err
