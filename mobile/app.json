@@ -16,10 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lmigroup.plytrack",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "remote-notification",
-          "remote-notification"
-        ],
+        "UIBackgroundModes": ["remote-notification"],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
