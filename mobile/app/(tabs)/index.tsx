@@ -29,6 +29,7 @@ import { useEntries } from '../../hooks/useEntries'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { useSyncStatus } from '../../hooks/useSyncStatus'
 import { prefetchAllData } from '../../lib/prefetch'
+import ReportsPanel from '../../components/ui/ReportsPanel'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
@@ -1056,6 +1057,9 @@ export default function DashboardScreen() {
 
             {/* Costs */}
             <CostCard costs={costs} isLoading={costsLoading} />
+
+            {/* Reports (admin/supervisor only) */}
+            <ReportsPanel />
           </>
         )}
       </ScrollView>

@@ -22,6 +22,7 @@ import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
 import { cachedQuery } from '../../lib/cachedQuery'
+import { compressImage } from '../../lib/compressImage'
 import { useToastStore } from '../../store/toast'
 import { Machine } from '../../types'
 
@@ -141,7 +142,8 @@ export default function NewBreakdownScreen() {
     })
     if (!result.canceled && result.assets.length > 0) {
       const asset = result.assets[0]
-      setPhotos(prev => [...prev, { uri: asset.uri, filename: `bd_${Date.now()}.jpg` }])
+      const compressed = await compressImage(asset.uri)
+      setPhotos(prev => [...prev, { uri: compressed, filename: `bd_${Date.now()}.jpg` }])
     }
   }
 
@@ -157,10 +159,12 @@ export default function NewBreakdownScreen() {
       allowsMultipleSelection: true,
     })
     if (!result.canceled) {
-      const picked = result.assets.map(a => ({
-        uri: a.uri,
-        filename: `bd_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`,
-      }))
+      const picked = await Promise.all(
+        result.assets.map(async a => ({
+          uri: await compressImage(a.uri),
+          filename: `bd_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`,
+        }))
+      )
       setPhotos(prev => [...prev, ...picked])
     }
   }

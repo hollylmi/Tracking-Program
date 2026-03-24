@@ -29,6 +29,7 @@ import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
 import { api } from '../../lib/api'
 import { saveEntry, markEntrySynced, savePendingPhoto } from '../../lib/db'
+import { compressImage } from '../../lib/compressImage'
 import { LocalEntry, LotMaterialProgress } from '../../types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -689,7 +690,8 @@ export default function NewEntryScreen() {
     })
     if (!result.canceled && result.assets.length > 0) {
       const asset = result.assets[0]
-      setPhotos((prev) => [...prev, { uri: asset.uri, filename: `photo_${Date.now()}.jpg` }])
+      const compressed = await compressImage(asset.uri)
+      setPhotos((prev) => [...prev, { uri: compressed, filename: `photo_${Date.now()}.jpg` }])
     }
   }
 
@@ -705,10 +707,12 @@ export default function NewEntryScreen() {
       allowsMultipleSelection: true,
     })
     if (!result.canceled) {
-      const picked = result.assets.map((a) => ({
-        uri: a.uri,
-        filename: `photo_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`,
-      }))
+      const picked = await Promise.all(
+        result.assets.map(async (a) => ({
+          uri: await compressImage(a.uri),
+          filename: `photo_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`,
+        }))
+      )
       setPhotos((prev) => [...prev, ...picked])
     }
   }

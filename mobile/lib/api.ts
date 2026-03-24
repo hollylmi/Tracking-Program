@@ -229,6 +229,26 @@ export const api = {
     },
   },
 
+  reports: {
+    progress: (projectId: number) =>
+      apiClient.get(`/reports/project/${projectId}/progress`, { responseType: 'arraybuffer' }),
+    weekly: (projectId: number, weekStart: string, weekEnd: string) =>
+      apiClient.get(`/reports/project/${projectId}/weekly`, {
+        params: { week_start: weekStart, week_end: weekEnd },
+        responseType: 'arraybuffer',
+      }),
+    delays: (projectId: number, dateFrom: string, dateTo: string) =>
+      apiClient.get('/reports/delays', {
+        params: { project_id: projectId, date_from: dateFrom, date_to: dateTo },
+        responseType: 'arraybuffer',
+      }),
+    hire: (hiredMachineId: number, dateFrom: string, dateTo: string) =>
+      apiClient.get(`/reports/hire/${hiredMachineId}`, {
+        params: { date_from: dateFrom, date_to: dateTo },
+        responseType: 'arraybuffer',
+      }),
+  },
+
   sync: {
     push: (data: unknown) => apiClient.post('/sync', data),
   },
