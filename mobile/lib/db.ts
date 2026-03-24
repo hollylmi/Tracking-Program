@@ -28,6 +28,9 @@ export function initDB(): void {
       machines_stood_down     INTEGER DEFAULT 0,
       weather                 TEXT,
       form_opened_at          TEXT,
+      employee_ids            TEXT,
+      machine_ids             TEXT,
+      standdown_machine_ids   TEXT,
       synced                  INTEGER DEFAULT 0,
       created_at              TEXT DEFAULT (datetime('now')),
       updated_at              TEXT DEFAULT (datetime('now'))
@@ -62,7 +65,30 @@ export function initDB(): void {
       value      TEXT NOT NULL,
       cached_at  TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS pending_photos (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_local_id TEXT NOT NULL,
+      uri           TEXT NOT NULL,
+      filename      TEXT NOT NULL,
+      created_at    TEXT DEFAULT (datetime('now'))
+    );
   `)
+
+  // Migrations for existing databases — add columns if missing
+  const cols = db.getAllSync<{ name: string }>(
+    `PRAGMA table_info(entries)`
+  ).map((c) => c.name)
+
+  if (!cols.includes('employee_ids')) {
+    db.execSync(`ALTER TABLE entries ADD COLUMN employee_ids TEXT`)
+  }
+  if (!cols.includes('machine_ids')) {
+    db.execSync(`ALTER TABLE entries ADD COLUMN machine_ids TEXT`)
+  }
+  if (!cols.includes('standdown_machine_ids')) {
+    db.execSync(`ALTER TABLE entries ADD COLUMN standdown_machine_ids TEXT`)
+  }
 }
 
 // ── Entries ───────────────────────────────────────────────────────────────────
@@ -74,13 +100,15 @@ export function saveEntry(entry: LocalEntry): void {
       material, num_people, install_hours, install_sqm, delay_hours,
       delay_billable, delay_reason, delay_description, notes,
       other_work_description, machines_stood_down, weather,
-      form_opened_at, synced, created_at, updated_at
+      form_opened_at, employee_ids, machine_ids, standdown_machine_ids,
+      synced, created_at, updated_at
     ) VALUES (
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
-      ?, ?, ?, datetime('now')
+      ?, ?, ?, ?,
+      ?, ?, datetime('now')
     )`,
     entry.local_id,
     entry.server_id ?? null,
@@ -101,15 +129,19 @@ export function saveEntry(entry: LocalEntry): void {
     entry.machines_stood_down != null ? (entry.machines_stood_down ? 1 : 0) : 0,
     entry.weather ?? null,
     entry.form_opened_at ?? null,
+    entry.employee_ids ? JSON.stringify(entry.employee_ids) : null,
+    entry.machine_ids ? JSON.stringify(entry.machine_ids) : null,
+    entry.standdown_machine_ids ? JSON.stringify(entry.standdown_machine_ids) : null,
     entry.synced ?? 0,
     entry.created_at ?? null,
   )
 }
 
 export function getUnsyncedEntries(): LocalEntry[] {
-  return db.getAllSync<LocalEntry>(
+  const rows = db.getAllSync<any>(
     `SELECT * FROM entries WHERE synced = 0 ORDER BY created_at ASC`
   )
+  return rows.map(parseEntryRow)
 }
 
 export function markEntrySynced(localId: string, serverId: number): void {
@@ -122,14 +154,54 @@ export function markEntrySynced(localId: string, serverId: number): void {
 }
 
 export function getEntries(projectId: number): LocalEntry[] {
-  return db.getAllSync<LocalEntry>(
+  const rows = db.getAllSync<any>(
     `SELECT * FROM entries WHERE project_id = ? ORDER BY entry_date DESC`,
     projectId,
   )
+  return rows.map(parseEntryRow)
 }
 
 export function deleteEntry(localId: string): void {
+  db.runSync(`DELETE FROM pending_photos WHERE entry_local_id = ?`, localId)
   db.runSync(`DELETE FROM entries WHERE local_id = ?`, localId)
+}
+
+/** Parse JSON columns back into arrays */
+function parseEntryRow(row: any): LocalEntry {
+  return {
+    ...row,
+    employee_ids: row.employee_ids ? JSON.parse(row.employee_ids) : undefined,
+    machine_ids: row.machine_ids ? JSON.parse(row.machine_ids) : undefined,
+    standdown_machine_ids: row.standdown_machine_ids ? JSON.parse(row.standdown_machine_ids) : undefined,
+  }
+}
+
+// ── Pending photos ───────────────────────────────────────────────────────────
+
+export function savePendingPhoto(entryLocalId: string, uri: string, filename: string): void {
+  db.runSync(
+    `INSERT INTO pending_photos (entry_local_id, uri, filename) VALUES (?, ?, ?)`,
+    entryLocalId,
+    uri,
+    filename,
+  )
+}
+
+export function getPendingPhotos(entryLocalId: string): { uri: string; filename: string }[] {
+  return db.getAllSync<{ uri: string; filename: string }>(
+    `SELECT uri, filename FROM pending_photos WHERE entry_local_id = ?`,
+    entryLocalId,
+  )
+}
+
+export function deletePendingPhotos(entryLocalId: string): void {
+  db.runSync(`DELETE FROM pending_photos WHERE entry_local_id = ?`, entryLocalId)
+}
+
+export function getAllPendingPhotoEntryIds(): string[] {
+  return db.getAllSync<{ entry_local_id: string }>(
+    `SELECT DISTINCT entry_local_id FROM pending_photos`
+  ).map((r) => r.entry_local_id)
 }
 
 // ── Breakdowns ────────────────────────────────────────────────────────────────

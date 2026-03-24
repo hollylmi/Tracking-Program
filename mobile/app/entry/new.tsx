@@ -27,7 +27,7 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
 import { api } from '../../lib/api'
-import { saveEntry, markEntrySynced } from '../../lib/db'
+import { saveEntry, markEntrySynced, savePendingPhoto } from '../../lib/db'
 import { LocalEntry, LotMaterialProgress } from '../../types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -777,10 +777,18 @@ export default function NewEntryScreen() {
       notes: notes || undefined,
       other_work_description: otherWork || undefined,
       form_opened_at: formOpenedAt,
+      employee_ids: selectedEmployeeIds.length > 0 ? selectedEmployeeIds : undefined,
+      machine_ids: selectedMachineIds.length > 0 ? selectedMachineIds : undefined,
+      standdown_machine_ids: hasDelays && selectedStanddownIds.length > 0 ? selectedStanddownIds : undefined,
       synced: 0,
     }
 
     saveEntry(entryData)
+
+    // Persist photos to SQLite so they survive app restarts
+    for (const photo of photos) {
+      savePendingPhoto(localId, photo.uri, photo.filename)
+    }
 
     if (isOnline) {
       try {
@@ -789,7 +797,7 @@ export default function NewEntryScreen() {
           employee_ids: selectedEmployeeIds,
           machine_ids: selectedMachineIds,
           standdown_machine_ids: hasDelays ? selectedStanddownIds : [],
-        } as LocalEntry & { employee_ids: number[]; machine_ids: number[]; standdown_machine_ids: number[] })
+        } as any)
         const serverId = response.data.id
         markEntrySynced(localId, serverId)
 
@@ -801,6 +809,12 @@ export default function NewEntryScreen() {
           } catch {
             photosFailed++
           }
+        }
+
+        // Clean up pending photos on successful upload
+        if (photosFailed === 0) {
+          const { deletePendingPhotos } = await import('../../lib/db')
+          deletePendingPhotos(localId)
         }
 
         if (photosFailed > 0) {

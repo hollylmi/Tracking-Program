@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -9,18 +9,21 @@ import {
   StyleSheet,
   Dimensions,
   ActivityIndicator,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import Card from '../../../components/ui/Card'
 import Badge from '../../../components/ui/Badge'
 import LoadingSpinner from '../../../components/ui/LoadingSpinner'
 import { Colors, Typography, Spacing, BorderRadius } from '../../../constants/theme'
 import { api } from '../../../lib/api'
+import { cachedQuery } from '../../../lib/cachedQuery'
 import { API_BASE_URL } from '../../../constants/api'
 import { useAuthStore } from '../../../store/auth'
+import { getCachedPhotoUri } from '../../../lib/photoCache'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 
@@ -31,11 +34,15 @@ const SLATE = Colors.dark
 function InternalHeader({
   onBack,
   onEdit,
+  onDelete,
   canEdit,
+  canDelete,
 }: {
   onBack: () => void
   onEdit: () => void
+  onDelete: () => void
   canEdit: boolean
+  canDelete: boolean
 }) {
   return (
     <View style={hdr.bar}>
@@ -47,13 +54,21 @@ function InternalHeader({
         <Ionicons name="chevron-back" size={24} color={Colors.white} />
       </TouchableOpacity>
       <Text style={hdr.title}>Entry Detail</Text>
-      {canEdit ? (
-        <TouchableOpacity onPress={onEdit} style={hdr.rightBtn}>
-          <Text style={hdr.editText}>Edit</Text>
-        </TouchableOpacity>
-      ) : (
-        <View style={hdr.rightBtn} />
-      )}
+      <View style={hdr.rightActions}>
+        {canDelete && (
+          <TouchableOpacity
+            onPress={onDelete}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="trash-outline" size={20} color={Colors.error} />
+          </TouchableOpacity>
+        )}
+        {canEdit && (
+          <TouchableOpacity onPress={onEdit}>
+            <Text style={hdr.editText}>Edit</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   )
 }
@@ -67,7 +82,7 @@ const hdr = StyleSheet.create({
     paddingVertical: 13,
   },
   leftBtn: { width: 40, alignItems: 'flex-start' },
-  rightBtn: { width: 40, alignItems: 'flex-end' },
+  rightActions: { flexDirection: 'row', alignItems: 'center', gap: 14, minWidth: 40, justifyContent: 'flex-end' },
   title: {
     flex: 1,
     textAlign: 'center',
@@ -104,13 +119,27 @@ function getPhotoUrl(url: string): string {
 
 function PhotoThumbnail({ url, onPress }: { url: string; onPress: () => void }) {
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [resolvedUri, setResolvedUri] = useState<string | null>(null)
   const token = useAuthStore((s) => s.accessToken)
+
+  useEffect(() => {
+    setStatus('loading')
+    getCachedPhotoUri(url).then((localUri) => {
+      setResolvedUri(localUri ?? getPhotoUrl(url))
+    })
+  }, [url])
+
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
       <View style={styles.thumbnail}>
-        {status !== 'error' && (
+        {resolvedUri && status !== 'error' && (
           <Image
-            source={{ uri: getPhotoUrl(url), headers: token ? { Authorization: `Bearer ${token}` } : undefined }}
+            source={{
+              uri: resolvedUri,
+              ...(resolvedUri.startsWith('http') && token
+                ? { headers: { Authorization: `Bearer ${token}` } }
+                : {}),
+            }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
             onLoad={() => setStatus('ok')}
@@ -127,6 +156,73 @@ function PhotoThumbnail({ url, onPress }: { url: string; onPress: () => void }) 
         )}
       </View>
     </TouchableOpacity>
+  )
+}
+
+function FullScreenPhotoModal({
+  photo,
+  photos,
+  photoIndex,
+  onClose,
+  token,
+}: {
+  photo: { url: string }
+  photos: { id: number; url: string }[]
+  photoIndex: number | null
+  onClose: () => void
+  token: string | null
+}) {
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [resolvedUri, setResolvedUri] = useState<string | null>(null)
+
+  useEffect(() => {
+    setStatus('loading')
+    getCachedPhotoUri(photo.url).then((localUri) => {
+      setResolvedUri(localUri ?? getPhotoUrl(photo.url))
+    })
+  }, [photo.url])
+
+  return (
+    <Modal visible animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalContainer}>
+        <TouchableOpacity
+          style={styles.modalClose}
+          onPress={onClose}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="close" size={28} color={Colors.white} />
+        </TouchableOpacity>
+        <View style={styles.fullImage}>
+          {resolvedUri && status !== 'error' && (
+            <Image
+              source={{
+                uri: resolvedUri,
+                ...(resolvedUri.startsWith('http') && token
+                  ? { headers: { Authorization: `Bearer ${token}` } }
+                  : {}),
+              }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="contain"
+              onLoad={() => setStatus('ok')}
+              onError={() => setStatus('error')}
+            />
+          )}
+          {status === 'loading' && (
+            <ActivityIndicator style={StyleSheet.absoluteFill} size="large" color={Colors.white} />
+          )}
+          {status === 'error' && (
+            <View style={[StyleSheet.absoluteFill, styles.photoError]}>
+              <Ionicons name="camera-outline" size={48} color={Colors.textSecondary} />
+            </View>
+          )}
+        </View>
+        {photos.length > 1 && (
+          <Text style={styles.photoCounter}>
+            {(photoIndex ?? 0) + 1} / {photos.length}
+          </Text>
+        )}
+      </View>
+    </Modal>
   )
 }
 
@@ -166,14 +262,18 @@ function BasicRow({ label, value }: { label: string; value: string }) {
 export default function EntryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [photoIndex, setPhotoIndex] = useState<number | null>(null)
-  const [modalStatus, setModalStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [deleting, setDeleting] = useState(false)
   const token = useAuthStore((s) => s.accessToken)
   const user = useAuthStore((s) => s.user)
 
   const { data: entry, isLoading, isError } = useQuery({
     queryKey: ['entry', id],
-    queryFn: () => api.entries.detail(Number(id)).then((r) => r.data),
+    queryFn: () =>
+      cachedQuery(`entry_${id}`, () =>
+        api.entries.detail(Number(id)).then((r) => r.data)
+      ),
     enabled: !!id,
   })
 
@@ -183,11 +283,39 @@ export default function EntryDetailScreen() {
     entry.submitted_by_user_id === user.id
   )
 
+  const canDelete = !!user && user.role === 'admin'
+
+  function handleDelete() {
+    Alert.alert(
+      'Delete Entry',
+      'Are you sure you want to permanently delete this entry? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true)
+            try {
+              await api.entries.delete(Number(id))
+              queryClient.invalidateQueries({ queryKey: ['entries'] })
+              router.back()
+            } catch {
+              Alert.alert('Error', 'Failed to delete entry. Please try again.')
+            } finally {
+              setDeleting(false)
+            }
+          },
+        },
+      ]
+    )
+  }
+
   // ── Loading ──
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <InternalHeader onBack={() => router.back()} onEdit={() => {}} canEdit={false} />
+        <InternalHeader onBack={() => router.back()} onEdit={() => {}} onDelete={() => {}} canEdit={false} canDelete={false} />
         <View style={styles.loadingBody}>
           <LoadingSpinner fullScreen />
         </View>
@@ -199,7 +327,7 @@ export default function EntryDetailScreen() {
   if (isError || !entry) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <InternalHeader onBack={() => router.back()} onEdit={() => {}} canEdit={false} />
+        <InternalHeader onBack={() => router.back()} onEdit={() => {}} onDelete={() => {}} canEdit={false} canDelete={false} />
         <View style={styles.errorBody}>
           <Text style={styles.errorText}>Could not load entry.</Text>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -225,7 +353,9 @@ export default function EntryDetailScreen() {
       <InternalHeader
         onBack={() => router.back()}
         onEdit={() => router.push(`/entry/${id}/edit` as any)}
+        onDelete={handleDelete}
         canEdit={canEdit}
+        canDelete={canDelete}
       />
 
       <ScrollView
@@ -396,50 +526,13 @@ export default function EntryDetailScreen() {
 
       {/* ── Full-screen photo modal ── */}
       {selectedPhoto && (
-        <Modal
-          visible
-          animationType="fade"
-          onRequestClose={() => setPhotoIndex(null)}
-          onShow={() => setModalStatus('loading')}
-        >
-          <View style={styles.modalContainer}>
-            <TouchableOpacity
-              style={styles.modalClose}
-              onPress={() => setPhotoIndex(null)}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Ionicons name="close" size={28} color={Colors.white} />
-            </TouchableOpacity>
-            <View style={styles.fullImage}>
-              {modalStatus !== 'error' && (
-                <Image
-                  source={{ uri: getPhotoUrl(selectedPhoto.url), headers: token ? { Authorization: `Bearer ${token}` } : undefined }}
-                  style={StyleSheet.absoluteFill}
-                  resizeMode="contain"
-                  onLoad={() => setModalStatus('ok')}
-                  onError={() => setModalStatus('error')}
-                />
-              )}
-              {modalStatus === 'loading' && (
-                <ActivityIndicator
-                  style={StyleSheet.absoluteFill}
-                  size="large"
-                  color={Colors.white}
-                />
-              )}
-              {modalStatus === 'error' && (
-                <View style={[StyleSheet.absoluteFill, styles.photoError]}>
-                  <Ionicons name="camera-outline" size={48} color={Colors.textSecondary} />
-                </View>
-              )}
-            </View>
-            {photos.length > 1 && (
-              <Text style={styles.photoCounter}>
-                {(photoIndex ?? 0) + 1} / {photos.length}
-              </Text>
-            )}
-          </View>
-        </Modal>
+        <FullScreenPhotoModal
+          photo={selectedPhoto}
+          photos={photos}
+          photoIndex={photoIndex}
+          onClose={() => setPhotoIndex(null)}
+          token={token}
+        />
       )}
     </SafeAreaView>
   )

@@ -21,6 +21,7 @@ import ScreenHeader from '../../components/layout/ScreenHeader'
 import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
+import { cachedQuery } from '../../lib/cachedQuery'
 import { useToastStore } from '../../store/toast'
 import { Machine } from '../../types'
 
@@ -82,7 +83,10 @@ export default function NewBreakdownScreen() {
 
   const { data: machines = [], isLoading: machinesLoading } = useQuery({
     queryKey: ['machines'],
-    queryFn: () => api.equipment.list().then(r => r.data.machines),
+    queryFn: () =>
+      cachedQuery('equipment_all', () =>
+        api.equipment.list().then(r => r.data.machines)
+      ),
     staleTime: 5 * 60 * 1000,
   })
 

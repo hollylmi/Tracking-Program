@@ -105,6 +105,7 @@ export const api = {
     detail: (id: number) => apiClient.get<Entry>(`/entries/${id}`),
     create: (data: LocalEntry) => apiClient.post<Entry>('/entries', data),
     update: (id: number, data: Partial<Entry>) => apiClient.patch<Entry>(`/entries/${id}`, data),
+    delete: (id: number) => apiClient.delete(`/entries/${id}`),
   },
 
   equipment: {

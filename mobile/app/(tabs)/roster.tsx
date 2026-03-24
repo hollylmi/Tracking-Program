@@ -13,6 +13,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import AppInput from '../../components/ui/AppInput'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
+import { cachedQuery } from '../../lib/cachedQuery'
 import { useAuthStore } from '../../store/auth'
 import { RosterDay } from '../../types'
 
@@ -467,7 +468,10 @@ function SchedulingGrid({ isAdmin }: { isAdmin: boolean }) {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['roster', 'team', weekStart],
-    queryFn: () => api.scheduling.grid(weekStart).then(r => r.data),
+    queryFn: () =>
+      cachedQuery(`scheduling_grid_${weekStart ?? 'default'}`, () =>
+        api.scheduling.grid(weekStart).then(r => r.data)
+      ),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -796,7 +800,10 @@ function PersonalRoster() {
   const [refreshing, setRefreshing] = useState(false)
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['roster', 'my'],
-    queryFn: () => api.roster.my().then(r => r.data),
+    queryFn: () =>
+      cachedQuery('roster_my_full', () =>
+        api.roster.my().then(r => r.data)
+      ),
     staleTime: 10 * 60 * 1000,
   })
 

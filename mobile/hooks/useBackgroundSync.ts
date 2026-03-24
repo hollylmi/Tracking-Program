@@ -1,12 +1,16 @@
 import { useEffect, useRef } from 'react'
 import * as Network from 'expo-network'
 import { syncPendingEntries } from '../lib/sync'
+import { prefetchAllData } from '../lib/prefetch'
 
 /**
- * Polls network state every 10 s and triggers a sync of locally-saved entries
+ * Polls network state every 10 s and triggers:
+ *  1. Push of locally-saved entries/breakdowns/photos to the server
+ *  2. Prefetch of all viewable data into SQLite cache for offline use
  * whenever the device transitions from offline → online.
- * Also runs once on mount (in case the app was opened while already online
- * with pending entries from a previous offline session).
+ *
+ * The initial prefetch on app start is handled separately (after auth loads)
+ * — this hook only handles the offline→online transition.
  */
 export function useBackgroundSync() {
   const wasOnline = useRef<boolean | null>(null)
@@ -17,11 +21,11 @@ export function useBackgroundSync() {
       const online =
         state.isConnected === true && state.isInternetReachable !== false
 
+      // Only trigger on offline → online transitions (not first mount)
       const justCameOnline = wasOnline.current === false && online
-      const firstCheckOnline = wasOnline.current === null && online
 
-      if (justCameOnline || firstCheckOnline) {
-        syncPendingEntries()
+      if (justCameOnline) {
+        syncPendingEntries().then(() => prefetchAllData())
       }
 
       wasOnline.current = online

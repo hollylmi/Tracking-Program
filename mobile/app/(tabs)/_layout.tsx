@@ -1,7 +1,11 @@
+import { useEffect } from 'react'
 import { View } from 'react-native'
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../../constants/theme'
+import { useAuthStore } from '../../store/auth'
+import { registerForPushNotifications } from '../../lib/notifications'
+import { OfflineBanner } from '../../components/ui/OfflineBanner'
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 
@@ -19,7 +23,17 @@ const tabs: Array<{
 ]
 
 export default function TabsLayout() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      registerForPushNotifications()
+    }
+  }, [isAuthenticated])
+
   return (
+    <View style={{ flex: 1 }}>
+    <OfflineBanner />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -70,5 +84,6 @@ export default function TabsLayout() {
         />
       ))}
     </Tabs>
+    </View>
   )
 }

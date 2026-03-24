@@ -22,6 +22,7 @@ import DateTimePicker from '@react-native-community/datetimepicker'
 import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
+import { cachedQuery } from '../../lib/cachedQuery'
 import { useAuthStore } from '../../store/auth'
 import { useToastStore } from '../../store/toast'
 import { BreakdownDetail, MachineDetail } from '../../types'
@@ -507,7 +508,10 @@ export default function MachineDetailScreen() {
 
   const { data: machine, isLoading, isError, refetch } = useQuery({
     queryKey: ['machine', id],
-    queryFn: () => api.equipment.detail(Number(id)).then(r => r.data),
+    queryFn: () =>
+      cachedQuery(`machine_${id}`, () =>
+        api.equipment.detail(Number(id)).then(r => r.data)
+      ),
     staleTime: 2 * 60 * 1000,
   })
 

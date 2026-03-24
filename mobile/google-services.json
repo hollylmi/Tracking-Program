@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "115334426855",
+    "project_id": "plytrack",
+    "storage_bucket": "plytrack.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:115334426855:android:dbb2ec48e1214f59adb242",
+        "android_client_info": {
+          "package_name": "com.lmigroup.plytrack"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOgo10RLF26mMRG_EgKKYhIDyfv4UJKZI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

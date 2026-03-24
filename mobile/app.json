@@ -13,15 +13,21 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lmigroup.plytrack",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
     "android": {
+      "package": "com.lmigroup.plytrack",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "permissions": ["RECEIVE_BOOT_COMPLETED"],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -33,7 +39,14 @@
       "expo-camera",
       "expo-image-picker",
       "expo-location",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "sounds": [],
+          "enableBackgroundRemoteNotifications": true
+        }
+      ]
     ]
   }
 }

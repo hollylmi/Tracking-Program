@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, Alert, ActivityIndicator, Modal, StatusBar, Linking,
@@ -13,9 +13,11 @@ import EmptyState from '../../components/ui/EmptyState'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { API_BASE_URL } from '../../constants/api'
 import { api } from '../../lib/api'
+import { cachedQuery } from '../../lib/cachedQuery'
 import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { Document } from '../../types'
+import { cacheDocument, getCachedDocumentUri } from '../../lib/documentCache'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -68,9 +70,14 @@ function PdfViewerModal({
 }) {
   const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(true)
+  const [url, setUrl] = useState(`${API_BASE_URL}/api/documents/${doc.id}/file?token=${token}`)
 
-  // Pass JWT as query param so WebView can load the protected URL
-  const url = `${API_BASE_URL}/api/documents/${doc.id}/file?token=${token}`
+  // Try local cache first (for offline viewing)
+  useEffect(() => {
+    getCachedDocumentUri(doc.id, doc.filename).then((localUri) => {
+      if (localUri) setUrl(localUri)
+    })
+  }, [doc.id])
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -115,11 +122,18 @@ function PdfViewerModal({
 
 function DocCard({ doc }: { doc: Document }) {
   const [opening, setOpening] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [isCached, setIsCached] = useState(false)
   const [pdfVisible, setPdfVisible] = useState(false)
   const token = useAuthStore(s => s.accessToken) ?? ''
   const ext = getExt(doc.filename)
   const icon = DOC_ICONS[ext] ?? 'document-outline'
   const color = DOC_COLORS[ext] ?? Colors.textSecondary
+
+  // Check if doc is saved offline
+  useEffect(() => {
+    getCachedDocumentUri(doc.id, doc.filename).then((uri) => setIsCached(!!uri))
+  }, [doc.id])
 
   const handleOpen = async () => {
     if (opening) return
@@ -141,6 +155,18 @@ function DocCard({ doc }: { doc: Document }) {
     }
   }
 
+  const handleSaveOffline = async () => {
+    setDownloading(true)
+    try {
+      await cacheDocument(doc.id, doc.filename)
+      setIsCached(true)
+    } catch {
+      Alert.alert('Error', 'Could not save document for offline use.')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
     <>
       <Card padding="none">
@@ -153,8 +179,19 @@ function DocCard({ doc }: { doc: Document }) {
             <Text style={styles.docMeta}>
               {ext.toUpperCase()}
               {doc.uploaded_at ? `  ·  ${formatDate(doc.uploaded_at)}` : ''}
+              {isCached ? '  ·  Saved offline' : ''}
             </Text>
           </View>
+          {!isCached && (
+            <TouchableOpacity onPress={handleSaveOffline} style={styles.saveBtn} activeOpacity={0.8} disabled={downloading}>
+              {downloading
+                ? <ActivityIndicator size="small" color={Colors.textSecondary} />
+                : <Ionicons name="download-outline" size={18} color={Colors.textSecondary} />}
+            </TouchableOpacity>
+          )}
+          {isCached && (
+            <Ionicons name="checkmark-circle" size={18} color={Colors.success} style={{ marginRight: 4 }} />
+          )}
           <TouchableOpacity onPress={handleOpen} style={styles.openBtn} activeOpacity={0.8} disabled={opening}>
             {opening
               ? <ActivityIndicator size="small" color={Colors.primary} />
@@ -182,7 +219,10 @@ export default function DocumentsScreen() {
 
   const { data: docs = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['documents', activeProject?.id],
-    queryFn: () => api.documents.list(activeProject?.id).then(r => r.data.documents),
+    queryFn: () =>
+      cachedQuery(`documents_${activeProject?.id}`, () =>
+        api.documents.list(activeProject?.id).then(r => r.data.documents)
+      ),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -241,6 +281,7 @@ const styles = StyleSheet.create({
   docName: { ...Typography.bodySmall, color: Colors.textPrimary, fontWeight: '500' },
   docMeta: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
   openBtn: { padding: Spacing.sm },
+  saveBtn: { padding: Spacing.sm },
   skeleton: { height: 72, backgroundColor: Colors.surface, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
   errorBody: { flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
   errorText: { ...Typography.body, color: Colors.textSecondary },

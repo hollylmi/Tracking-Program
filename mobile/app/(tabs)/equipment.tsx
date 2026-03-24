@@ -16,6 +16,7 @@ import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
+import { cachedQuery } from '../../lib/cachedQuery'
 import { useProjectStore } from '../../store/project'
 import { Machine, Breakdown } from '../../types'
 
@@ -92,7 +93,10 @@ export default function EquipmentScreen() {
   const { data: machines = [], isLoading: machinesLoading, refetch: refetchMachines } =
     useQuery({
       queryKey: ['machines', projectId],
-      queryFn: () => api.equipment.list(projectId).then(r => r.data.machines),
+      queryFn: () =>
+        cachedQuery(`machines_project_${projectId}`, () =>
+          api.equipment.list(projectId).then(r => r.data.machines)
+        ),
       enabled: !!projectId,
       staleTime: 5 * 60 * 1000,
     })
@@ -100,7 +104,10 @@ export default function EquipmentScreen() {
   const { data: breakdowns = [], isLoading: breakdownsLoading, refetch: refetchBreakdowns } =
     useQuery({
       queryKey: ['breakdowns', projectId],
-      queryFn: () => api.equipment.breakdowns(projectId).then(r => r.data.breakdowns),
+      queryFn: () =>
+        cachedQuery(`breakdowns_${projectId}`, () =>
+          api.equipment.breakdowns(projectId).then(r => r.data.breakdowns)
+        ),
       enabled: !!projectId,
       staleTime: 2 * 60 * 1000,
     })

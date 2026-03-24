@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getUnsyncedEntries, getUnsyncedBreakdowns, markEntrySynced, markBreakdownSynced } from '../lib/db'
+import {
+  getUnsyncedEntries, getUnsyncedBreakdowns,
+  markEntrySynced, markBreakdownSynced,
+  getPendingPhotos, deletePendingPhotos,
+} from '../lib/db'
 import { api } from '../lib/api'
 import { useToastStore } from '../store/toast'
 
@@ -49,9 +53,29 @@ export function useSyncStatus(): SyncStatus {
       const unsyncedEntries = getUnsyncedEntries()
       for (const entry of unsyncedEntries) {
         try {
-          const res = await api.entries.create(entry)
-          markEntrySynced(entry.local_id, res.data.id)
+          const res = await api.entries.create({
+            ...entry,
+            employee_ids: entry.employee_ids ?? [],
+            machine_ids: entry.machine_ids ?? [],
+            standdown_machine_ids: entry.standdown_machine_ids ?? [],
+          } as any)
+          const serverId = res.data.id
+          markEntrySynced(entry.local_id, serverId)
           synced++
+
+          // Upload any pending photos
+          const photos = getPendingPhotos(entry.local_id)
+          let allUploaded = true
+          for (const photo of photos) {
+            try {
+              await api.photos.upload(serverId, photo.uri, photo.filename)
+            } catch {
+              allUploaded = false
+            }
+          }
+          if (allUploaded) {
+            deletePendingPhotos(entry.local_id)
+          }
         } catch {
           failed++
         }

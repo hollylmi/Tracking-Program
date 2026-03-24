@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useProjectStore } from '../store/project'
+import { cachedQuery } from '../lib/cachedQuery'
 import { ReferenceData } from '../types'
 
 export function useReference() {
@@ -8,7 +9,10 @@ export function useReference() {
 
   return useQuery<ReferenceData>({
     queryKey: ['reference', activeProject?.id],
-    queryFn: () => api.reference.get(activeProject?.id).then((r) => r.data as ReferenceData),
+    queryFn: () =>
+      cachedQuery(`reference_${activeProject!.id}`, () =>
+        api.reference.get(activeProject?.id).then((r) => r.data as ReferenceData)
+      ),
     enabled: !!activeProject,
     staleTime: 30 * 60 * 1000,
   })

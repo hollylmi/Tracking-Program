@@ -13,12 +13,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PieChart } from 'react-native-gifted-charts'
 import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme'
 import ScreenHeader from '../../components/layout/ScreenHeader'
 import { api } from '../../lib/api'
+import { saveReferenceData, getReferenceData } from '../../lib/db'
+import { cachedQuery } from '../../lib/cachedQuery'
 import { Entry, ProgressTask, ProjectCosts, MaterialProductivity } from '../../types'
 import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
@@ -26,6 +28,7 @@ import { useProject } from '../../hooks/useProject'
 import { useEntries } from '../../hooks/useEntries'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { useSyncStatus } from '../../hooks/useSyncStatus'
+import { prefetchAllData } from '../../lib/prefetch'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
@@ -754,14 +757,14 @@ function SyncStatusBar({
           </Text>
         )}
       </View>
-      {!syncing && isOnline && hasPending && (
+      {!syncing && isOnline && (
         <TouchableOpacity
           onPress={onSyncNow}
           style={stSync.btn}
           activeOpacity={0.75}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Text style={stSync.btnText}>Sync now</Text>
+          <Text style={stSync.btnText}>{hasPending ? 'Sync now' : 'Refresh'}</Text>
         </TouchableOpacity>
       )}
       {syncing && (
@@ -829,8 +832,13 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     if (!activeProject && user?.accessible_projects?.length) {
-      api.projects.detail(user.accessible_projects[0].id).then((r) => {
+      const projectId = user.accessible_projects[0].id
+      api.projects.detail(projectId).then((r) => {
+        try { saveReferenceData(`project_${projectId}`, r.data) } catch {}
         setActiveProject(r.data)
+      }).catch(() => {
+        const cached = getReferenceData(`project_${projectId}`)
+        if (cached) setActiveProject(cached as any)
       })
     }
   }, [activeProject, user])
@@ -841,13 +849,24 @@ export default function DashboardScreen() {
     setSwitcherOpen(false)
     try {
       const { data } = await api.projects.detail(projectId)
+      try { saveReferenceData(`project_${projectId}`, data) } catch {}
       setActiveProject(data)
+    } catch {
+      const cached = getReferenceData(`project_${projectId}`)
+      if (cached) setActiveProject(cached as any)
     } finally {
       setSwitching(false)
     }
   }
 
   const { pending, syncing, lastSyncedAt, syncNow } = useSyncStatus()
+  const queryClient = useQueryClient()
+
+  const handleFullSync = async () => {
+    await syncNow()
+    await prefetchAllData()
+    queryClient.invalidateQueries()
+  }
 
   const {
     data: project,
@@ -862,7 +881,10 @@ export default function DashboardScreen() {
 
   const { data: costs, isLoading: costsLoading } = useQuery({
     queryKey: ['project-costs', activeProject?.id],
-    queryFn: () => api.projects.costs(activeProject!.id).then((r) => r.data),
+    queryFn: () =>
+      cachedQuery(`project_costs_${activeProject!.id}`, () =>
+        api.projects.costs(activeProject!.id).then((r) => r.data)
+      ),
     enabled: !!activeProject?.id,
     staleTime: 5 * 60 * 1000,
   })
@@ -995,7 +1017,7 @@ export default function DashboardScreen() {
           syncing={syncing}
           lastSyncedAt={lastSyncedAt}
           isOnline={isOnline}
-          onSyncNow={syncNow}
+          onSyncNow={handleFullSync}
         />
 
         {projectError ? (

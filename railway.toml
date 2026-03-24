@@ -5,3 +5,9 @@ buildCommand = "pip install -r requirements.txt && playwright install chromium &
 [deploy]
 startCommand = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
 restartPolicyType = "on_failure"
+
+# ── Cron: daily entry reminders at 4pm AEST (06:00 UTC) weekdays ────────────
+# Requires APP_URL and CRON_SECRET env vars set in Railway
+[cron]
+schedule = "0 6 * * 1-5"
+command = "curl -sf -X POST \"$APP_URL/api/admin/send-reminders\" -H \"Authorization: Bearer $CRON_SECRET\" -H \"Content-Type: application/json\""

@@ -28,6 +28,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ accessToken, refreshToken, user, isAuthenticated: true })
   },
   logout: async () => {
+    const { unregisterPushToken } = await import('../lib/notifications')
+    await unregisterPushToken()
     await SecureStore.deleteItemAsync('access_token')
     await SecureStore.deleteItemAsync('refresh_token')
     await SecureStore.deleteItemAsync('user')

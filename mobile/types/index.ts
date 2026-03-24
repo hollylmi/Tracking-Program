@@ -179,6 +179,9 @@ export interface LocalEntry {
   machines_stood_down?: boolean
   weather?: string
   form_opened_at?: string
+  employee_ids?: number[]
+  machine_ids?: number[]
+  standdown_machine_ids?: number[]
   synced?: number
   created_at?: string
 }

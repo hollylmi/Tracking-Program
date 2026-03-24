@@ -21,6 +21,7 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../../con
 import { useReference } from '../../../hooks/useReference'
 import { useToastStore } from '../../../store/toast'
 import { api } from '../../../lib/api'
+import { cachedQuery } from '../../../lib/cachedQuery'
 import { LotMaterialProgress } from '../../../types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -396,7 +397,10 @@ export default function EntryEditScreen() {
 
   const entryQuery = useQuery({
     queryKey: ['entry', id],
-    queryFn: () => api.entries.detail(Number(id)).then((r) => r.data),
+    queryFn: () =>
+      cachedQuery(`entry_${id}`, () =>
+        api.entries.detail(Number(id)).then((r) => r.data)
+      ),
     enabled: !!id,
   })
 

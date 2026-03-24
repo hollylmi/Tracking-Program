@@ -9,7 +9,7 @@ import uuid
 from werkzeug.utils import secure_filename
 
 from models import (
-    db, User, Project, DailyEntry, Employee, Machine, HiredMachine,
+    db, User, Project, DailyEntry, Employee, Machine, HiredMachine, StandDown,
     MachineBreakdown, BreakdownPhoto, ProjectDocument, ProjectMachine, ProjectAssignment,
     PlannedData, Role, DeviceToken, EntryPhoto,
     ProjectBudgetedRole, ProjectNonWorkDate, PublicHoliday, CFMEUDate,
@@ -511,6 +511,31 @@ def create_entry():
     )
 
     db.session.add(entry)
+    db.session.flush()  # get entry.id before adding associations
+
+    # ── Employee associations ─────────────────────────────────────────────
+    employee_ids = data.get('employee_ids') or []
+    if employee_ids:
+        employees = Employee.query.filter(Employee.id.in_(employee_ids)).all()
+        entry.employees = employees
+
+    # ── Machine associations ──────────────────────────────────────────────
+    machine_ids = data.get('machine_ids') or []
+    if machine_ids:
+        machines = Machine.query.filter(Machine.id.in_(machine_ids)).all()
+        entry.machines = machines
+
+    # ── Standdown hired machines ──────────────────────────────────────────
+    standdown_ids = data.get('standdown_machine_ids') or []
+    for hm_id in standdown_ids:
+        sd = StandDown(
+            hired_machine_id=hm_id,
+            entry_id=entry.id,
+            stand_down_date=entry_date,
+            reason=data.get('delay_reason') or 'Wet Weather',
+        )
+        db.session.add(sd)
+
     db.session.commit()
 
     return _format_entry(entry, include_detail=True), 201
@@ -575,6 +600,39 @@ def update_entry(entry_id):
     db.session.commit()
 
     return _format_entry(entry, include_detail=True), 200
+
+
+@api_data_bp.route('/entries/<int:entry_id>', methods=['DELETE'])
+@jwt_required()
+def delete_entry(entry_id):
+    user, err = _get_user()
+    if err:
+        return err
+
+    if user.role != 'admin':
+        return {'error': 'Only admins can delete entries'}, 403
+
+    entry = DailyEntry.query.get(entry_id)
+    if not entry:
+        return {'error': 'Entry not found'}, 404
+
+    allowed_ids = _accessible_ids(user)
+    if not _has_project_access(user, entry.project_id, allowed_ids):
+        return {'error': 'Access denied'}, 403
+
+    # Remove associated photos from storage
+    for photo in entry.photos:
+        try:
+            photo_path = os.path.join('uploads', photo.filename)
+            if os.path.exists(photo_path):
+                os.remove(photo_path)
+        except Exception:
+            pass
+
+    db.session.delete(entry)
+    db.session.commit()
+
+    return {'message': 'Entry deleted'}, 200
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2119,14 +2177,22 @@ def remove_device_token():
 # ─────────────────────────────────────────────────────────────────────────────
 
 @api_data_bp.route('/admin/send-reminders', methods=['POST'])
-@jwt_required()
+@jwt_required(optional=True)
 def send_reminders():
-    user, err = _get_user()
-    if err:
-        return err
+    # Allow cron jobs to authenticate with CRON_SECRET bearer token
+    auth_header = request.headers.get('Authorization', '')
+    cron_secret = os.environ.get('CRON_SECRET')
+    is_cron = (
+        cron_secret
+        and auth_header == f'Bearer {cron_secret}'
+    )
 
-    if user.role != 'admin':
-        return {'error': 'Access denied'}, 403
+    if not is_cron:
+        user, err = _get_user()
+        if err:
+            return err
+        if user.role != 'admin':
+            return {'error': 'Access denied'}, 403
 
     from utils.notifications import send_entry_reminders
     count = send_entry_reminders()

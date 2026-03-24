@@ -44,13 +44,12 @@ function Field({
   editable?: boolean
   inputRef?: React.RefObject<TextInput>
 }) {
-  const [focused, setFocused] = useState(false)
   const [hidden, setHidden] = useState(secureTextEntry ?? false)
 
   return (
     <View style={fieldSt.wrap}>
       <Text style={fieldSt.label}>{label}</Text>
-      <View style={[fieldSt.row, focused && fieldSt.rowFocused]}>
+      <View style={fieldSt.row}>
         <TextInput
           ref={inputRef}
           style={fieldSt.input}
@@ -64,8 +63,6 @@ function Field({
           returnKeyType={returnKeyType}
           onSubmitEditing={onSubmitEditing}
           editable={editable}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
         />
         {secureTextEntry && (
           <TouchableOpacity
@@ -76,7 +73,7 @@ function Field({
             <Ionicons
               name={hidden ? 'eye-off-outline' : 'eye-outline'}
               size={18}
-              color={focused ? Colors.primary : Colors.textLight}
+              color={Colors.textLight}
             />
           </TouchableOpacity>
         )}
@@ -182,6 +179,7 @@ export default function LoginScreen() {
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
     >
       {/* ── Background shading layers ── */}
       <View style={styles.glowTop} />
@@ -189,7 +187,8 @@ export default function LoginScreen() {
 
       <ScrollView
         contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
+        bounces={false}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Brand ── */}

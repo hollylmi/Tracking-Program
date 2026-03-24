@@ -9,12 +9,15 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import Toast from '../components/ui/Toast'
 import { useToastStore } from '../store/toast'
 import { useBackgroundSync } from '../hooks/useBackgroundSync'
+import { syncPendingEntries } from '../lib/sync'
+import { prefetchAllData } from '../lib/prefetch'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       staleTime: 1000 * 60 * 5, // 5 minutes
+      networkMode: 'always',     // let queryFn run offline (serves from SQLite cache)
     },
   },
 })
@@ -47,6 +50,8 @@ export default function RootLayout() {
           // attempted a refresh and called logout() if it failed.
           // Nothing extra to do; the app will redirect to /login.
         }
+        // Push any pending local data, then prefetch everything for offline use
+        syncPendingEntries().then(() => prefetchAllData())
       }
       setInitializing(false)
     }
