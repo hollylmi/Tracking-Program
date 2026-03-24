@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Entry Detail — {{ entry.entry_date.strftime('%d %b %Y') }}{% endblock %}
+
+{% block content %}
+
+{# ── Header ── #}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <a href="{{ url_for('entries.entries') }}" class="text-muted text-decoration-none small">
+      <i class="bi bi-chevron-left me-1"></i>All Entries
+    </a>
+    <h2 class="fw-bold mb-0 mt-1">
+      <i class="bi bi-clipboard-data me-2 text-primary"></i>
+      {{ entry.entry_date.strftime('%A, %d %B %Y') }}
+    </h2>
+    <div class="text-muted small mt-1">{{ entry.project.name }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('entries.edit_entry', entry_id=entry.id) }}" class="btn btn-primary">
+      <i class="bi bi-pencil me-1"></i>Edit Entry
+    </a>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  {# ── Left column ── #}
+  <div class="col-lg-8">
+
+    {# Basic Info #}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-info-circle me-1"></i>Basic Info
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted ps-3" style="width:35%">Date</td>
+              <td class="fw-semibold">{{ entry.entry_date.strftime('%A, %d %B %Y') }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-3">Project</td>
+              <td><span class="badge bg-primary-subtle text-primary fw-semibold">{{ entry.project.name }}</span></td>
+            </tr>
+            {% if entry.lot_number or entry.material %}
+            <tr>
+              <td class="text-muted ps-3">Lot / Material</td>
+              <td>
+                {% if entry.lot_number %}Lot {{ entry.lot_number }}{% endif %}
+                {% if entry.lot_number and entry.material %} — {% endif %}
+                {% if entry.material %}{{ entry.material }}{% endif %}
+              </td>
+            </tr>
+            {% endif %}
+            {% if entry.location %}
+            <tr>
+              <td class="text-muted ps-3">Location</td>
+              <td>{{ entry.location }}</td>
+            </tr>
+            {% endif %}
+            {% if entry.weather %}
+            <tr>
+              <td class="text-muted ps-3">Weather</td>
+              <td><i class="bi bi-cloud me-1 text-muted"></i>{{ entry.weather }}</td>
+            </tr>
+            {% endif %}
+            {% if entry.user %}
+            <tr>
+              <td class="text-muted ps-3">Submitted by</td>
+              <td>{{ entry.user.display_name or entry.user.username }}</td>
+            </tr>
+            {% endif %}
+            {% if entry.created_at %}
+            <tr>
+              <td class="text-muted ps-3">Submitted at</td>
+              <td class="text-muted small">{{ entry.created_at.strftime('%d %b %Y %H:%M') }}</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# Production #}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-bar-chart me-1"></i>Production
+      </div>
+      <div class="card-body">
+        <div class="row g-3 text-center">
+          <div class="col-4">
+            <div class="fs-3 fw-bold text-primary">{{ entry.install_hours }}</div>
+            <div class="text-muted small">Install Hours</div>
+          </div>
+          <div class="col-4">
+            <div class="fs-3 fw-bold text-primary">{{ entry.install_sqm }}</div>
+            <div class="text-muted small">Area Installed (m²)</div>
+          </div>
+          <div class="col-4">
+            <div class="fs-3 fw-bold text-primary">{{ entry.num_people or '—' }}</div>
+            <div class="text-muted small">Crew Size</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Crew #}
+    {% if entry.employees %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-people me-1"></i>Crew on Site ({{ entry.employees|length }})
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% for emp in entry.employees %}
+            <tr>
+              <td class="ps-3">{{ emp.name }}</td>
+              <td class="text-muted">{{ emp.role or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Equipment #}
+    {% if entry.machines %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-truck me-1"></i>Equipment Used
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% for m in entry.machines %}
+            <tr>
+              <td class="ps-3">{{ m.name }}</td>
+              <td class="text-muted">{{ m.machine_type or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Photos #}
+    {% if entry.photos %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-images me-1"></i>Photos ({{ entry.photos|length }})
+      </div>
+      <div class="card-body">
+        <div class="row g-2">
+          {% for photo in entry.photos %}
+          <div class="col-6 col-md-4 col-lg-3">
+            <a href="{{ url_for('entries.serve_entry_photo', filename=photo.filename) }}" target="_blank">
+              <img src="{{ url_for('entries.serve_entry_photo', filename=photo.filename) }}"
+                   class="img-fluid rounded shadow-sm"
+                   style="width:100%; height:140px; object-fit:cover;"
+                   alt="{{ photo.original_name or photo.filename }}"
+                   onerror="this.parentElement.innerHTML='<div class=\'bg-light rounded d-flex align-items-center justify-content-center\' style=\'height:140px\'><i class=\'bi bi-image text-muted fs-2\'></i></div>'">
+            </a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {# ── Right column ── #}
+  <div class="col-lg-4">
+
+    {# Delays #}
+    {% if entry.delay_hours and entry.delay_hours > 0 %}
+    <div class="card border-0 shadow-sm mb-4 border-start border-warning border-3">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-exclamation-triangle text-warning me-1"></i>Delays
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-warning text-dark fs-6">{{ entry.delay_hours }}h delay</span>
+          {% if entry.delay_billable is not none %}
+          <span class="badge {% if entry.delay_billable %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-secondary{% endif %}">
+            {{ 'Billable' if entry.delay_billable else 'Non-billable' }}
+          </span>
+          {% endif %}
+        </div>
+        {% if entry.delay_reason %}
+        <div class="fw-semibold mb-1">{{ entry.delay_reason }}</div>
+        {% endif %}
+        {% if entry.delay_description %}
+        <div class="text-muted small fst-italic">{{ entry.delay_description }}</div>
+        {% endif %}
+        {# Stood-down hired machines #}
+        {% set standdowns = entry.stand_downs %}
+        {% if standdowns %}
+        <hr class="my-2">
+        <div class="small text-muted fw-semibold text-uppercase mb-1">Hired Machines Stood Down</div>
+        {% for sd in standdowns %}
+        <div class="small"><i class="bi bi-exclamation-circle text-warning me-1"></i>{{ sd.hired_machine.machine_name }}</div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# Notes #}
+    {% if entry.notes %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-chat-left-text me-1"></i>Notes
+      </div>
+      <div class="card-body bg-light rounded-bottom">
+        <p class="mb-0 fst-italic text-muted">{{ entry.notes }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Other Work #}
+    {% if entry.other_work_description %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-tools me-1"></i>Other Work
+      </div>
+      <div class="card-body bg-light rounded-bottom">
+        <p class="mb-0 fst-italic text-muted">{{ entry.other_work_description }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

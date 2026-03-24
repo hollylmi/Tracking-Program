@@ -64,6 +64,8 @@ class Project(db.Model):
     quoted_days = db.Column(db.Integer)       # Total quoted working days for the job
     state = db.Column(db.String(10))              # Australian state code e.g. 'QLD'
     is_cfmeu = db.Column(db.Boolean, default=False)
+    site_address = db.Column(db.String(500))      # Physical site address
+    site_contact = db.Column(db.String(200))      # On-site contact name / phone
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     entries = db.relationship('DailyEntry', backref='project', lazy=True)
     planned_data = db.relationship('PlannedData', backref='project',

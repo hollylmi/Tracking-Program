@@ -22,3 +22,9 @@ Thumbs.db
 # Editor
 .vscode/
 *.swp
+
+# Mobile App
+mobile/node_modules/
+mobile/.expo/
+"mobile/GoogleService-Info.plist" 
+"mobile/google-services.json" 

@@ -638,6 +638,8 @@ def admin_projects():
                             setattr(p, attr, cast(raw))
                         except ValueError:
                             pass
+                p.site_address = request.form.get('site_address', '').strip() or None
+                p.site_contact = request.form.get('site_contact', '').strip() or None
                 db.session.add(p)
                 db.session.commit()
                 flash(f'Project "{name}" added.', 'success')
@@ -655,6 +657,8 @@ def admin_projects():
             project.hours_per_day = float(hours_per_day) if hours_per_day else None
             quoted_days = request.form.get('quoted_days', '').strip()
             project.quoted_days = int(quoted_days) if quoted_days else None
+            project.site_address = request.form.get('site_address', '').strip() or None
+            project.site_contact = request.form.get('site_contact', '').strip() or None
             db.session.commit()
             flash('Project updated.', 'success')
         elif action == 'toggle':
