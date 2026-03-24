@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import db, User, Employee
+from models import db, User, Employee, UserProjectAccess, DeviceToken
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -125,6 +125,25 @@ def admin_users_reset_password(user_id):
     user.password_hash = generate_password_hash(new_password)
     db.session.commit()
     flash(f'Password for "{user.username}" reset successfully.', 'success')
+    return redirect(url_for('auth.admin_users'))
+
+
+@auth_bp.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@require_role('admin')
+def admin_users_delete(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash('You cannot delete your own account.', 'danger')
+        return redirect(url_for('auth.admin_users'))
+    if user.entries:
+        flash(f'Cannot delete "{user.username}" — has submitted entries. Deactivate instead.', 'danger')
+        return redirect(url_for('auth.admin_users'))
+    # Clean up related data
+    UserProjectAccess.query.filter_by(user_id=user.id).delete()
+    DeviceToken.query.filter_by(user_id=user.id).delete()
+    db.session.delete(user)
+    db.session.commit()
+    flash(f'User "{user.username}" deleted.', 'success')
     return redirect(url_for('auth.admin_users'))
 
 

@@ -86,6 +86,14 @@
                       <i class="bi bi-{{ 'person-dash' if user.active else 'person-check' }}"></i>
                     </button>
                   </form>
+
+                  <!-- Delete user -->
+                  <form method="POST" action="{{ url_for('auth.admin_users_delete', user_id=user.id) }}"
+                        onsubmit="return confirm('Permanently delete {{ user.username }}? This cannot be undone.')">
+                    <button class="btn btn-outline-danger" title="Delete user">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
                   {% endif %}
                 </div>
               </td>
