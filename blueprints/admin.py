@@ -926,7 +926,7 @@ def admin_holidays():
                 try:
                     d = datetime.strptime(date_str, '%Y-%m-%d').date()
                     states_str = ','.join(selected_states)
-                    db.session.add(PublicHoliday(state=states_str, states=states_str, date=d, name=name))
+                    db.session.add(PublicHoliday(state=selected_states[0], states=states_str, date=d, name=name))
                     db.session.commit()
                     flash(f'Added: {name} ({states_str} — {d.strftime("%d/%m/%Y")}).', 'success')
                 except ValueError:
@@ -957,7 +957,7 @@ def admin_cfmeu():
                 try:
                     d = datetime.strptime(date_str, '%Y-%m-%d').date()
                     states_str = ','.join(selected_states)
-                    db.session.add(CFMEUDate(state=states_str, states=states_str, date=d, name=name))
+                    db.session.add(CFMEUDate(state=selected_states[0], states=states_str, date=d, name=name))
                     db.session.commit()
                     flash(f'Added: {name} ({states_str} — {d.strftime("%d/%m/%Y")}).', 'success')
                 except ValueError:
