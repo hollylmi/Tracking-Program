@@ -164,11 +164,13 @@ class DailyEntry(db.Model):
     num_people = db.Column(db.Integer)
     install_hours = db.Column(db.Float, default=0)
     install_sqm = db.Column(db.Float, default=0)       # actual SQM installed this entry
-    delay_hours = db.Column(db.Float, default=0)
-    delay_billable = db.Column(db.Boolean, default=True)   # True=client delay (billed), False=own delay
-    delay_reason = db.Column(db.Text)                       # short category / type
-    delay_description = db.Column(db.Text)                  # detailed description for standdown emails
-    machines_stood_down = db.Column(db.Boolean, default=False)  # True = hired machines stood down (wet weather)
+    delay_hours = db.Column(db.Float, default=0)            # wet weather delay hours
+    delay_billable = db.Column(db.Boolean, default=True)   # legacy — kept for compat
+    delay_reason = db.Column(db.Text)                       # e.g. "Wet Weather"
+    delay_description = db.Column(db.Text)                  # description for standdown emails
+    own_delay_hours = db.Column(db.Float, default=0)       # internal delays (hidden from client view)
+    own_delay_description = db.Column(db.Text)             # internal delay notes
+    machines_stood_down = db.Column(db.Boolean, default=False)  # hired machines stood down
     weather = db.Column(db.String(200))             # weather conditions for the day
     notes = db.Column(db.Text)
     other_work_description = db.Column(db.Text)
@@ -191,6 +193,9 @@ class DailyEntry(db.Model):
     production_lines = db.relationship('EntryProductionLine', backref='entry',
                                         cascade='all, delete-orphan', lazy=True,
                                         order_by='EntryProductionLine.id')
+    variation_lines = db.relationship('EntryVariationLine', backref='entry',
+                                       cascade='all, delete-orphan', lazy=True,
+                                       order_by='EntryVariationLine.id')
 
     @property
     def day_name(self):
@@ -210,8 +215,25 @@ class DailyEntry(db.Model):
             return sum(pl.install_hours or 0 for pl in self.production_lines)
         return self.install_hours or 0
 
+    @property
+    def total_variation_hours(self):
+        """Total hours from variation lines."""
+        return sum(vl.hours or 0 for vl in self.variation_lines) if self.variation_lines else 0
+
     def __repr__(self):
         return f'<DailyEntry {self.entry_date} - {self.project.name}>'
+
+
+class EntryVariationLine(db.Model):
+    """Client-directed variation work within a daily entry."""
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
+    variation_number = db.Column(db.String(100))
+    description = db.Column(db.Text)
+    hours = db.Column(db.Float, default=0)
+
+    def __repr__(self):
+        return f'<EntryVariationLine V{self.variation_number} {self.hours}h>'
 
 
 class EntryProductionLine(db.Model):

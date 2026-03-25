@@ -231,6 +231,9 @@ with app.app_context():
         "ALTER TABLE hired_machine ADD COLUMN group_id INTEGER REFERENCES machine_group(id)",
         # Production line hours
         "ALTER TABLE entry_production_line ADD COLUMN install_hours FLOAT DEFAULT 0",
+        # Own delays + variations
+        "ALTER TABLE daily_entry ADD COLUMN own_delay_hours FLOAT DEFAULT 0",
+        "ALTER TABLE daily_entry ADD COLUMN own_delay_description TEXT",
     ]:
         try:
             db.session.execute(db.text(stmt))

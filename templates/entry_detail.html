@@ -225,6 +225,48 @@
     </div>
     {% endif %}
 
+    {# Variations #}
+    {% if entry.variation_lines %}
+    <div class="card border-0 shadow-sm mb-4 border-start border-warning border-3">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
+        <i class="bi bi-clipboard-check text-warning me-1"></i>Variations (Client Work)
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>Variation #</th><th>Description</th><th class="text-end">Hours</th></tr>
+          </thead>
+          <tbody>
+            {% for vl in entry.variation_lines %}
+            <tr>
+              <td class="fw-semibold">{{ vl.variation_number or '—' }}</td>
+              <td>{{ vl.description or '—' }}</td>
+              <td class="text-end"><span class="badge bg-warning text-dark">{{ vl.hours }}h</span></td>
+            </tr>
+            {% endfor %}
+            <tr class="table-light">
+              <td colspan="2" class="fw-semibold text-end">Total</td>
+              <td class="text-end fw-semibold">{{ entry.total_variation_hours }}h</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Own Delays (internal) #}
+    {% if entry.own_delay_hours and entry.own_delay_hours > 0 %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold text-uppercase small text-secondary border-bottom">
+        <i class="bi bi-shield-x me-1"></i>Own Delays (Internal)
+      </div>
+      <div class="card-body">
+        <span class="badge bg-secondary">{{ entry.own_delay_hours }}h</span>
+        {% if entry.own_delay_description %}<span class="text-muted ms-2">{{ entry.own_delay_description }}</span>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
     {# Notes #}
     {% if entry.notes %}
     <div class="card border-0 shadow-sm mb-4">

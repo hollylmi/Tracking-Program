@@ -110,14 +110,19 @@ def compute_gantt_data(project_id):
     target_finish = max(day_to_date.values()) if day_to_date else None
 
     # Standdown dates — split by cause for Gantt shading, combined for forecast skip
-    _delay_entries = (DailyEntry.query.filter_by(project_id=project_id)
-                      .filter(DailyEntry.delay_hours > 0).all())
-    delay_entry_dates = {e.entry_date for e in _delay_entries}
+    # Wet weather delays (delay_hours > 0 with weather reason) — shown + affects schedule
+    _all_entries = DailyEntry.query.filter_by(project_id=project_id).all()
     weather_delay_dates = {
-        e.entry_date for e in _delay_entries
-        if e.delay_reason and 'weather' in e.delay_reason.lower()
+        e.entry_date for e in _all_entries
+        if (e.delay_hours or 0) > 0 and e.delay_reason and 'weather' in e.delay_reason.lower()
     }
-    client_delay_dates = delay_entry_dates - weather_delay_dates
+    # Client delay dates = entries with variation lines (client-directed extra work)
+    client_delay_dates = {
+        e.entry_date for e in _all_entries
+        if e.variation_lines and sum(vl.hours or 0 for vl in e.variation_lines) > 0
+    }
+    # Combined delay dates for forecast skip (weather + client variations, NOT own delays)
+    delay_entry_dates = weather_delay_dates | client_delay_dates
 
     def next_work_day(d):
         # Advance d past Sundays (unless worked), non-work dates, and standdown dates

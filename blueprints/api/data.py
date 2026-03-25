@@ -9,7 +9,7 @@ import uuid
 from werkzeug.utils import secure_filename
 
 from models import (
-    db, User, Project, DailyEntry, EntryProductionLine, Employee, Machine, MachineGroup, HiredMachine, StandDown,
+    db, User, Project, DailyEntry, EntryProductionLine, EntryVariationLine, Employee, Machine, MachineGroup, HiredMachine, StandDown,
     MachineBreakdown, BreakdownPhoto, ProjectDocument, ProjectMachine, ProjectAssignment,
     PlannedData, Role, DeviceToken, EntryPhoto,
     ProjectBudgetedRole, ProjectNonWorkDate, PublicHoliday, CFMEUDate,
@@ -126,6 +126,12 @@ def _format_entry(entry, include_detail=False):
              'install_hours': pl.install_hours, 'install_sqm': pl.install_sqm}
             for pl in entry.production_lines
         ]
+        base['variation_lines'] = [
+            {'variation_number': vl.variation_number, 'description': vl.description, 'hours': vl.hours}
+            for vl in entry.variation_lines
+        ]
+        base['own_delay_hours'] = entry.own_delay_hours
+        base['own_delay_description'] = entry.own_delay_description
         sd_ids = [sd.hired_machine_id for sd in entry.stand_downs if sd.hired_machine_id]
         if sd_ids:
             hm_map = {
@@ -564,6 +570,21 @@ def create_entry():
         if prod_lines[0].get('material'):
             entry.material = prod_lines[0]['material']
 
+    # ── Variation lines ────────────────────────────────────────────────
+    var_lines = data.get('variation_lines') or []
+    for vl in var_lines:
+        db.session.add(EntryVariationLine(
+            entry_id=entry.id,
+            variation_number=vl.get('variation_number') or None,
+            description=vl.get('description') or None,
+            hours=float(vl.get('hours') or 0)))
+
+    # ── Own delays ─────────────────────────────────────────────────────
+    if 'own_delay_hours' in data:
+        entry.own_delay_hours = float(data.get('own_delay_hours') or 0)
+    if 'own_delay_description' in data:
+        entry.own_delay_description = data.get('own_delay_description') or None
+
     db.session.commit()
 
     return _format_entry(entry, include_detail=True), 201
@@ -678,6 +699,22 @@ def update_entry(entry_id):
         entry.install_hours = total_hrs
         entry.lot_number = first_lot
         entry.material = first_material
+
+    # Variation lines
+    if 'variation_lines' in data:
+        EntryVariationLine.query.filter_by(entry_id=entry.id).delete()
+        for vl in (data['variation_lines'] or []):
+            db.session.add(EntryVariationLine(
+                entry_id=entry.id,
+                variation_number=vl.get('variation_number') or None,
+                description=vl.get('description') or None,
+                hours=float(vl.get('hours') or 0)))
+
+    # Own delays
+    if 'own_delay_hours' in data:
+        entry.own_delay_hours = float(data.get('own_delay_hours') or 0)
+    if 'own_delay_description' in data:
+        entry.own_delay_description = data.get('own_delay_description') or None
 
     entry.updated_at = datetime.utcnow()
     db.session.commit()

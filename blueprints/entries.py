@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 from datetime import date, datetime
 
 from models import (db, Project, Employee, Machine, MachineGroup, DailyEntry, EntryProductionLine,
-                    HiredMachine, StandDown, EntryPhoto, ProjectMachine, ProjectAssignment)
+                    EntryVariationLine, HiredMachine, StandDown, EntryPhoto, ProjectMachine, ProjectAssignment)
 import storage
 from utils.files import allowed_photo
 
@@ -158,6 +158,23 @@ def new_entry():
                 material=pl['material'], install_hours=pl['hours'],
                 install_sqm=pl['sqm']))
 
+        # Variation lines
+        var_numbers = request.form.getlist('var_number[]')
+        var_descs = request.form.getlist('var_desc[]')
+        var_hours_list = request.form.getlist('var_hours[]')
+        for i in range(len(var_numbers)):
+            vnum = (var_numbers[i].strip() if i < len(var_numbers) else '') or None
+            vdesc = (var_descs[i].strip() if i < len(var_descs) else '') or None
+            vhrs = float(var_hours_list[i] or 0) if i < len(var_hours_list) else 0
+            if vnum or vdesc or vhrs:
+                db.session.add(EntryVariationLine(
+                    entry_id=entry.id, variation_number=vnum,
+                    description=vdesc, hours=vhrs))
+
+        # Own delays
+        entry.own_delay_hours = float(request.form.get('own_delay_hours') or 0)
+        entry.own_delay_description = request.form.get('own_delay_description', '').strip() or None
+
         # Photo uploads
         photos = request.files.getlist('photos')
         for photo in photos:
@@ -267,6 +284,24 @@ def edit_entry(entry_id):
         entry.weather = request.form.get('weather', '').strip() or None
         entry.notes = request.form.get('notes', '').strip() or None
         entry.other_work_description = request.form.get('other_work_description', '').strip() or None
+
+        # Variation lines
+        EntryVariationLine.query.filter_by(entry_id=entry.id).delete()
+        var_numbers = request.form.getlist('var_number[]')
+        var_descs = request.form.getlist('var_desc[]')
+        var_hours_list = request.form.getlist('var_hours[]')
+        for i in range(len(var_numbers)):
+            vnum = (var_numbers[i].strip() if i < len(var_numbers) else '') or None
+            vdesc = (var_descs[i].strip() if i < len(var_descs) else '') or None
+            vhrs = float(var_hours_list[i] or 0) if i < len(var_hours_list) else 0
+            if vnum or vdesc or vhrs:
+                db.session.add(EntryVariationLine(
+                    entry_id=entry.id, variation_number=vnum,
+                    description=vdesc, hours=vhrs))
+
+        # Own delays
+        entry.own_delay_hours = float(request.form.get('own_delay_hours') or 0)
+        entry.own_delay_description = request.form.get('own_delay_description', '').strip() or None
         try:
             entry.entry_date = datetime.strptime(request.form.get('entry_date'), '%Y-%m-%d').date()
         except ValueError:
