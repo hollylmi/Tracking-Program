@@ -15,12 +15,13 @@ def require_role(*roles):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
+            is_api = request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
             if not current_user.is_authenticated:
-                if request.is_json:
+                if is_api:
                     return {'error': 'Unauthorised'}, 401
                 return redirect(url_for('auth.login'))
             if current_user.role not in roles:
-                if request.is_json:
+                if is_api:
                     return {'error': 'Forbidden'}, 403
                 flash('You do not have permission to access this page.', 'danger')
                 return redirect(url_for('main.index'))

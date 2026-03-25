@@ -471,24 +471,36 @@ function openSchedModal(td) {
   new bootstrap.Modal(document.getElementById('schedOverrideModal')).show();
 }
 
+// ── AJAX submit helper ───────────────────────────────────────────────────────
+async function ajaxOverride(form) {
+  const formData = new FormData(form);
+  const resp = await fetch(form.action, {
+    method: 'POST',
+    body: new URLSearchParams(formData),
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'Accept': 'application/json',
+    },
+    credentials: 'same-origin',
+  });
+  // Check that we got JSON back (not a redirect to login page)
+  const ct = resp.headers.get('content-type') || '';
+  if (resp.ok && ct.includes('application/json')) {
+    return true;
+  }
+  return false;
+}
+
 // Intercept modal form submit — use AJAX so the page doesn't reload
 document.querySelector('#schedOverrideModal form').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const form = this;
-  const formData = new FormData(form);
-
   try {
-    const resp = await fetch(form.action, {
-      method: 'POST',
-      body: new URLSearchParams(formData),
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    });
-    if (resp.ok) {
+    const ok = await ajaxOverride(this);
+    if (ok) {
       bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
-      // Immediately poll to show the change
       await pollGrid();
     } else {
-      alert('Failed to save override. Please try again.');
+      alert('Failed to save. You may need to refresh the page and log in again.');
     }
   } catch {
     alert('Network error. Please check your connection.');
@@ -498,17 +510,10 @@ document.querySelector('#schedOverrideModal form').addEventListener('submit', as
 // Also handle the Clear button via AJAX
 document.getElementById('schedClearBtn').addEventListener('click', async function(e) {
   e.preventDefault();
-  const form = this.closest('form');
   document.getElementById('schedAction').value = 'clear';
-  const formData = new FormData(form);
-
   try {
-    const resp = await fetch(form.action, {
-      method: 'POST',
-      body: new URLSearchParams(formData),
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    });
-    if (resp.ok) {
+    const ok = await ajaxOverride(this.closest('form'));
+    if (ok) {
       bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
       await pollGrid();
     } else {

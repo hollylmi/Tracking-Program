@@ -402,8 +402,10 @@ def scheduling_leave_delete(leave_id):
 # ---------------------------------------------------------------------------
 
 @scheduling_bp.route('/scheduling/override', methods=['POST'])
-@require_role('admin')
+@require_role('admin', 'supervisor')
 def schedule_override():
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     employee_id = request.form.get('employee_id', type=int)
     date_str = request.form.get('date', '').strip()
     action = request.form.get('action', 'set')
@@ -413,6 +415,8 @@ def schedule_override():
     try:
         override_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Invalid date'}), 400
         flash('Invalid date.', 'danger')
         if redirect_project:
             return redirect(url_for('scheduling.scheduling_project', project_id=redirect_project, week=week))
@@ -444,8 +448,7 @@ def schedule_override():
             ))
         db.session.commit()
 
-    # If AJAX request, return JSON instead of redirect
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+    if is_ajax:
         return jsonify({'ok': True})
 
     if redirect_project:
