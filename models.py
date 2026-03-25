@@ -188,13 +188,35 @@ class DailyEntry(db.Model):
     )
     photos = db.relationship('EntryPhoto', backref='entry',
                              cascade='all, delete-orphan', lazy=True)
+    production_lines = db.relationship('EntryProductionLine', backref='entry',
+                                        cascade='all, delete-orphan', lazy=True,
+                                        order_by='EntryProductionLine.id')
 
     @property
     def day_name(self):
         return self.entry_date.strftime('%A') if self.entry_date else ''
 
+    @property
+    def total_sqm(self):
+        """Total sqm from production lines, falling back to install_sqm."""
+        if self.production_lines:
+            return sum(pl.install_sqm or 0 for pl in self.production_lines)
+        return self.install_sqm or 0
+
     def __repr__(self):
         return f'<DailyEntry {self.entry_date} - {self.project.name}>'
+
+
+class EntryProductionLine(db.Model):
+    """One lot/material production line within a daily entry."""
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
+    lot_number = db.Column(db.String(100))
+    material = db.Column(db.String(200))
+    install_sqm = db.Column(db.Float, default=0)
+
+    def __repr__(self):
+        return f'<EntryProductionLine {self.lot_number} {self.material} {self.install_sqm}>'
 
 
 class EntryPhoto(db.Model):

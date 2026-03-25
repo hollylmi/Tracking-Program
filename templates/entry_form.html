@@ -63,29 +63,13 @@
                      placeholder="e.g. Fine, Wet, Overcast, High winds — 32°C">
             </div>
 
-            <!-- Lot Number, Location, Material -->
-            <div class="col-sm-4">
-              <label class="form-label fw-semibold">Lot Number</label>
-              <input type="text" name="lot_number" class="form-control" id="lotInput"
-                     value="{{ entry.lot_number if entry and entry.lot_number else '' }}"
-                     placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off">
-              <datalist id="lotOptions"></datalist>
-            </div>
-            <div class="col-sm-4">
+            <!-- Location -->
+            <div class="col-sm-6">
               <label class="form-label fw-semibold">Location</label>
               <input type="text" name="location" class="form-control"
                      value="{{ entry.location if entry and entry.location else '' }}"
                      placeholder="e.g. North End">
             </div>
-            <div class="col-sm-4">
-              <label class="form-label fw-semibold">Material</label>
-              <input type="text" name="material" class="form-control" id="materialInput"
-                     value="{{ entry.material if entry and entry.material else '' }}"
-                     placeholder="e.g. HDPE" list="materialOptions" autocomplete="off">
-              <datalist id="materialOptions"></datalist>
-            </div>
-
-            <!-- Hours + SQM -->
             <div class="col-sm-3">
               <label class="form-label fw-semibold">People</label>
               <input type="number" name="num_people" class="form-control bg-light" min="0"
@@ -100,13 +84,65 @@
                      value="{{ entry.install_hours if entry else '' }}"
                      placeholder="0.00">
             </div>
-            <div class="col-sm-3">
-              <label class="form-label fw-semibold">Install SQM</label>
-              <input type="number" name="install_sqm" class="form-control" min="0" step="0.1"
-                     id="installSqmInput"
-                     value="{{ entry.install_sqm if entry else '' }}"
-                     placeholder="0.0">
+
+            <!-- Production Lines (multiple lots/materials) -->
+            <div class="col-12">
+              <div class="card border shadow-sm">
+                <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold small"><i class="bi bi-layers me-1 text-primary"></i>Production Lines</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small" id="totalSqmLabel">Total: 0 m²</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary py-0" onclick="addProductionLine()">
+                      <i class="bi bi-plus me-1"></i>Add Line
+                    </button>
+                  </div>
+                </div>
+                <div class="card-body p-0">
+                  <datalist id="lotOptions"></datalist>
+                  <datalist id="materialOptions"></datalist>
+                  <table class="table table-sm mb-0 align-middle" id="productionTable">
+                    <thead class="table-light">
+                      <tr>
+                        <th style="width:30%">Lot</th>
+                        <th style="width:35%">Material</th>
+                        <th style="width:25%">SQM</th>
+                        <th style="width:10%"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="productionLines">
+                      {% if entry and entry.production_lines %}
+                        {% for pl in entry.production_lines %}
+                        <tr class="prod-line">
+                          <td><input type="text" name="line_lot[]" class="form-control form-control-sm" value="{{ pl.lot_number or '' }}" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
+                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" value="{{ pl.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
+                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ pl.install_sqm or '' }}" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
+                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotalSqm()"><i class="bi bi-x-lg"></i></button></td>
+                        </tr>
+                        {% endfor %}
+                      {% elif entry and (entry.lot_number or entry.material or entry.install_sqm) %}
+                        <tr class="prod-line">
+                          <td><input type="text" name="line_lot[]" class="form-control form-control-sm" value="{{ entry.lot_number or '' }}" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
+                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" value="{{ entry.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
+                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ entry.install_sqm or '' }}" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
+                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotalSqm()"><i class="bi bi-x-lg"></i></button></td>
+                        </tr>
+                      {% else %}
+                        <tr class="prod-line">
+                          <td><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
+                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
+                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
+                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotalSqm()"><i class="bi bi-x-lg"></i></button></td>
+                        </tr>
+                      {% endif %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
+
+            <!-- Hidden install_sqm field (auto-calculated from production lines) -->
+            <input type="hidden" name="install_sqm" id="installSqmInput" value="{{ entry.install_sqm if entry else '0' }}">
+
             <div class="col-sm-3">
               <label class="form-label fw-semibold">Delay Hours</label>
               <input type="number" name="delay_hours" class="form-control" min="0" step="0.25"
@@ -490,6 +526,33 @@
   const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const ENTRY_ID = {{ entry.id if entry else 'null' }};
 
+  // ── Production lines ──────────────────────────────────────────────────────
+  function addProductionLine() {
+    const tbody = document.getElementById('productionLines');
+    const row = document.createElement('tr');
+    row.className = 'prod-line';
+    row.innerHTML = `
+      <td><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
+      <td><input type="text" name="line_material[]" class="form-control form-control-sm" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
+      <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
+      <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotalSqm()"><i class="bi bi-x-lg"></i></button></td>
+    `;
+    tbody.appendChild(row);
+    row.querySelector('input').focus();
+  }
+
+  function updateTotalSqm() {
+    let total = 0;
+    document.querySelectorAll('.line-sqm').forEach(input => {
+      total += parseFloat(input.value) || 0;
+    });
+    document.getElementById('totalSqmLabel').textContent = 'Total: ' + total.toLocaleString('en-AU', {maximumFractionDigits:1}) + ' m²';
+    document.getElementById('installSqmInput').value = total;
+  }
+
+  // Init total on load
+  updateTotalSqm();
+
   function deletePhoto(url, thumbId) {
     if (!confirm('Delete this photo?')) return;
     fetch(url, { method: 'POST' })
@@ -554,12 +617,13 @@
   // Run on load to set initial state
   updateMachinesStoodDownVisibility();
 
-  // Progress widget
+  // Progress widget — uses first production line
   let progressTimeout = null;
   function fetchProgress() {
     const projectId = document.getElementById('projectSelect').value;
-    const lot = document.getElementById('lotInput').value.trim();
-    const material = document.getElementById('materialInput').value.trim();
+    const firstRow = document.querySelector('.prod-line');
+    const lot = firstRow ? (firstRow.querySelector('[name="line_lot[]"]')?.value || '').trim() : '';
+    const material = firstRow ? (firstRow.querySelector('[name="line_material[]"]')?.value || '').trim() : '';
     const widget = document.getElementById('progressWidget');
 
     if (!projectId || !lot || !material) {
@@ -706,15 +770,9 @@
   // Run on page load
   filterMachinesByProject();
   filterEmployeesByProject();
-  document.getElementById('lotInput').addEventListener('change', () => {
-    fetchPlannedOptions(document.getElementById('lotInput').value.trim());
-    scheduleProgress();
-  });
-  document.getElementById('lotInput').addEventListener('input', scheduleProgress);
-  document.getElementById('materialInput').addEventListener('input', scheduleProgress);
 
-  // Initial load — populate material options for existing lot value
-  fetchPlannedOptions('{{ entry.lot_number if entry and entry.lot_number else "" }}');
+  // Initial load — populate lot/material datalists
+  fetchPlannedOptions('');
   fetchProgress();
 
   // Employee checkbox counter
