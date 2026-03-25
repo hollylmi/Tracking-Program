@@ -1,4 +1,4 @@
-from models import DailyEntry, PlannedData, Project
+from models import DailyEntry, EntryProductionLine, PlannedData, Project
 from utils.helpers import _natural_key
 
 
@@ -28,9 +28,15 @@ def compute_project_progress(project_id):
     actual_by_task = {}
     total_install_hours = 0.0
     for e in entries:
-        key = (e.lot_number or '', e.material or '')
-        actual_by_task[key] = actual_by_task.get(key, 0.0) + (e.install_sqm or 0)
         total_install_hours += (e.install_hours or 0)
+        # Use production lines if available, else fall back to legacy fields
+        if e.production_lines:
+            for pl in e.production_lines:
+                key = (pl.lot_number or '', pl.material or '')
+                actual_by_task[key] = actual_by_task.get(key, 0.0) + (pl.install_sqm or 0)
+        else:
+            key = (e.lot_number or '', e.material or '')
+            actual_by_task[key] = actual_by_task.get(key, 0.0) + (e.install_sqm or 0)
 
     tasks = []
     total_planned = 0.0
@@ -95,15 +101,24 @@ def compute_material_productivity(project_id):
                .filter(DailyEntry.install_sqm > 0)
                .all())
 
-    # Group actuals by material
+    # Group actuals by material — use production lines if available
     mat_actual = {}
     for e in entries:
-        mat = e.material or 'Unknown'
-        if mat not in mat_actual:
-            mat_actual[mat] = {'sqm': 0.0, 'dates': set()}
-        mat_actual[mat]['sqm'] += e.install_sqm or 0
-        if e.entry_date:
-            mat_actual[mat]['dates'].add(e.entry_date)
+        if e.production_lines:
+            for pl in e.production_lines:
+                mat = pl.material or 'Unknown'
+                if mat not in mat_actual:
+                    mat_actual[mat] = {'sqm': 0.0, 'dates': set()}
+                mat_actual[mat]['sqm'] += pl.install_sqm or 0
+                if e.entry_date:
+                    mat_actual[mat]['dates'].add(e.entry_date)
+        else:
+            mat = e.material or 'Unknown'
+            if mat not in mat_actual:
+                mat_actual[mat] = {'sqm': 0.0, 'dates': set()}
+            mat_actual[mat]['sqm'] += e.install_sqm or 0
+            if e.entry_date:
+                mat_actual[mat]['dates'].add(e.entry_date)
 
     # Overall totals
     total_planned_sqm = sum(v['sqm'] for v in mat_planned.values())

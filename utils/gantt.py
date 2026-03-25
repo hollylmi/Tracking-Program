@@ -70,15 +70,24 @@ def compute_gantt_data(project_id):
 
     task_order_keys.sort(key=lambda k: (_natural_key(k[0]), _natural_key(k[1])))
 
-    # Actuals by (lot_number, material) — deduplicate dates per task
+    # Actuals by (lot_number, material) — use production lines if available
     actuals_by_task = {}
     for e in entries:
-        key = (e.lot_number or '', e.material or '')
-        if key not in actuals_by_task:
-            actuals_by_task[key] = {'sqm': 0.0, 'hrs': 0.0, 'dates': set()}
-        actuals_by_task[key]['sqm'] += e.install_sqm or 0
-        actuals_by_task[key]['hrs'] += e.install_hours or 0
-        actuals_by_task[key]['dates'].add(e.entry_date)
+        if e.production_lines:
+            for pl in e.production_lines:
+                key = (pl.lot_number or '', pl.material or '')
+                if key not in actuals_by_task:
+                    actuals_by_task[key] = {'sqm': 0.0, 'hrs': 0.0, 'dates': set()}
+                actuals_by_task[key]['sqm'] += pl.install_sqm or 0
+                actuals_by_task[key]['hrs'] += (e.install_hours or 0) / max(len(e.production_lines), 1)
+                actuals_by_task[key]['dates'].add(e.entry_date)
+        else:
+            key = (e.lot_number or '', e.material or '')
+            if key not in actuals_by_task:
+                actuals_by_task[key] = {'sqm': 0.0, 'hrs': 0.0, 'dates': set()}
+            actuals_by_task[key]['sqm'] += e.install_sqm or 0
+            actuals_by_task[key]['hrs'] += e.install_hours or 0
+            actuals_by_task[key]['dates'].add(e.entry_date)
 
     # Install rates per task + global fallback
     task_rates = {}

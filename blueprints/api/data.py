@@ -1714,7 +1714,27 @@ def get_reference():
 
     lot_progress: dict = {}
     if planned_totals:
-        aq = (db.session.query(
+        # Query production lines for accurate per-lot/material actuals
+        plq = (db.session.query(
+            EntryProductionLine.lot_number,
+            EntryProductionLine.material,
+            db.func.sum(EntryProductionLine.install_sqm).label('actual'),
+        ).join(DailyEntry, EntryProductionLine.entry_id == DailyEntry.id)
+        .filter(
+            EntryProductionLine.lot_number.isnot(None),
+            EntryProductionLine.material.isnot(None),
+        ))
+        if prog_pid:
+            plq = plq.filter(DailyEntry.project_id == prog_pid)
+        elif allowed_ids is not None:
+            plq = plq.filter(DailyEntry.project_id.in_(allowed_ids))
+        actuals_from_lines = {
+            (r.lot_number, r.material): float(r.actual or 0)
+            for r in plq.group_by(EntryProductionLine.lot_number, EntryProductionLine.material).all()
+        }
+
+        # Also query legacy entries (no production lines) for backward compat
+        legacy_q = (db.session.query(
             DailyEntry.lot_number,
             DailyEntry.material,
             db.func.sum(DailyEntry.install_sqm).label('actual'),
@@ -1722,15 +1742,25 @@ def get_reference():
             DailyEntry.lot_number.isnot(None),
             DailyEntry.material.isnot(None),
             DailyEntry.install_sqm.isnot(None),
+            ~DailyEntry.id.in_(
+                db.session.query(EntryProductionLine.entry_id).distinct()
+            ),
         ))
         if prog_pid:
-            aq = aq.filter(DailyEntry.project_id == prog_pid)
+            legacy_q = legacy_q.filter(DailyEntry.project_id == prog_pid)
         elif allowed_ids is not None:
-            aq = aq.filter(DailyEntry.project_id.in_(allowed_ids))
-        actuals = {
+            legacy_q = legacy_q.filter(DailyEntry.project_id.in_(allowed_ids))
+        actuals_legacy = {
             (r.lot_number, r.material): float(r.actual or 0)
-            for r in aq.group_by(DailyEntry.lot_number, DailyEntry.material).all()
+            for r in legacy_q.group_by(DailyEntry.lot_number, DailyEntry.material).all()
         }
+
+        # Merge both sources
+        actuals = {}
+        for key, val in actuals_from_lines.items():
+            actuals[key] = actuals.get(key, 0) + val
+        for key, val in actuals_legacy.items():
+            actuals[key] = actuals.get(key, 0) + val
         for lot, mats in planned_totals.items():
             lot_progress[lot] = {}
             for mat, planned_sqm in mats.items():
