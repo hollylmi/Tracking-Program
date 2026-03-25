@@ -172,10 +172,12 @@ def compute_gantt_data(project_id):
         start_f = next_work_day(candidate)
 
         if remaining > planned_sqm * 0.005 and daily_cap_hrs > 0:
-            actual_work_days = len(act['dates']) if act and act['dates'] else 0
-            if actual_work_days > 0 and act and act['sqm'] > 0:
-                # Use effective daily sqm — naturally accounts for partial standdowns
-                effective_daily_sqm = act['sqm'] / actual_work_days
+            actual_hrs = act['hrs'] if act else 0.0
+            actual_sqm_val = act['sqm'] if act else 0.0
+            if actual_hrs > 0 and actual_sqm_val > 0:
+                # Use m²/hour rate × hours_per_day to get daily forecast
+                sqm_per_hour = actual_sqm_val / actual_hrs
+                effective_daily_sqm = sqm_per_hour * hours_per_day
                 days_req = max(1, math.ceil(remaining / effective_daily_sqm - 0.001))
             else:
                 # No actuals yet — use planned number of days

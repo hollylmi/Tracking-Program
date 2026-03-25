@@ -637,14 +637,14 @@ function ProductivityCard({
           <Text style={st.prodOverallNum}>
             {overall.planned_rate !== null ? `${overall.planned_rate}` : '—'}
           </Text>
-          <Text style={st.prodOverallCaption}>plan m²/day</Text>
+          <Text style={st.prodOverallCaption}>plan m²/hr</Text>
         </View>
         <View style={st.cellDivider} />
         <View style={st.prodOverallItem}>
           <Text style={st.prodOverallNum}>
             {overall.actual_rate !== null ? `${overall.actual_rate}` : '—'}
           </Text>
-          <Text style={st.prodOverallCaption}>actual m²/day</Text>
+          <Text style={st.prodOverallCaption}>actual m²/hr</Text>
         </View>
         <View style={st.cellDivider} />
         <View style={st.prodOverallItem}>
@@ -693,7 +693,7 @@ function ProductivityCard({
         )
       })}
 
-      <Text style={st.prodFootnote}>m²/day  ·  based on days with entries for each material</Text>
+      <Text style={st.prodFootnote}>m²/hr  ·  based on recorded install hours per material</Text>
     </Card>
   )
 }

@@ -376,7 +376,7 @@
               <div class="fs-4 fw-bold text-primary">
                 {% if ov.planned_rate %}{{ ov.planned_rate }}{% else %}—{% endif %}
               </div>
-              <div class="small text-muted">Planned m²/day</div>
+              <div class="small text-muted">Planned m²/hr</div>
             </div>
           </div>
           <div class="col-4">
@@ -389,7 +389,7 @@
                 {% endif %}">
                 {% if ov.actual_rate %}{{ ov.actual_rate }}{% else %}—{% endif %}
               </div>
-              <div class="small text-muted">Actual m²/day</div>
+              <div class="small text-muted">Actual m²/hr</div>
             </div>
           </div>
           <div class="col-4">
@@ -407,6 +407,26 @@
           </div>
         </div>
 
+        {% if ov.variation_hours or ov.weather_hours %}
+        <div class="d-flex gap-3 mb-3 flex-wrap">
+          {% if ov.variation_hours %}
+          <div class="badge bg-warning text-dark px-3 py-2">
+            <i class="bi bi-clipboard-check me-1"></i>{{ ov.variation_hours }}h client variations
+          </div>
+          {% endif %}
+          {% if ov.weather_hours %}
+          <div class="badge bg-info text-white px-3 py-2">
+            <i class="bi bi-cloud-rain me-1"></i>{{ ov.weather_hours }}h wet weather
+          </div>
+          {% endif %}
+          {% if ov.actual_hours %}
+          <div class="badge bg-dark text-white px-3 py-2">
+            <i class="bi bi-clock me-1"></i>{{ ov.actual_hours }}h productive install time
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
         <!-- Per-material breakdown -->
         <table class="table table-sm mb-0">
           <thead class="table-light">
@@ -414,8 +434,8 @@
               <th>Material</th>
               <th class="text-end">Planned m²</th>
               <th class="text-end">Actual m²</th>
-              <th class="text-end">Plan Rate<br><small class="text-muted fw-normal">m²/day</small></th>
-              <th class="text-end">Actual Rate<br><small class="text-muted fw-normal">m²/day</small></th>
+              <th class="text-end">Plan Rate<br><small class="text-muted fw-normal">m²/hr</small></th>
+              <th class="text-end">Actual Rate<br><small class="text-muted fw-normal">m²/hr</small></th>
               <th class="text-end">vs Plan</th>
             </tr>
           </thead>
