@@ -259,9 +259,11 @@
           </td>
           <td>
             {% for item in row.machines %}
-            <span class="badge {{ 'bg-danger' if item.broken else 'bg-primary-subtle text-primary' }} me-1">
-              <i class="bi bi-{{ 'tools' if item.broken else ('wrench' if item.assignment.machine_id else 'building') }} me-1"></i>
-              {{ item.assignment.display_name }}
+            {% set a = item.assignment %}
+            {% set plant = (a.machine.plant_id if a.machine and a.machine.plant_id else (a.hired_machine.plant_id if a.hired_machine and a.hired_machine.plant_id else None)) %}
+            <span class="badge {{ 'bg-danger text-white' if item.broken else 'bg-dark text-white' }} me-1">
+              <i class="bi bi-{{ 'tools' if item.broken else ('wrench' if a.machine_id else 'building') }} me-1"></i>
+              {{ a.display_name }}{% if plant %} <span class="fw-normal opacity-75">({{ plant }})</span>{% endif %}
               {% if item.broken %}
                 <span class="fw-normal">(Broken Down{% if item.broken.anticipated_return %} — est. {{ item.broken.anticipated_return.strftime('%d/%m') }}{% endif %})</span>
               {% endif %}
