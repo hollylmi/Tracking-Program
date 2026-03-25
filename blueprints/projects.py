@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify
 from blueprints.auth import require_role
 
-from models import (db, Project, Machine, DailyEntry, HiredMachine, PlannedData,
+from models import (db, Project, Machine, MachineGroup, DailyEntry, HiredMachine, PlannedData,
                     ProjectNonWorkDate, ProjectBudgetedRole, ProjectMachine,
                     ProjectWorkedSunday, ProjectDocument, Role, PublicHoliday,
                     CFMEUDate, ProjectEquipmentRequirement, ProjectEquipmentAssignment)
@@ -275,6 +275,7 @@ def project_dashboard(project_id):
                       if m.id not in assigned_own_ids]
     # All hired machines for this project not yet assigned to a requirement
     assignable_hired = [hm for hm in hired_machines_list if hm.id not in assigned_hired_ids]
+    machine_groups = MachineGroup.query.order_by(MachineGroup.name).all()
 
     return render_template('project_dashboard.html',
                            project=project, progress=progress,
@@ -299,6 +300,7 @@ def project_dashboard(project_id):
                            equip_coverage=equip_coverage,
                            assignable_own=assignable_own,
                            assignable_hired=assignable_hired,
+                           machine_groups=machine_groups,
                            state_holidays=state_holidays,
                            today=date.today())
 
@@ -728,8 +730,39 @@ def equipment_req_assign(project_id, req_id):
     req = ProjectEquipmentRequirement.query.filter_by(id=req_id, project_id=project_id).first_or_404()
     machine_id = request.form.get('machine_id', '').strip()
     hired_machine_id = request.form.get('hired_machine_id', '').strip()
+    group_id = request.form.get('group_id', '').strip()
+
+    # Assign entire group — add all active machines from the group
+    if group_id:
+        grp = MachineGroup.query.get(int(group_id))
+        if grp:
+            count = 0
+            for m in grp.machines:
+                if not m.active:
+                    continue
+                # Skip if already assigned to this requirement
+                existing = ProjectEquipmentAssignment.query.filter_by(
+                    requirement_id=req.id, machine_id=m.id).first()
+                if not existing:
+                    db.session.add(ProjectEquipmentAssignment(
+                        requirement_id=req.id, machine_id=m.id))
+                    count += 1
+            # Also add hired machines in the group
+            for hm in grp.hired_machines:
+                if not hm.active:
+                    continue
+                existing = ProjectEquipmentAssignment.query.filter_by(
+                    requirement_id=req.id, hired_machine_id=hm.id).first()
+                if not existing:
+                    db.session.add(ProjectEquipmentAssignment(
+                        requirement_id=req.id, hired_machine_id=hm.id))
+                    count += 1
+            db.session.commit()
+            flash(f'Group "{grp.name}" assigned — {count} item{"s" if count != 1 else ""} added.', 'success')
+        return redirect(url_for('projects.project_dashboard', project_id=project_id) + '#tab-scheduling')
+
     if not machine_id and not hired_machine_id:
-        flash('Select a machine to assign.', 'danger')
+        flash('Select a machine or group to assign.', 'danger')
         return redirect(url_for('projects.project_dashboard', project_id=project_id) + '#tab-scheduling')
     assignment = ProjectEquipmentAssignment(requirement_id=req.id)
     if machine_id:
