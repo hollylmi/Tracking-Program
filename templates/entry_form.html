@@ -262,13 +262,10 @@
                 </a>
                 <div class="card-body p-1">
                   <div class="text-muted small text-truncate">{{ photo.original_name or photo.filename }}</div>
-                  <form method="POST"
-                        action="{{ url_for('entries.delete_photo', entry_id=entry.id, photo_id=photo.id) }}"
-                        onsubmit="return confirm('Delete this photo?')" class="mt-1">
-                    <button type="submit" class="btn btn-sm btn-outline-danger w-100 py-0">
-                      <i class="bi bi-trash"></i> Remove
-                    </button>
-                  </form>
+                  <button type="button" class="btn btn-sm btn-outline-danger w-100 py-0 mt-1"
+                          onclick="deletePhoto('{{ url_for('entries.delete_photo', entry_id=entry.id, photo_id=photo.id) }}', 'photoThumb_{{ photo.id }}')">
+                    <i class="bi bi-trash"></i> Remove
+                  </button>
                 </div>
               </div>
             </div>
@@ -473,6 +470,20 @@
 <script>
   const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const ENTRY_ID = {{ entry.id if entry else 'null' }};
+
+  function deletePhoto(url, thumbId) {
+    if (!confirm('Delete this photo?')) return;
+    fetch(url, { method: 'POST' })
+      .then(r => {
+        if (r.ok || r.redirected) {
+          const el = document.getElementById(thumbId);
+          if (el) el.remove();
+        } else {
+          alert('Failed to delete photo.');
+        }
+      })
+      .catch(() => alert('Failed to delete photo.'));
+  }
 
   function updateDayDisplay() {
     const input = document.getElementById('entryDate');
