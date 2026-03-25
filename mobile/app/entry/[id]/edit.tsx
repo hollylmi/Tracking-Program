@@ -437,11 +437,11 @@ export default function EntryEditScreen() {
   const [location, setLocation] = useState('')
   const [weather, setWeather] = useState('')
 
-  // Step 2
-  const [lotNumber, setLotNumber] = useState('')
-  const [material, setMaterial] = useState('')
+  // Step 2 — Production (multiple lines)
   const [installHours, setInstallHours] = useState('')
-  const [installSqm, setInstallSqm] = useState('')
+  const [productionLines, setProductionLines] = useState<{ lot: string; material: string; sqm: string }[]>(
+    [{ lot: '', material: '', sqm: '' }]
+  )
 
   // Step 3 — Crew
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([])
@@ -465,7 +465,7 @@ export default function EntryEditScreen() {
   // ── Keyboard refs ─────────────────────────────────────────────────────────────
   const locationRef = useRef<TextInput>(null)
   const installHoursRef = useRef<TextInput>(null)
-  const installSqmRef = useRef<TextInput>(null)
+  // installSqmRef removed — sqm is per production line
   const delayHoursRef = useRef<TextInput>(null)
   const delayDescRef = useRef<TextInput>(null)
   const notesRef = useRef<TextInput>(null)
@@ -476,15 +476,38 @@ export default function EntryEditScreen() {
     return ids.includes(tid) ? ids.filter((x) => x !== tid) : [...ids, tid]
   }
 
+  function updateLine(index: number, field: 'lot' | 'material' | 'sqm', value: string) {
+    setProductionLines(prev => prev.map((line, i) => i === index ? { ...line, [field]: value } : line))
+  }
+
+  function addLine() {
+    setProductionLines(prev => [...prev, { lot: '', material: '', sqm: '' }])
+  }
+
+  function removeLine(index: number) {
+    setProductionLines(prev => prev.length <= 1 ? prev : prev.filter((_, i) => i !== index))
+  }
+
+  const totalSqm = productionLines.reduce((sum, l) => sum + (parseFloat(l.sqm) || 0), 0)
+
   // ── Populate from loaded entry ────────────────────────────────────────────────
   useEffect(() => {
     if (!entry || ready) return
     setLocation(entry.location ?? '')
     setWeather(entry.weather ?? '')
-    setLotNumber(entry.lot_number ?? '')
-    setMaterial(entry.material ?? '')
     setInstallHours(entry.install_hours != null ? String(entry.install_hours) : '')
-    setInstallSqm(entry.install_sqm != null ? String(entry.install_sqm) : '')
+    // Load production lines from entry
+    if (entry.production_lines && entry.production_lines.length > 0) {
+      setProductionLines(entry.production_lines.map((pl: any) => ({
+        lot: pl.lot_number ?? '', material: pl.material ?? '',
+        sqm: pl.install_sqm != null ? String(pl.install_sqm) : '',
+      })))
+    } else if (entry.lot_number || entry.material || entry.install_sqm) {
+      setProductionLines([{
+        lot: entry.lot_number ?? '', material: entry.material ?? '',
+        sqm: entry.install_sqm != null ? String(entry.install_sqm) : '',
+      }])
+    }
     setSelectedEmployeeIds((entry.employees ?? []).map((e: any) => e.id))
     setSelectedMachineIds((entry.machines ?? []).map((m: any) => m.id))
     setSelectedStanddownIds((entry.standdown_machines ?? []).map((h: any) => h.id))
@@ -544,13 +567,11 @@ export default function EntryEditScreen() {
     if (!id) return
     setSaving(true)
     try {
+      const validLines = productionLines.filter(l => l.lot || l.material || l.sqm)
       await api.entries.update(Number(id), {
         location: location || undefined,
         weather: weather || undefined,
-        lot_number: lotNumber || undefined,
-        material: material || undefined,
         install_hours: installHours ? parseFloat(installHours) : undefined,
-        install_sqm: installSqm ? parseFloat(installSqm) : undefined,
         delay_hours: hasDelays && delayHours ? parseFloat(delayHours) : 0,
         delay_reason: hasDelays ? delayReason || undefined : undefined,
         delay_billable: hasDelays ? delayBillable : undefined,
@@ -560,6 +581,11 @@ export default function EntryEditScreen() {
         employee_ids: selectedEmployeeIds,
         machine_ids: selectedMachineIds,
         standdown_machine_ids: selectedStanddownIds.length > 0 ? selectedStanddownIds : [],
+        production_lines: validLines.map(l => ({
+          lot_number: l.lot || null,
+          material: l.material || null,
+          install_sqm: parseFloat(l.sqm) || 0,
+        })),
       } as any)
       queryClient.invalidateQueries({ queryKey: ['entry', id] })
       queryClient.invalidateQueries({ queryKey: ['entries'] })
@@ -620,27 +646,46 @@ export default function EntryEditScreen() {
           {/* ── Step 2: Production ── */}
           {step === 2 && (
             <View>
-              <SelectField label="Lot Number" value={lotNumber} options={lots}
-                onChange={(v) => {
-                  setLotNumber(v)
-                  if (v && lotMaterials[v] && material && !lotMaterials[v].includes(material)) setMaterial('')
-                }}
-                placeholder="Select lot..." optional />
-              <SelectField label="Material" value={material}
-                options={lotNumber && lotMaterials[lotNumber] ? lotMaterials[lotNumber] : materials}
-                onChange={setMaterial} placeholder="Select material..." optional />
-              {lotNumber && lotMaterials[lotNumber] && (
-                <Text style={styles.filterHint}>Showing materials for Lot {lotNumber}</Text>
-              )}
-              {lotNumber && material && lotProgress[lotNumber]?.[material] && (
-                <LotProgressCard data={lotProgress[lotNumber][material]} />
-              )}
               <FieldInput ref={installHoursRef} label="Install Hours" value={installHours}
                 onChangeText={setInstallHours} placeholder="0.0" keyboardType="decimal-pad"
-                optional returnKeyType="next" onSubmitEditing={() => installSqmRef.current?.focus()} />
-              <FieldInput ref={installSqmRef} label="Area Installed (m²)" value={installSqm}
-                onChangeText={setInstallSqm} placeholder="0.0" keyboardType="decimal-pad"
                 optional returnKeyType="done" />
+
+              <View style={styles.prodHeader}>
+                <Text style={styles.prodHeaderTitle}>Production Lines</Text>
+                <Text style={styles.prodHeaderTotal}>Total: {totalSqm.toLocaleString('en-AU', { maximumFractionDigits: 1 })} m²</Text>
+              </View>
+
+              {productionLines.map((line, index) => (
+                <View key={index} style={styles.prodLine}>
+                  <View style={styles.prodLineHeader}>
+                    <Text style={styles.prodLineNum}>Line {index + 1}</Text>
+                    {productionLines.length > 1 && (
+                      <TouchableOpacity onPress={() => removeLine(index)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="close-circle" size={20} color={Colors.error} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <SelectField label="Lot" value={line.lot} options={lots}
+                    onChange={(v) => updateLine(index, 'lot', v)} placeholder="Select lot..." optional />
+                  <SelectField label="Material" value={line.material}
+                    options={line.lot && lotMaterials[line.lot] ? lotMaterials[line.lot] : materials}
+                    onChange={(v) => updateLine(index, 'material', v)} placeholder="Select material..." optional />
+                  {line.lot && lotMaterials[line.lot] && (
+                    <Text style={styles.filterHint}>Showing materials for Lot {line.lot}</Text>
+                  )}
+                  {line.lot && line.material && lotProgress[line.lot]?.[line.material] && (
+                    <LotProgressCard data={lotProgress[line.lot][line.material]} />
+                  )}
+                  <FieldInput label="Area Installed (m²)" value={line.sqm}
+                    onChangeText={(v) => updateLine(index, 'sqm', v)} placeholder="0.0"
+                    keyboardType="decimal-pad" optional returnKeyType="done" />
+                </View>
+              ))}
+
+              <TouchableOpacity style={styles.addLineBtn} onPress={addLine} activeOpacity={0.7}>
+                <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
+                <Text style={styles.addLineBtnText}>Add Production Line</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -746,6 +791,27 @@ const styles = StyleSheet.create({
   loadingText: { ...Typography.body, color: Colors.textSecondary },
   errorText: { ...Typography.body, color: Colors.error },
   backLink: { ...Typography.body, color: Colors.primary, fontWeight: '600' },
+  prodHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: Spacing.sm, marginTop: Spacing.sm,
+  },
+  prodHeaderTitle: { ...Typography.h4, color: Colors.textPrimary },
+  prodHeaderTotal: { ...Typography.bodySmall, color: Colors.primary, fontWeight: '600' },
+  prodLine: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface, padding: Spacing.md, marginBottom: Spacing.sm,
+  },
+  prodLineHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  prodLineNum: { ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  addLineBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    borderWidth: 1.5, borderColor: Colors.primary, borderRadius: BorderRadius.md,
+    paddingVertical: 12, backgroundColor: 'rgba(255,183,197,0.08)', marginBottom: Spacing.md,
+  },
+  addLineBtnText: { ...Typography.body, color: Colors.primary, fontWeight: '600' },
   filterHint: {
     ...Typography.caption, color: Colors.textSecondary, fontStyle: 'italic',
     marginTop: -Spacing.sm, marginBottom: Spacing.md, paddingHorizontal: 2,

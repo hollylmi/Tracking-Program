@@ -94,6 +94,7 @@ export interface Entry {
   employees?: { id: number; name: string; role: string }[]
   machines?: { id: number; name: string; type: string }[]
   standdown_machines?: { id: number; machine_name: string }[]
+  production_lines?: { lot_number: string | null; material: string | null; install_sqm: number }[]
 }
 
 export interface Photo {
