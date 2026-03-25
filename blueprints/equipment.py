@@ -67,6 +67,34 @@ def equipment_machine_save():
     return redirect(url_for('equipment.equipment_overview') + '#tab-own')
 
 
+@equipment_bp.route('/equipment/group/bulk', methods=['POST'])
+@require_role('admin', 'supervisor')
+def equipment_group_bulk():
+    """Bulk update group membership — set which machines belong to a group."""
+    group_id = request.form.get('group_id', type=int)
+    if not group_id:
+        flash('Select a group.', 'danger')
+        return redirect(url_for('equipment.equipment_overview') + '#tab-own')
+
+    grp = MachineGroup.query.get_or_404(group_id)
+    selected_ids = set(int(x) for x in request.form.getlist('machine_ids') if x)
+
+    # Remove machines no longer selected from this group
+    for m in Machine.query.filter_by(group_id=group_id).all():
+        if m.id not in selected_ids:
+            m.group_id = None
+
+    # Add newly selected machines to this group
+    for mid in selected_ids:
+        m = Machine.query.get(mid)
+        if m:
+            m.group_id = group_id
+
+    db.session.commit()
+    flash(f'Group "{grp.name}" updated — {len(selected_ids)} item{"s" if len(selected_ids) != 1 else ""}.', 'success')
+    return redirect(url_for('equipment.equipment_overview') + '#tab-own')
+
+
 @equipment_bp.route('/equipment')
 @require_role('admin', 'supervisor', 'site')
 def equipment_overview():

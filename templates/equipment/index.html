@@ -137,6 +137,57 @@
       </div>
     </div>
 
+    <!-- Manage Group Members panel -->
+    {% if groups and own_machines %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold small"><i class="bi bi-collection me-2 text-info"></i>Manage Group Members</span>
+        <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse" data-bs-target="#groupMembersPanel">
+          <i class="bi bi-people me-1"></i>Edit Groups
+        </button>
+      </div>
+      <div class="collapse" id="groupMembersPanel">
+        <div class="card-body border-top">
+          <form method="POST" action="{{ url_for('equipment.equipment_group_bulk') }}">
+            <div class="row g-2 mb-3">
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Select Group</label>
+                <select name="group_id" class="form-select form-select-sm" id="bulkGroupSelect"
+                        onchange="updateBulkChecks()">
+                  <option value="">— Choose a group —</option>
+                  {% for g in groups %}
+                  <option value="{{ g.id }}">{{ g.name }}{% if g.delay_rate %} (${{ '%.2f'|format(g.delay_rate) }}/hr){% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-8 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-info text-white btn-sm" id="bulkSaveBtn" disabled>
+                  <i class="bi bi-check-lg me-1"></i>Save Group
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="bulkSelectAll()">Select All</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="bulkClearAll()">Clear All</button>
+              </div>
+            </div>
+            <div class="border rounded p-2" style="max-height:250px;overflow-y:auto;" id="bulkMachineList">
+              {% for m in own_machines if m.active %}
+              <label class="d-flex align-items-center gap-2 px-2 py-1 rounded bulk-machine-item" style="cursor:pointer;"
+                     data-machine-id="{{ m.id }}" data-current-group="{{ m.group_id or '' }}">
+                <input type="checkbox" name="machine_ids" value="{{ m.id }}" class="form-check-input mt-0 bulk-check">
+                <span>
+                  {{ m.name }}
+                  {% if m.machine_type %}<small class="text-muted ms-1">— {{ m.machine_type }}</small>{% endif %}
+                  {% if m.group %}<span class="badge bg-info-subtle text-info border border-info-subtle ms-1" style="font-size:.65rem;">{{ m.group.name }}</span>{% endif %}
+                </span>
+              </label>
+              {% endfor %}
+            </div>
+            <div class="form-text mt-1">Tick machines to include in the selected group. Unticked machines will be removed from that group.</div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Filters -->
     <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
       {% if groups %}
@@ -640,6 +691,26 @@
       history.replaceState(null, '', e.target.dataset.bsTarget);
     });
   });
+
+  // ── Bulk group management ──────────────────────────────────────────────────
+  function updateBulkChecks() {
+    const sel = document.getElementById('bulkGroupSelect');
+    const groupId = sel.value;
+    document.getElementById('bulkSaveBtn').disabled = !groupId;
+    document.querySelectorAll('.bulk-check').forEach(cb => {
+      const item = cb.closest('.bulk-machine-item');
+      const currentGroup = item.dataset.currentGroup;
+      cb.checked = groupId && currentGroup === groupId;
+    });
+  }
+
+  function bulkSelectAll() {
+    document.querySelectorAll('.bulk-check').forEach(cb => cb.checked = true);
+  }
+
+  function bulkClearAll() {
+    document.querySelectorAll('.bulk-check').forEach(cb => cb.checked = false);
+  }
 
   function applyFleetFilters() {
     const groupSel = document.getElementById('filterGroup');
