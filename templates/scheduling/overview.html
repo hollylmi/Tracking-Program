@@ -282,7 +282,7 @@
           <input type="hidden" name="date" id="schedDate">
           <input type="hidden" name="week" id="schedWeek" value="{{ week_start.isoformat() }}">
           <input type="hidden" name="redirect_project_id" value="">
-          <input type="hidden" name="action" id="schedAction" value="set">
+          <input type="hidden" name="action" id="schedAction" value="set" data-field="action">
           <div class="mb-2">
             <label class="form-label small fw-semibold mb-1">Status</label>
             <select class="form-select form-select-sm" name="status" id="schedStatus"
@@ -474,7 +474,8 @@ function openSchedModal(td) {
 // ── AJAX submit helper ───────────────────────────────────────────────────────
 async function ajaxOverride(form) {
   const formData = new FormData(form);
-  const resp = await fetch(form.action, {
+  const url = form.getAttribute('action');
+  const resp = await fetch(url, {
     method: 'POST',
     body: new URLSearchParams(formData),
     headers: {
