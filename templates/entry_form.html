@@ -527,18 +527,76 @@
   const ENTRY_ID = {{ entry.id if entry else 'null' }};
 
   // ── Production lines ──────────────────────────────────────────────────────
+  let lineCounter = document.querySelectorAll('.prod-line').length;
+
   function addProductionLine() {
     const tbody = document.getElementById('productionLines');
+    lineCounter++;
+    const lineId = 'line_' + lineCounter;
+
+    // Data row
     const row = document.createElement('tr');
     row.className = 'prod-line';
+    row.dataset.lineId = lineId;
     row.innerHTML = `
-      <td><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
-      <td><input type="text" name="line_material[]" class="form-control form-control-sm" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
+      <td><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off" onchange="fetchLineProgress(this.closest('tr'))"></td>
+      <td><input type="text" name="line_material[]" class="form-control form-control-sm" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off" onchange="fetchLineProgress(this.closest('tr'))"></td>
       <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
-      <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotalSqm()"><i class="bi bi-x-lg"></i></button></td>
+      <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeProductionLine(this)"><i class="bi bi-x-lg"></i></button></td>
     `;
+    // Progress row
+    const progRow = document.createElement('tr');
+    progRow.className = 'prod-progress';
+    progRow.dataset.lineId = lineId;
+    progRow.style.display = 'none';
+    progRow.innerHTML = `<td colspan="4" class="py-1 px-2"><div class="d-flex align-items-center gap-2 small">
+      <div class="progress flex-grow-1" style="height:10px"><div class="progress-bar bg-success" style="width:0%"></div></div>
+      <span class="text-muted prog-label">—</span>
+    </div></td>`;
+
     tbody.appendChild(row);
+    tbody.appendChild(progRow);
     row.querySelector('input').focus();
+  }
+
+  function removeProductionLine(btn) {
+    const row = btn.closest('tr');
+    const lineId = row.dataset.lineId;
+    const progRow = document.querySelector(`tr.prod-progress[data-line-id="${lineId}"]`);
+    if (progRow) progRow.remove();
+    row.remove();
+    updateTotalSqm();
+  }
+
+  function fetchLineProgress(row) {
+    const projectId = document.getElementById('projectSelect').value;
+    const lot = row.querySelector('[name="line_lot[]"]').value.trim();
+    const material = row.querySelector('[name="line_material[]"]').value.trim();
+    const lineId = row.dataset.lineId;
+    const progRow = document.querySelector(`tr.prod-progress[data-line-id="${lineId}"]`);
+
+    if (!projectId || !lot || !material || !progRow) {
+      if (progRow) progRow.style.display = 'none';
+      return;
+    }
+
+    const params = new URLSearchParams({
+      project_id: projectId, lot, material,
+      ...(ENTRY_ID ? { exclude_id: ENTRY_ID } : {}),
+    });
+
+    fetch('/api/progress?' + params)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.has_planned) { progRow.style.display = 'none'; return; }
+        progRow.style.display = '';
+        const pct = data.pct_complete !== null ? Math.min(data.pct_complete, 100) : 0;
+        progRow.querySelector('.progress-bar').style.width = pct + '%';
+        const remaining = data.remaining !== undefined ? data.remaining.toLocaleString() : '—';
+        progRow.querySelector('.prog-label').textContent =
+          `${pct}% done · ${remaining} m² remaining of ${data.planned_sqm ? data.planned_sqm.toLocaleString() : '—'} m²`;
+      })
+      .catch(() => { progRow.style.display = 'none'; });
   }
 
   function updateTotalSqm() {
@@ -550,7 +608,37 @@
     document.getElementById('installSqmInput').value = total;
   }
 
-  // Init total on load
+  // Init: assign lineIds to existing rows and attach progress listeners
+  document.querySelectorAll('.prod-line').forEach((row, i) => {
+    const lineId = 'line_' + i;
+    row.dataset.lineId = lineId;
+
+    // Create progress row after each existing line
+    const progRow = document.createElement('tr');
+    progRow.className = 'prod-progress';
+    progRow.dataset.lineId = lineId;
+    progRow.style.display = 'none';
+    progRow.innerHTML = `<td colspan="4" class="py-1 px-2"><div class="d-flex align-items-center gap-2 small">
+      <div class="progress flex-grow-1" style="height:10px"><div class="progress-bar bg-success" style="width:0%"></div></div>
+      <span class="text-muted prog-label">—</span>
+    </div></td>`;
+    row.after(progRow);
+
+    // Attach change listeners
+    row.querySelector('[name="line_lot[]"]')?.addEventListener('change', () => fetchLineProgress(row));
+    row.querySelector('[name="line_material[]"]')?.addEventListener('change', () => fetchLineProgress(row));
+
+    // Update remove button to use new function
+    const removeBtn = row.querySelector('.btn-outline-danger');
+    if (removeBtn) {
+      removeBtn.setAttribute('onclick', 'removeProductionLine(this)');
+    }
+
+    // Fetch initial progress for pre-filled lines
+    fetchLineProgress(row);
+  });
+  lineCounter = document.querySelectorAll('.prod-line').length;
+
   updateTotalSqm();
 
   function deletePhoto(url, thumbId) {
@@ -617,47 +705,10 @@
   // Run on load to set initial state
   updateMachinesStoodDownVisibility();
 
-  // Progress widget — uses first production line
-  let progressTimeout = null;
-  function fetchProgress() {
-    const projectId = document.getElementById('projectSelect').value;
-    const firstRow = document.querySelector('.prod-line');
-    const lot = firstRow ? (firstRow.querySelector('[name="line_lot[]"]')?.value || '').trim() : '';
-    const material = firstRow ? (firstRow.querySelector('[name="line_material[]"]')?.value || '').trim() : '';
-    const widget = document.getElementById('progressWidget');
-
-    if (!projectId || !lot || !material) {
-      widget.style.display = 'none';
-      return;
-    }
-
-    const params = new URLSearchParams({
-      project_id: projectId, lot, material,
-      ...(ENTRY_ID ? { exclude_id: ENTRY_ID } : {}),
-    });
-
-    fetch('/api/progress?' + params)
-      .then(r => r.json())
-      .then(data => {
-        if (!data.has_planned) { widget.style.display = 'none'; return; }
-        widget.style.display = '';
-        document.getElementById('progressLotLabel').textContent =
-          `${data.pct_complete !== null ? data.pct_complete + '%' : '—'} complete`;
-        document.getElementById('progressBar').style.width =
-          (data.pct_complete !== null ? Math.min(data.pct_complete, 100) : 0) + '%';
-        document.getElementById('progressPlanned').textContent =
-          data.planned_sqm.toLocaleString() + ' m²';
-        document.getElementById('progressInstalled').textContent =
-          data.installed_sqm.toLocaleString() + ' m²';
-        document.getElementById('progressRemaining').textContent =
-          data.remaining.toLocaleString() + ' m²';
-      })
-      .catch(() => { widget.style.display = 'none'; });
-  }
-
+  // Progress is now handled per production line via fetchLineProgress above
   function scheduleProgress() {
-    clearTimeout(progressTimeout);
-    progressTimeout = setTimeout(fetchProgress, 400);
+    // Refresh all line progress when project changes
+    document.querySelectorAll('.prod-line').forEach(row => fetchLineProgress(row));
   }
 
   // Populate lot / material datalists from planned data
@@ -773,7 +824,6 @@
 
   // Initial load — populate lot/material datalists
   fetchPlannedOptions('');
-  fetchProgress();
 
   // Employee checkbox counter
   function updateEmployeeCount() {
