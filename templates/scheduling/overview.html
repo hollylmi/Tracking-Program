@@ -351,18 +351,18 @@ function updateCell(td, cell, projectColours) {
   const ovId = cell.override_id || '';
   const pname = cell.project_name || '';
   const pid = cell.project_id || cell.override_project_id || null;
-  const dotCls = ovId ? 'cell-override-dot' : '';
+  const dotCls = ovId ? ' cell-override-dot' : '';
 
   // Remove old status classes
   ALL_CELL_CLASSES.forEach(c => td.classList.remove(c));
 
   // Apply new status class
-  const cfg = STATUS_CSS[status] || STATUS_CSS.available;
-  td.classList.add(cfg.cls);
+  const cssClass = status === 'sunday' ? 'cell-weekend' : ('cell-' + status);
+  td.classList.add(cssClass);
 
   // Background colour for assigned cells
-  if (status === 'assigned' && pid && projectColours[pid]) {
-    const [bg, fg] = projectColours[pid];
+  if (status === 'assigned' && pid && projectColours[String(pid)]) {
+    const [bg, fg] = projectColours[String(pid)];
     td.style.background = bg;
     td.style.color = fg;
   } else {
@@ -370,20 +370,25 @@ function updateCell(td, cell, projectColours) {
     td.style.color = '';
   }
 
-  // Inner HTML
+  // Inner HTML — match exactly what Jinja renders on the server
+  let html = '';
   if (status === 'assigned') {
-    td.innerHTML = `<span style="font-size:.6rem;" class="${dotCls}">${(pname || '—').substring(0, 8)}</span>`;
+    html = `<span style="font-size:.6rem;" class="${dotCls}">${(pname || '—').substring(0, 8)}</span>`;
+  } else if (status === 'sunday') {
+    html = '—';
   } else if (status === 'rdo') {
-    td.innerHTML = `<span class="${dotCls}" style="font-size:.6rem;">${cell.label || 'RDO'}</span>`;
+    html = `<span class="${dotCls}" style="font-size:.6rem;">${cell.label || 'RDO'}</span>`;
+  } else if (status === 'r_and_r') {
+    html = `<span class="${dotCls}">R&R</span>`;
+  } else if (status === 'travel') {
+    html = `<i class="bi bi-airplane-fill${dotCls}" style="font-size:.6rem;"></i>`;
+  } else if (status === 'leave') {
+    html = `<span class="${dotCls}">L</span>`;
   } else {
-    let html = cfg.html;
-    if (dotCls && html.includes('<span')) {
-      html = html.replace('<span', `<span class="${dotCls}"`);
-    } else if (dotCls && html.includes('<i')) {
-      html = html.replace('<i', `<i class="${dotCls} `);
-    }
-    td.innerHTML = html;
+    // available or unknown
+    html = `<span class="${dotCls}">&bull;</span>`;
   }
+  td.innerHTML = html;
 
   // Title
   td.title = cell.nwd_reason || pname || cell.label || status.replace('_', ' ');
