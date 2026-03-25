@@ -139,13 +139,15 @@
 
     <!-- Group filter -->
     {% if groups %}
-    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-      <span class="text-muted small fw-medium">Filter by group:</span>
-      <button class="btn btn-sm btn-outline-secondary py-0 fleet-filter active" data-group="all" onclick="filterFleet('all', this)">All</button>
-      {% for g in groups %}
-      <button class="btn btn-sm btn-outline-info py-0 fleet-filter" data-group="{{ g.id }}" onclick="filterFleet('{{ g.id }}', this)">{{ g.name }}</button>
-      {% endfor %}
-      <button class="btn btn-sm btn-outline-secondary py-0 fleet-filter" data-group="none" onclick="filterFleet('none', this)">Ungrouped</button>
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <label class="text-muted small fw-medium mb-0">Filter:</label>
+      <select class="form-select form-select-sm" style="width:auto;max-width:200px;" onchange="filterFleet(this.value)">
+        <option value="all">All groups</option>
+        {% for g in groups %}
+        <option value="{{ g.id }}">{{ g.name }}</option>
+        {% endfor %}
+        <option value="none">Ungrouped</option>
+      </select>
     </div>
     {% endif %}
 
@@ -186,18 +188,11 @@
               <td class="text-muted">{{ m.plant_id or '—' }}</td>
               <td class="text-muted">{{ m.machine_type or '—' }}</td>
               <td>
-                <form method="POST" action="{{ url_for('equipment.equipment_machine_save') }}" class="d-inline">
-                  <input type="hidden" name="action" value="edit">
-                  <input type="hidden" name="machine_id" value="{{ m.id }}">
-                  <input type="hidden" name="name" value="{{ m.name }}">
-                  <select name="group_id" class="form-select form-select-sm py-0" style="width:auto;min-width:90px;font-size:.78rem;"
-                          onchange="this.form.submit()">
-                    <option value="">— None —</option>
-                    {% for g in groups %}
-                    <option value="{{ g.id }}" {{ 'selected' if m.group_id == g.id else '' }}>{{ g.name }}</option>
-                    {% endfor %}
-                  </select>
-                </form>
+                {% if m.group %}
+                  <span class="badge bg-info-subtle text-info border border-info-subtle">{{ m.group.name }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
               </td>
               <td>
                 {% set rate = m.effective_delay_rate %}
@@ -630,9 +625,7 @@
     });
   });
 
-  function filterFleet(groupId, btn) {
-    document.querySelectorAll('.fleet-filter').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+  function filterFleet(groupId) {
     document.querySelectorAll('.fleet-row').forEach(row => {
       const rowGroup = row.dataset.groupId || '';
       if (groupId === 'all') {
