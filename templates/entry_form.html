@@ -142,12 +142,77 @@
               </div>
             </div>
 
-            <div class="col-sm-3">
-              <label class="form-label fw-semibold">Delay Hours</label>
-              <input type="number" name="delay_hours" class="form-control" min="0" step="0.25"
-                     id="delayHoursInput"
-                     value="{{ entry.delay_hours if entry else '0' }}"
-                     placeholder="0.00">
+            <!-- Variations (Client-Directed Work) -->
+            <div class="col-12">
+              <div class="card border shadow-sm">
+                <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold small"><i class="bi bi-clipboard-check me-1 text-warning"></i>Variations (Client Work)</span>
+                  <button type="button" class="btn btn-sm btn-outline-warning py-0" onclick="addVariationLine()">
+                    <i class="bi bi-plus me-1"></i>Add Variation
+                  </button>
+                </div>
+                <div class="card-body p-0">
+                  <table class="table table-sm mb-0 align-middle">
+                    <thead class="table-light">
+                      <tr>
+                        <th style="width:20%">Variation #</th>
+                        <th style="width:50%">Description</th>
+                        <th style="width:20%">Hours</th>
+                        <th style="width:10%"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="variationLines">
+                      {% if entry and entry.variation_lines %}
+                        {% for vl in entry.variation_lines %}
+                        <tr class="var-line">
+                          <td><input type="text" name="var_number[]" class="form-control form-control-sm" value="{{ vl.variation_number or '' }}" placeholder="e.g. V001"></td>
+                          <td><input type="text" name="var_desc[]" class="form-control form-control-sm" value="{{ vl.description or '' }}" placeholder="Description"></td>
+                          <td><input type="number" name="var_hours[]" class="form-control form-control-sm var-hours" min="0" step="0.25" value="{{ vl.hours or '' }}" placeholder="0.0"></td>
+                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove()"><i class="bi bi-x-lg"></i></button></td>
+                        </tr>
+                        {% endfor %}
+                      {% endif %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Own Delays (Internal) -->
+            <div class="col-sm-6">
+              <div class="card border shadow-sm">
+                <div class="card-header bg-light py-2">
+                  <span class="fw-semibold small"><i class="bi bi-shield-x me-1 text-secondary"></i>Own Delays (Internal)</span>
+                </div>
+                <div class="card-body py-2">
+                  <div class="row g-2">
+                    <div class="col-4">
+                      <input type="number" name="own_delay_hours" class="form-control form-control-sm" min="0" step="0.25"
+                             value="{{ entry.own_delay_hours if entry and entry.own_delay_hours else '' }}" placeholder="Hours">
+                    </div>
+                    <div class="col-8">
+                      <input type="text" name="own_delay_description" class="form-control form-control-sm"
+                             value="{{ entry.own_delay_description if entry and entry.own_delay_description else '' }}"
+                             placeholder="Internal notes...">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Wet Weather Delays -->
+            <div class="col-sm-6">
+              <div class="card border shadow-sm">
+                <div class="card-header bg-light py-2">
+                  <span class="fw-semibold small"><i class="bi bi-cloud-rain me-1 text-info"></i>Wet Weather Delay</span>
+                </div>
+                <div class="card-body py-2">
+                  <input type="number" name="delay_hours" class="form-control form-control-sm" min="0" step="0.25"
+                         id="delayHoursInput"
+                         value="{{ entry.delay_hours if entry else '' }}"
+                         placeholder="Hours">
+                </div>
+              </div>
             </div>
 
             <!-- Progress widget (shown when project + lot + material filled) -->
@@ -426,68 +491,6 @@
             <a href="{{ url_for('admin.admin_machines') }}">Add machines</a> in Admin.
           </div>
           {% endif %}
-        </div>
-      </div>
-
-      <!-- Variations (Client-Directed Work) -->
-      <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-          <h5 class="mb-0 fw-semibold"><i class="bi bi-clipboard-check me-2 text-warning"></i>Variations (Client Work)</h5>
-          <button type="button" class="btn btn-sm btn-outline-warning py-0" onclick="addVariationLine()">
-            <i class="bi bi-plus me-1"></i>Add Variation
-          </button>
-        </div>
-        <div class="card-body p-0">
-          <div class="px-3 py-2 text-muted small border-bottom bg-light">
-            <i class="bi bi-info-circle me-1"></i>Client-directed extra work. These hours count as client delays in the schedule.
-          </div>
-          <table class="table table-sm mb-0 align-middle">
-            <thead class="table-light">
-              <tr>
-                <th style="width:20%">Variation #</th>
-                <th style="width:50%">Description</th>
-                <th style="width:20%">Hours</th>
-                <th style="width:10%"></th>
-              </tr>
-            </thead>
-            <tbody id="variationLines">
-              {% if entry and entry.variation_lines %}
-                {% for vl in entry.variation_lines %}
-                <tr class="var-line">
-                  <td><input type="text" name="var_number[]" class="form-control form-control-sm" value="{{ vl.variation_number or '' }}" placeholder="e.g. V001"></td>
-                  <td><input type="text" name="var_desc[]" class="form-control form-control-sm" value="{{ vl.description or '' }}" placeholder="Description of work"></td>
-                  <td><input type="number" name="var_hours[]" class="form-control form-control-sm var-hours" min="0" step="0.25" value="{{ vl.hours or '' }}" placeholder="0.0"></td>
-                  <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove()"><i class="bi bi-x-lg"></i></button></td>
-                </tr>
-                {% endfor %}
-              {% endif %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Own Delays (Internal — hidden from client view) -->
-      <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white py-3">
-          <h5 class="mb-0 fw-semibold"><i class="bi bi-shield-x me-2 text-secondary"></i>Own Delays (Internal)</h5>
-        </div>
-        <div class="card-body">
-          <div class="text-muted small mb-2">
-            <i class="bi bi-eye-slash me-1"></i>These are tracked internally but not shown to clients or included in the schedule forecast.
-          </div>
-          <div class="row g-2">
-            <div class="col-sm-3">
-              <label class="form-label fw-semibold small">Hours</label>
-              <input type="number" name="own_delay_hours" class="form-control form-control-sm" min="0" step="0.25"
-                     value="{{ entry.own_delay_hours if entry and entry.own_delay_hours else '' }}" placeholder="0.0">
-            </div>
-            <div class="col-sm-9">
-              <label class="form-label fw-semibold small">Notes</label>
-              <input type="text" name="own_delay_description" class="form-control form-control-sm"
-                     value="{{ entry.own_delay_description if entry and entry.own_delay_description else '' }}"
-                     placeholder="Internal delay notes...">
-            </div>
-          </div>
         </div>
       </div>
 
