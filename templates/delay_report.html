@@ -114,11 +114,33 @@
         </div>
         <span class="fw-bold text-danger">${{ '{:,.2f}'.format(row.entry_cost) }}</span>
       </div>
-      {% if row.entry.delay_description %}
+      {% if row.entry.delay_description and row.type|default('delay') == 'delay' %}
       <div class="px-3 pt-2 text-muted small fst-italic">
         <i class="bi bi-chat-left-text me-1"></i>{{ row.entry.delay_description }}
       </div>
       {% endif %}
+
+      {# Variations subsection #}
+      {% if row.var_lines %}
+      <div class="px-3 pt-2">
+        <div class="fw-semibold small text-warning mb-1"><i class="bi bi-clipboard-check me-1"></i>Client Variations</div>
+        <table class="table table-sm table-borderless mb-0">
+          <thead><tr class="small text-muted">
+            <th>Variation #</th><th>Description</th><th class="text-end">Hours</th>
+          </tr></thead>
+          <tbody>
+          {% for vl in row.var_lines %}
+          <tr>
+            <td class="fw-semibold">{{ vl.variation_number }}</td>
+            <td>{{ vl.description }}</td>
+            <td class="text-end"><span class="badge bg-warning text-dark">{{ vl.hours }}h</span></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
       <div class="card-body py-2">
         {% if row.emp_lines or row.machine_lines %}
         <table class="table table-sm table-borderless mb-0">
@@ -150,7 +172,10 @@
             </td></tr>
             {% for line in row.machine_lines %}
             <tr>
-              <td class="ps-3">{{ line.name }}</td>
+              <td class="ps-3">
+                {% if line.is_group %}<i class="bi bi-collection me-1 text-info"></i>{% endif %}
+                {{ line.name }}
+              </td>
               <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
               <td class="text-end text-muted">{{ line.hours }}</td>
               <td class="text-end fw-semibold">${{ '%.2f'|format(line.cost) }}</td>

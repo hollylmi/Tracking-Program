@@ -175,35 +175,64 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
         col_w = [70, 30, 30, 50]
         for row in rows_list:
             entry = row['entry']
+            row_type = row.get('type', 'delay')
+
             pdf.set_fill_color(230, 235, 255)
             pdf.set_font('Helvetica', 'B', 10)
-            label = safe(f'{entry.entry_date.strftime("%d/%m/%Y")} ({entry.day_name})  -  '
-                         f'{entry.project.name}  -  {entry.delay_hours} hrs delay')
+
+            if row_type == 'variation':
+                var_hrs = sum(v['hours'] for v in row.get('var_lines', []))
+                label = safe(f'{entry.entry_date.strftime("%d/%m/%Y")} ({entry.day_name})  -  '
+                             f'{entry.project.name}  -  {var_hrs} hrs client variation')
+            else:
+                label = safe(f'{entry.entry_date.strftime("%d/%m/%Y")} ({entry.day_name})  -  '
+                             f'{entry.project.name}  -  {entry.delay_hours} hrs delay')
             pdf.cell(0, 7, label, new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
 
-            pdf.set_font('Helvetica', 'I', 9)
-            pdf.cell(0, 5, safe(f'Reason: {entry.delay_reason or "Not specified"}'), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            if entry.delay_description:
-                pdf.multi_cell(0, 5, safe(entry.delay_description))
+            if row_type != 'variation':
+                pdf.set_font('Helvetica', 'I', 9)
+                pdf.cell(0, 5, safe(f'Reason: {entry.delay_reason or "Not specified"}'), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                if entry.delay_description:
+                    pdf.multi_cell(0, 5, safe(entry.delay_description))
+
+            # Variations subsection
+            if row.get('var_lines'):
+                pdf.ln(1)
+                pdf.set_font('Helvetica', 'B', 9)
+                pdf.set_fill_color(255, 245, 220)
+                pdf.cell(0, 6, '  CLIENT VARIATIONS', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+                pdf.set_font('Helvetica', '', 8)
+                var_col = [30, 100, 50]
+                pdf.set_fill_color(250, 240, 210)
+                for header, w in zip(['Variation #', 'Description', 'Hours'], var_col):
+                    pdf.cell(w, 5, header, border=1, fill=True)
+                pdf.ln()
+                for vl in row['var_lines']:
+                    pdf.cell(var_col[0], 5, safe(str(vl['variation_number'])), border=1)
+                    pdf.cell(var_col[1], 5, safe(vl['description'][:60]), border=1)
+                    pdf.cell(var_col[2], 5, f'{vl["hours"]}h', border=1)
+                    pdf.ln()
+
             pdf.ln(1)
 
-            pdf.set_font('Helvetica', 'B', 8)
-            pdf.set_fill_color(210, 218, 255)
-            for header, w in zip(['Role / Equipment', 'Rate ($/hr)', 'Hours', 'Cost ($)'], col_w):
-                pdf.cell(w, 6, header, border=1, fill=True)
-            pdf.ln()
+            # Cost table (employees + equipment)
+            if row['emp_lines'] or row['machine_lines']:
+                pdf.set_font('Helvetica', 'B', 8)
+                pdf.set_fill_color(210, 218, 255)
+                for header, w in zip(['Role / Equipment', 'Rate ($/hr)', 'Hours', 'Cost ($)'], col_w):
+                    pdf.cell(w, 6, header, border=1, fill=True)
+                pdf.ln()
 
-            pdf.set_font('Helvetica', '', 8)
-            if row['emp_lines']:
+                pdf.set_font('Helvetica', '', 8)
                 for line in row['emp_lines']:
                     pdf.cell(col_w[0], 5, safe('  ' + line['name']), border=1)
                     pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
                     pdf.cell(col_w[2], 5, str(line['hours']), border=1)
                     pdf.cell(col_w[3], 5, f'${line["cost"]:.2f}', border=1)
                     pdf.ln()
-            if row['machine_lines']:
                 for line in row['machine_lines']:
-                    pdf.cell(col_w[0], 5, safe('  ' + line['name']), border=1)
+                    icon = '[GRP] ' if line.get('is_group') else ''
+                    pdf.cell(col_w[0], 5, safe('  ' + icon + line['name']), border=1)
                     pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
                     pdf.cell(col_w[2], 5, str(line['hours']), border=1)
                     pdf.cell(col_w[3], 5, f'${line["cost"]:.2f}', border=1)
