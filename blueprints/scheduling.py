@@ -1,8 +1,8 @@
 from datetime import date, datetime, timedelta
 from itertools import groupby
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
-from flask_login import current_user
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import current_user, login_required
 
 from blueprints.auth import require_role
 
@@ -99,6 +99,48 @@ def scheduling_overview():
         project_colour_map=project_colour_map,
         today=date.today()
     )
+
+
+@scheduling_bp.route('/scheduling/grid.json')
+@login_required
+def scheduling_grid_json():
+    """Return the schedule grid as JSON for live polling."""
+    week_str = request.args.get('week')
+    try:
+        week_start = datetime.strptime(week_str, '%Y-%m-%d').date()
+        week_start = week_start - timedelta(days=week_start.weekday())
+    except (ValueError, TypeError):
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+
+    date_list = [week_start + timedelta(days=i) for i in range(84)]
+
+    if current_user.role == 'admin':
+        employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
+    elif current_user.employee_id is None:
+        employees = []
+    else:
+        employees = Employee.query.filter_by(id=current_user.employee_id, active=True).all()
+
+    grid = build_schedule_grid(employees, date_list)
+
+    # Build colour map
+    all_proj_ordered = Project.query.order_by(Project.id).all()
+    project_colour_map = {
+        p.id: SCHED_PALETTE[i % len(SCHED_PALETTE)]
+        for i, p in enumerate(all_proj_ordered)
+    }
+
+    # Serialize grid — convert int keys to strings for JSON
+    serialized = {}
+    for emp_id, dates in grid.items():
+        serialized[str(emp_id)] = dates
+
+    return jsonify({
+        'grid': serialized,
+        'project_colours': {str(k): v for k, v in project_colour_map.items()},
+        'timestamp': datetime.utcnow().isoformat(),
+    })
 
 
 @scheduling_bp.route('/scheduling/project/<int:project_id>')
@@ -401,6 +443,10 @@ def schedule_override():
                 notes=notes,
             ))
         db.session.commit()
+
+    # If AJAX request, return JSON instead of redirect
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True})
 
     if redirect_project:
         return redirect(url_for('scheduling.scheduling_project', project_id=redirect_project, week=week))

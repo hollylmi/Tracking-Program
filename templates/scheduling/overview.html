@@ -47,9 +47,14 @@
   </div>
 </div>
 
-<p class="text-muted small mb-2">
-  Showing 12 weeks: {{ week_start.strftime('%d %b %Y') }} &ndash; {{ week_end.strftime('%d %b %Y') }}
-</p>
+<div class="d-flex align-items-center gap-2 mb-2">
+  <p class="text-muted small mb-0">
+    Showing 12 weeks: {{ week_start.strftime('%d %b %Y') }} &ndash; {{ week_end.strftime('%d %b %Y') }}
+  </p>
+  <span id="liveIndicator" class="badge bg-success-subtle text-success border border-success-subtle ms-auto" style="font-size:.65rem;">
+    <i class="bi bi-circle-fill me-1" style="font-size:.4rem;vertical-align:middle;"></i>Live
+  </span>
+</div>
 
 <!-- Quick jump to project view -->
 {% if projects %}
@@ -324,9 +329,123 @@
 
 {% block scripts %}
 <script>
+const WEEK_START = '{{ week_start.isoformat() }}';
+const POLL_INTERVAL = 5000; // 5 seconds
+const PROJECT_COLOURS = {{ project_colour_map | tojson }};
+
+// ── Cell styling config ──────────────────────────────────────────────────────
+const STATUS_CSS = {
+  available: {cls: 'cell-available', html: '<span>&bull;</span>'},
+  assigned:  {cls: 'cell-assigned',  html: ''},  // handled specially
+  rdo:       {cls: 'cell-rdo',       html: ''},
+  leave:     {cls: 'cell-leave',     html: '<span>L</span>'},
+  r_and_r:   {cls: 'cell-r_and_r',   html: '<span>R&R</span>'},
+  travel:    {cls: 'cell-travel',    html: '<i class="bi bi-airplane-fill" style="font-size:.6rem;"></i>'},
+  sunday:    {cls: 'cell-weekend',   html: '—'},
+};
+const ALL_CELL_CLASSES = Object.values(STATUS_CSS).map(s => s.cls);
+
+// ── Update a single cell in the DOM ──────────────────────────────────────────
+function updateCell(td, cell, projectColours) {
+  const status = cell.status || 'available';
+  const ovId = cell.override_id || '';
+  const pname = cell.project_name || '';
+  const pid = cell.project_id || cell.override_project_id || null;
+  const dotCls = ovId ? 'cell-override-dot' : '';
+
+  // Remove old status classes
+  ALL_CELL_CLASSES.forEach(c => td.classList.remove(c));
+
+  // Apply new status class
+  const cfg = STATUS_CSS[status] || STATUS_CSS.available;
+  td.classList.add(cfg.cls);
+
+  // Background colour for assigned cells
+  if (status === 'assigned' && pid && projectColours[pid]) {
+    const [bg, fg] = projectColours[pid];
+    td.style.background = bg;
+    td.style.color = fg;
+  } else {
+    td.style.background = '';
+    td.style.color = '';
+  }
+
+  // Inner HTML
+  if (status === 'assigned') {
+    td.innerHTML = `<span style="font-size:.6rem;" class="${dotCls}">${(pname || '—').substring(0, 8)}</span>`;
+  } else if (status === 'rdo') {
+    td.innerHTML = `<span class="${dotCls}" style="font-size:.6rem;">${cell.label || 'RDO'}</span>`;
+  } else {
+    let html = cfg.html;
+    if (dotCls && html.includes('<span')) {
+      html = html.replace('<span', `<span class="${dotCls}"`);
+    } else if (dotCls && html.includes('<i')) {
+      html = html.replace('<i', `<i class="${dotCls} `);
+    }
+    td.innerHTML = html;
+  }
+
+  // Title
+  td.title = cell.nwd_reason || pname || cell.label || status.replace('_', ' ');
+
+  // Data attributes
+  td.dataset.overrideId = ovId;
+  td.dataset.overrideStatus = cell.override_status || '';
+  td.dataset.overrideProject = cell.override_project_id || '';
+}
+
+// ── Poll for grid updates ────────────────────────────────────────────────────
+let lastGridHash = '';
+const indicator = document.getElementById('liveIndicator');
+
+async function pollGrid() {
+  try {
+    const resp = await fetch(`/scheduling/grid.json?week=${WEEK_START}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const newHash = JSON.stringify(data.grid);
+    if (newHash === lastGridHash) return; // no changes
+    lastGridHash = newHash;
+
+    const colours = data.project_colours || {};
+    // Update every cell in the grid
+    document.querySelectorAll('td.sched-clickable').forEach(td => {
+      const empId = td.dataset.empId;
+      const dateStr = td.dataset.date;
+      if (!empId || !dateStr) return;
+      const empGrid = data.grid[empId];
+      if (!empGrid) return;
+      const cell = empGrid[dateStr];
+      if (!cell) return;
+      updateCell(td, cell, colours);
+    });
+
+    // Flash the indicator
+    indicator.classList.remove('bg-success-subtle', 'text-success', 'border-success-subtle');
+    indicator.classList.add('bg-info-subtle', 'text-info', 'border-info-subtle');
+    indicator.innerHTML = '<i class="bi bi-arrow-repeat me-1" style="font-size:.4rem;vertical-align:middle;"></i>Updated';
+    setTimeout(() => {
+      indicator.classList.remove('bg-info-subtle', 'text-info', 'border-info-subtle');
+      indicator.classList.add('bg-success-subtle', 'text-success', 'border-success-subtle');
+      indicator.innerHTML = '<i class="bi bi-circle-fill me-1" style="font-size:.4rem;vertical-align:middle;"></i>Live';
+    }, 2000);
+  } catch {
+    indicator.classList.remove('bg-success-subtle', 'text-success', 'border-success-subtle');
+    indicator.classList.add('bg-warning-subtle', 'text-warning', 'border-warning-subtle');
+    indicator.innerHTML = '<i class="bi bi-exclamation-triangle me-1" style="font-size:.5rem;vertical-align:middle;"></i>Offline';
+  }
+}
+
+// Start polling
+setInterval(pollGrid, POLL_INTERVAL);
+// Initial hash so first poll doesn't flash "Updated" unnecessarily
+pollGrid().then(() => { lastGridHash = lastGridHash; });
+
+// ── Override modal (AJAX) ────────────────────────────────────────────────────
 function schedStatusChanged(sel) {
   document.getElementById('schedProjectDiv').style.display = sel.value === 'project' ? '' : 'none';
 }
+
 function openSchedModal(td) {
   const empId = td.dataset.empId;
   const empName = td.dataset.empName;
@@ -351,5 +470,53 @@ function openSchedModal(td) {
   document.getElementById('schedClearBtn').style.display = ovId ? '' : 'none';
   new bootstrap.Modal(document.getElementById('schedOverrideModal')).show();
 }
+
+// Intercept modal form submit — use AJAX so the page doesn't reload
+document.querySelector('#schedOverrideModal form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const form = this;
+  const formData = new FormData(form);
+
+  try {
+    const resp = await fetch(form.action, {
+      method: 'POST',
+      body: new URLSearchParams(formData),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    if (resp.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
+      // Immediately poll to show the change
+      await pollGrid();
+    } else {
+      alert('Failed to save override. Please try again.');
+    }
+  } catch {
+    alert('Network error. Please check your connection.');
+  }
+});
+
+// Also handle the Clear button via AJAX
+document.getElementById('schedClearBtn').addEventListener('click', async function(e) {
+  e.preventDefault();
+  const form = this.closest('form');
+  document.getElementById('schedAction').value = 'clear';
+  const formData = new FormData(form);
+
+  try {
+    const resp = await fetch(form.action, {
+      method: 'POST',
+      body: new URLSearchParams(formData),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    if (resp.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
+      await pollGrid();
+    } else {
+      alert('Failed to clear override.');
+    }
+  } catch {
+    alert('Network error.');
+  }
+});
 </script>
 {% endblock %}
