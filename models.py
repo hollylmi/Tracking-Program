@@ -145,19 +145,10 @@ class Machine(db.Model):
     plant_id = db.Column(db.String(100))           # internal plant/fleet ID
     machine_type = db.Column(db.String(100))
     description = db.Column(db.Text)               # what the item is / notes
-    delay_rate = db.Column(db.Float)               # own rate, or null to inherit from group
+    delay_rate = db.Column(db.Float)               # own rate for this individual item (independent of group)
     group_id = db.Column(db.Integer, db.ForeignKey('machine_group.id'), nullable=True)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    @property
-    def effective_delay_rate(self):
-        """Own delay_rate if set, otherwise inherit from group."""
-        if self.delay_rate is not None:
-            return self.delay_rate
-        if self.group and self.group.delay_rate is not None:
-            return self.group.delay_rate
-        return None
 
     def __repr__(self):
         return f'<Machine {self.name}>'
@@ -247,14 +238,6 @@ class HiredMachine(db.Model):
         cascade='all, delete-orphan',
         order_by='StandDown.stand_down_date'
     )
-
-    @property
-    def effective_delay_rate(self):
-        if self.cost_per_day is not None:
-            return self.cost_per_day
-        if self.group and self.group.delay_rate is not None:
-            return self.group.delay_rate
-        return None
 
     def __repr__(self):
         return f'<HiredMachine {self.machine_name} - {self.hire_company}>'

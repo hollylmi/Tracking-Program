@@ -344,6 +344,23 @@
             <i class="bi bi-info-circle me-1"></i>Showing machines assigned to selected project.
             <a href="#" id="showAllMachinesLink">Show all</a>
           </div>
+
+          {# Group quick-select buttons #}
+          {% if machine_groups is defined and machine_groups %}
+          <div class="px-3 py-2 border-bottom bg-light">
+            <span class="small text-muted fw-medium me-2">Select group:</span>
+            {% for g in machine_groups %}
+            {% set g_machine_ids = g.machines | selectattr('active') | map(attribute='id') | list %}
+            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 me-1 mb-1"
+                    onclick="toggleGroup({{ g_machine_ids | tojson }}, this)"
+                    data-group-ids="{{ g_machine_ids | tojson }}">
+              {{ g.name }}
+              {% if g.delay_rate %}<small class="opacity-75">${{ '%.0f'|format(g.delay_rate) }}/hr</small>{% endif %}
+            </button>
+            {% endfor %}
+          </div>
+          {% endif %}
+
           <div class="checkbox-scroll-list" id="machineList">
             {% for machine in machines %}
             <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2"
@@ -354,6 +371,7 @@
                      {% if selected_machine_ids is defined and machine.id in selected_machine_ids %}checked{% endif %}>
               <span>
                 {{ machine.name }}
+                {% if machine.group %}<span class="badge bg-info-subtle text-info border border-info-subtle ms-1" style="font-size:.6rem;">{{ machine.group.name }}</span>{% endif %}
                 {% if machine.machine_type %}
                   <small class="text-muted ms-1">— {{ machine.machine_type }}</small>
                 {% endif %}
@@ -659,6 +677,18 @@
     document.getElementById('numPeopleInput').value = count;
   }
   document.querySelectorAll('.employee-check').forEach(cb => cb.addEventListener('change', updateEmployeeCount));
+
+  // Toggle a group — select or deselect all machines in the group
+  function toggleGroup(machineIds, btn) {
+    const checks = machineIds.map(id =>
+      document.querySelector(`.checkbox-item[data-machine-id="${id}"] .machine-check`)
+    ).filter(Boolean);
+    // If all are already checked, uncheck them (toggle off); otherwise check all
+    const allChecked = checks.every(cb => cb.checked);
+    checks.forEach(cb => { cb.checked = !allChecked; });
+    btn.classList.toggle('active', !allChecked);
+    updateMachineCount();
+  }
 
   // Machine checkbox counter
   function updateMachineCount() {

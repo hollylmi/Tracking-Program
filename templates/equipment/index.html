@@ -302,16 +302,15 @@
                 {% endif %}
               </td>
               <td>
-                {% set rate = m.effective_delay_rate %}
-                {% if rate %}<span class="text-success">${{ '%.2f'|format(rate) }}/hr</span>
-                  {% if m.delay_rate is none and m.group %}<br><small class="text-muted">from group</small>{% endif %}
+                {% if m.delay_rate %}<span class="text-success">${{ '%.2f'|format(m.delay_rate) }}/hr</span>
+                {% elif m.group and m.group.delay_rate %}<span class="text-info">${{ '%.2f'|format(m.group.delay_rate) }}/hr</span><br><small class="text-muted">group rate</small>
                 {% else %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td>
                 {% if projs %}
                   {% for p, lbl in projs %}
                     <a href="{{ url_for('projects.project_dashboard', project_id=p.id) }}#tab-scheduling"
-                       class="badge bg-primary-subtle text-primary text-decoration-none me-1">{{ p.name }}</a>
+                       class="badge bg-dark text-white text-decoration-none me-1">{{ p.name }}</a>
                   {% endfor %}
                 {% else %}<span class="text-muted fst-italic">Unassigned</span>{% endif %}
               </td>

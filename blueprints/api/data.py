@@ -9,7 +9,7 @@ import uuid
 from werkzeug.utils import secure_filename
 
 from models import (
-    db, User, Project, DailyEntry, Employee, Machine, HiredMachine, StandDown,
+    db, User, Project, DailyEntry, Employee, Machine, MachineGroup, HiredMachine, StandDown,
     MachineBreakdown, BreakdownPhoto, ProjectDocument, ProjectMachine, ProjectAssignment,
     PlannedData, Role, DeviceToken, EntryPhoto,
     ProjectBudgetedRole, ProjectNonWorkDate, PublicHoliday, CFMEUDate,
@@ -1749,6 +1749,11 @@ def get_reference():
         'hired_machines': [
             {'id': h.id, 'machine_name': h.machine_name, 'hire_company': h.hire_company or ''}
             for h in hired
+        ],
+        'machine_groups': [
+            {'id': g.id, 'name': g.name, 'delay_rate': g.delay_rate,
+             'machine_ids': [m.id for m in g.machines if m.active]}
+            for g in MachineGroup.query.filter_by(active=True).order_by(MachineGroup.name).all()
         ],
     }, 200
 

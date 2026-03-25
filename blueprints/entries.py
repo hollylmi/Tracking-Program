@@ -9,7 +9,7 @@ from utils.helpers import get_active_project_id
 from werkzeug.utils import secure_filename
 from datetime import date, datetime
 
-from models import (db, Project, Employee, Machine, DailyEntry, HiredMachine,
+from models import (db, Project, Employee, Machine, MachineGroup, DailyEntry, HiredMachine,
                     StandDown, EntryPhoto, ProjectMachine)
 import storage
 from utils.files import allowed_photo
@@ -30,6 +30,7 @@ def new_entry():
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
     hired_machines = HiredMachine.query.filter_by(active=True).order_by(HiredMachine.machine_name).all()
+    machine_groups = MachineGroup.query.filter_by(active=True).order_by(MachineGroup.name).all()
 
     if request.method == 'POST':
         project_id = request.form.get('project_id')
@@ -38,6 +39,7 @@ def new_entry():
             flash('Project and date are required.', 'danger')
             return render_template('entry_form.html', projects=projects, employees=employees,
                                    machines=machines, hired_machines=hired_machines,
+                                   machine_groups=machine_groups,
                                    standdown_machine_ids=[], today=date.today())
         try:
             entry_date = datetime.strptime(entry_date_str, '%Y-%m-%d').date()
@@ -45,6 +47,7 @@ def new_entry():
             flash('Invalid date format.', 'danger')
             return render_template('entry_form.html', projects=projects, employees=employees,
                                    machines=machines, hired_machines=hired_machines,
+                                   machine_groups=machine_groups,
                                    standdown_machine_ids=[], today=date.today())
 
         delay_hours = float(request.form.get('delay_hours') or 0)
@@ -124,6 +127,7 @@ def new_entry():
 
     return render_template('entry_form.html', projects=projects, employees=employees,
                            machines=machines, hired_machines=hired_machines,
+                           machine_groups=machine_groups,
                            machine_project_map=machine_project_map,
                            standdown_machine_ids=[], today=date.today())
 
@@ -139,6 +143,7 @@ def edit_entry(entry_id):
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
     hired_machines = HiredMachine.query.filter_by(active=True).order_by(HiredMachine.machine_name).all()
+    machine_groups = MachineGroup.query.filter_by(active=True).order_by(MachineGroup.name).all()
 
     if request.method == 'POST':
         entry.project_id = int(request.form.get('project_id'))
@@ -220,6 +225,7 @@ def edit_entry(entry_id):
     return render_template('entry_form.html', entry=entry, projects=projects,
                            employees=employees, machines=machines,
                            hired_machines=hired_machines,
+                           machine_groups=machine_groups,
                            machine_project_map=machine_project_map,
                            standdown_machine_ids=existing_sd_ids,
                            selected_employee_ids=[e.id for e in entry.employees],

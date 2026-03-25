@@ -200,16 +200,14 @@
               {% else %}—{% endif %}
             </td>
             <td class="small">
-              {% set rate = machine.effective_delay_rate %}
-              {% if rate %}
-                <span class="text-success fw-semibold">${{ '%.2f'|format(rate) }}/hr</span>
-                {% if machine.delay_rate is none and machine.group %}<br><small class="text-muted">from group</small>{% endif %}
+              {% if machine.delay_rate %}
+                <span class="text-success fw-semibold">${{ '%.2f'|format(machine.delay_rate) }}/hr</span>
               {% else %}—{% endif %}
             </td>
             <td style="min-width:180px;">
               <div class="d-flex flex-wrap gap-1 align-items-center">
                 {% for pm in machine_assignments %}
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle d-inline-flex align-items-center gap-1">
+                <span class="badge bg-dark text-white d-inline-flex align-items-center gap-1">
                   {{ pm.project.name }}
                   <form method="POST" class="d-inline m-0 p-0">
                     <input type="hidden" name="action" value="unassign">
