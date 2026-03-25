@@ -8,14 +8,14 @@ from blueprints.auth import require_role
 
 from models import (
     db,
-    Employee, Role, Project,
+    Employee, Role, Project, Machine, MachineGroup,
     ProjectAssignment, ProjectBudgetedRole, ProjectNonWorkDate,
     EmployeeSwing, EmployeeLeave,
     ScheduleDayOverride,
     SwingPattern,
     PublicHoliday, CFMEUDate,
     ProjectEquipmentRequirement, ProjectEquipmentAssignment,
-    MachineBreakdown,
+    ProjectMachine, MachineBreakdown,
 )
 from utils.schedule import build_schedule_grid
 
@@ -254,6 +254,18 @@ def scheduling_project(project_id):
         })
 
     all_projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    machine_groups = MachineGroup.query.filter_by(active=True).order_by(MachineGroup.name).all()
+
+    # All machines directly assigned to this project (ProjectMachine)
+    project_machines = ProjectMachine.query.filter_by(project_id=project_id).all()
+    # IDs of machines that are in a requirement assignment (to exclude from "other" list)
+    req_machine_ids = set()
+    for er in equip_reqs:
+        for a in er.assignments:
+            if a.machine_id:
+                req_machine_ids.add(a.machine_id)
+    # "Other equipment" = assigned to project but not in any requirement
+    other_machines = [pm for pm in project_machines if pm.machine_id not in req_machine_ids]
 
     all_proj_ordered = Project.query.order_by(Project.id).all()
     project_colour_map = {
@@ -278,8 +290,10 @@ def scheduling_project(project_id):
         all_employees=all_employees,
         emp_roles_data=emp_roles_data,
         all_projects=all_projects,
+        machine_groups=machine_groups,
         project_nwd=project_nwd,
         equip_coverage=equip_coverage,
+        other_machines=other_machines,
         project_colour_map=project_colour_map,
         today=date.today()
     )

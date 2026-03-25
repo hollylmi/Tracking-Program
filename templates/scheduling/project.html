@@ -313,6 +313,76 @@
 </div>
 {% endif %}
 
+<!-- Assign Equipment Group to Project -->
+{% if machine_groups %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-collection me-2 text-info"></i>Assign Equipment Group to Project</span>
+  </div>
+  <div class="card-body py-3">
+    <form method="POST" action="{{ url_for('projects.assign_group_to_project', project_id=project.id) }}"
+          class="d-flex flex-wrap gap-2 align-items-center">
+      <select name="group_id" class="form-select form-select-sm" style="max-width:250px;" required>
+        <option value="">— Select group —</option>
+        {% for g in machine_groups %}
+        <option value="{{ g.id }}">{{ g.name }} ({{ g.machines | selectattr('active') | list | length }} items){% if g.delay_rate %} — ${{ '%.0f'|format(g.delay_rate) }}/hr{% endif %}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-info text-white">
+        <i class="bi bi-plus me-1"></i>Assign Group
+      </button>
+      <span class="text-muted small">Assigns all items in the group to this project</span>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<!-- Other Equipment on Site (not in requirements) -->
+{% if other_machines %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold">
+    <i class="bi bi-wrench me-2 text-secondary"></i>Other Equipment on Site
+    <span class="badge bg-secondary ms-1">{{ other_machines | length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Plant ID</th>
+          <th>Type</th>
+          <th>Group</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pm in other_machines %}
+        {% set m = pm.machine %}
+        <tr>
+          <td class="fw-semibold">{{ m.name }}</td>
+          <td class="text-muted">{{ m.plant_id or '—' }}</td>
+          <td class="text-muted">{{ m.machine_type or '—' }}</td>
+          <td>
+            {% if m.group %}
+              <span class="badge bg-info-subtle text-info border border-info-subtle">{{ m.group.name }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            <form method="POST" action="{{ url_for('projects.own_equipment_remove', project_id=project.id, pm_id=pm.id) }}"
+                  class="d-inline" onsubmit="return confirm('Remove {{ m.name }} from project?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- Active assignments list -->
 {% if assignments %}
 <div class="card shadow-sm mb-4">

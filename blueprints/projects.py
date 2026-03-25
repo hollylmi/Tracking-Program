@@ -496,9 +496,18 @@ def own_equipment_add(project_id):
         flash('Please select a machine.', 'danger')
         return redirect(url_for('projects.project_dashboard', project_id=project_id))
     machine_id = int(machine_id_raw)
-    existing = ProjectMachine.query.filter_by(project_id=project_id, machine_id=machine_id).first()
+    # A machine can only be on one project — move if already assigned elsewhere
+    existing = ProjectMachine.query.filter_by(machine_id=machine_id).first()
     if existing:
-        flash('That machine is already assigned to this project.', 'warning')
+        if existing.project_id == project_id:
+            flash('That machine is already assigned to this project.', 'warning')
+            return redirect(url_for('projects.project_dashboard', project_id=project_id))
+        # Move from old project
+        old_project = Project.query.get(existing.project_id)
+        existing.project_id = project_id
+        db.session.commit()
+        machine = Machine.query.get(machine_id)
+        flash(f'"{machine.name}" moved from {old_project.name if old_project else "another project"} to this project.', 'info')
         return redirect(url_for('projects.project_dashboard', project_id=project_id))
     assigned_date_str = request.form.get('assigned_date', '').strip()
     assigned_date = None
@@ -514,6 +523,39 @@ def own_equipment_add(project_id):
     machine = Machine.query.get(machine_id)
     flash(f'Own equipment "{machine.name}" assigned to project.', 'success')
     return redirect(url_for('projects.project_dashboard', project_id=project_id))
+
+
+@projects_bp.route('/project/<int:project_id>/assign-group', methods=['POST'])
+@require_role('admin', 'supervisor')
+def assign_group_to_project(project_id):
+    """Assign all machines in a group to the project (ProjectMachine entries).
+    A machine can only be on one project at a time — existing assignments are moved."""
+    group_id = request.form.get('group_id', type=int)
+    if not group_id:
+        flash('Select a group.', 'danger')
+        return redirect(url_for('scheduling.scheduling_project', project_id=project_id))
+    grp = MachineGroup.query.get_or_404(group_id)
+    count = 0
+    moved = 0
+    for m in grp.machines:
+        if not m.active:
+            continue
+        existing = ProjectMachine.query.filter_by(machine_id=m.id).first()
+        if existing:
+            if existing.project_id == project_id:
+                continue  # already on this project
+            # Move from old project to this one
+            existing.project_id = project_id
+            moved += 1
+        else:
+            db.session.add(ProjectMachine(project_id=project_id, machine_id=m.id))
+        count += 1
+    db.session.commit()
+    msg = f'Group "{grp.name}" assigned — {count} item{"s" if count != 1 else ""} on project.'
+    if moved:
+        msg += f' ({moved} moved from other project{"s" if moved != 1 else ""})'
+    flash(msg, 'success')
+    return redirect(url_for('scheduling.scheduling_project', project_id=project_id))
 
 
 @projects_bp.route('/project/<int:project_id>/own-equipment/<int:pm_id>/remove', methods=['POST'])
