@@ -95,7 +95,7 @@
                 <select name="machine_id" class="form-select form-select-sm" required>
                   <option value="">— Select —</option>
                   {% for m in own_machines if m.active %}
-                  <option value="{{ m.id }}">{{ m.name }}{% if m.machine_type %} ({{ m.machine_type }}){% endif %}</option>
+                  <option value="{{ m.id }}">{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}</option>
                   {% endfor %}
                 </select>
               </div>
@@ -198,7 +198,7 @@
                      data-machine-type="{{ m.machine_type or '' }}">
                 <input type="checkbox" name="machine_ids" value="{{ m.id }}" class="form-check-input mt-0 bulk-check">
                 <span>
-                  {{ m.name }}
+                  {{ m.name }}{% if m.plant_id %} <small class="text-muted">({{ m.plant_id }})</small>{% endif %}
                   {% if m.machine_type %}<small class="text-muted ms-1">— {{ m.machine_type }}</small>{% endif %}
                   {% if m.group %}<span class="badge bg-info-subtle text-info border border-info-subtle ms-1" style="font-size:.65rem;">{{ m.group.name }}</span>{% endif %}
                 </span>
@@ -289,7 +289,7 @@
                 data-machine-type="{{ m.machine_type or '' }}"
                 data-project-ids="{{ proj_ids | join(',') }}">
               <td class="fw-semibold">
-                {{ m.name }}
+                {{ m.name }}{% if m.plant_id %} <small class="fw-normal text-muted">({{ m.plant_id }})</small>{% endif %}
                 {% if m.description %}<br><small class="text-muted fw-normal">{{ m.description }}</small>{% endif %}
               </td>
               <td class="text-muted">{{ m.plant_id or '—' }}</td>
@@ -433,7 +433,7 @@
                 <select name="hired_machine_id" class="form-select form-select-sm" required>
                   <option value="">— Select —</option>
                   {% for hm in hired_machines %}
-                  <option value="{{ hm.id }}">{{ hm.machine_name }}{% if hm.project %} — {{ hm.project.name }}{% endif %}</option>
+                  <option value="{{ hm.id }}">{{ hm.machine_name }}{% if hm.plant_id %} ({{ hm.plant_id }}){% endif %}{% if hm.project %} — {{ hm.project.name }}{% endif %}</option>
                   {% endfor %}
                 </select>
               </div>
@@ -499,7 +499,7 @@
             {% set history = hired_bd_history.get(hm.id, []) %}
             <tr class="{{ 'table-danger' if bd else '' }}">
               <td class="fw-semibold small">
-                {{ hm.machine_name }}
+                {{ hm.machine_name }}{% if hm.plant_id %} <small class="fw-normal text-muted">({{ hm.plant_id }})</small>{% endif %}
                 {% if hm.description %}<br><small class="text-muted fw-normal">{{ hm.description }}</small>{% endif %}
               </td>
               <td class="text-muted small">{{ hm.plant_id or '—' }}</td>

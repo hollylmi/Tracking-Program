@@ -137,7 +137,7 @@
           <tbody>
             {% for m in entry.machines %}
             <tr>
-              <td class="ps-3">{{ m.name }}</td>
+              <td class="ps-3">{{ m.name }}{% if m.plant_id %} <small class="text-muted">({{ m.plant_id }})</small>{% endif %}</td>
               <td class="text-muted">{{ m.machine_type or '—' }}</td>
             </tr>
             {% endfor %}

@@ -337,9 +337,15 @@ class ProjectEquipmentAssignment(db.Model):
     @property
     def display_name(self):
         if self.machine:
-            return self.machine.name
+            name = self.machine.name
+            if self.machine.plant_id:
+                name += f' ({self.machine.plant_id})'
+            return name
         if self.hired_machine:
-            return self.hired_machine.machine_name
+            name = self.hired_machine.machine_name
+            if self.hired_machine.plant_id:
+                name += f' ({self.hired_machine.plant_id})'
+            return name
         return '—'
 
     @property

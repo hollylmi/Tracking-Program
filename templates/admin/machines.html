@@ -136,7 +136,7 @@
           <td>
             {% set grp_machines = grp.machines | selectattr('active') | list %}
             {% for m in grp_machines %}
-            <span class="badge bg-light text-dark border me-1">{{ m.name }}</span>
+            <span class="badge bg-light text-dark border me-1">{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}</span>
             {% endfor %}
             {% if not grp_machines %}<span class="text-muted small">No items</span>{% endif %}
           </td>
@@ -189,7 +189,7 @@
           {% set assigned_project_ids = machine_assignments | map(attribute='project_id') | list %}
           <tr>
             <td class="fw-semibold">
-              {{ machine.name }}
+              {{ machine.name }}{% if machine.plant_id %} <small class="fw-normal text-muted">({{ machine.plant_id }})</small>{% endif %}
               {% if machine.description %}<br><small class="text-muted fw-normal">{{ machine.description }}</small>{% endif %}
             </td>
             <td class="text-muted small">{{ machine.plant_id or '—' }}</td>
