@@ -77,6 +77,9 @@ def scheduling_overview():
     for role_name, emp_iter in groupby(employees_sorted, key=lambda e: e.role or 'No Role'):
         roles_grouped.append((role_name, list(emp_iter)))
 
+    # Distinct scheduling groups for filter dropdown
+    role_groups_distinct = sorted({(r.group_name or r.name) for r in roles_db if r.name})
+
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
     all_proj_ordered = Project.query.order_by(Project.id).all()
@@ -94,6 +97,8 @@ def scheduling_overview():
         next_period=next_period,
         employees=employees_sorted,
         roles_grouped=roles_grouped,
+        role_group_map=role_group_map,
+        role_groups_distinct=role_groups_distinct,
         grid=grid,
         projects=projects,
         project_colour_map=project_colour_map,

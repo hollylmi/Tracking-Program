@@ -10,7 +10,8 @@
   .sched-table td.emp-name { background: #fff; font-weight: 500; min-width: 130px; max-width: 150px;
     position: sticky; left: 0; z-index: 2; border-right: 2px solid #adb5bd; overflow: hidden; text-overflow: ellipsis; }
   .sched-table tr.role-header td { background: #e9ecef; font-weight: 700; font-size: .69rem;
-    text-transform: uppercase; letter-spacing: .05em; color: #495057; }
+    text-transform: uppercase; letter-spacing: .05em; color: #495057;
+    position: sticky; left: 0; z-index: 2; }
   .cell-available  { background: #d1e7dd; color: #0a3622; text-align: center; }
   .cell-assigned   { background: #cfe2ff; color: #084298; text-align: center; font-weight: 600; }
   .cell-rdo        { background: #ffe5d0; color: #6c3a00; text-align: center; }
@@ -20,7 +21,10 @@
   .cell-weekend    { background: #f1f3f5; color: #ced4da; text-align: center; }
   .col-today       { outline: 2px solid #0d6efd; outline-offset: -2px; }
   th.col-today     { background: #cfe2ff !important; }
-  .sched-wrapper   { overflow-x: auto; max-width: 100%; }
+  .sched-wrapper   { overflow: auto; max-width: 100%; max-height: 80vh; }
+  .sched-table thead th { position: sticky; top: 0; z-index: 4; background: #f8f9fa; }
+  .sched-table thead tr:first-child th { top: 0; }
+  .sched-table thead tr:nth-child(2) th { top: 26px; }
   .sched-clickable { cursor: pointer; }
   .sched-clickable:hover { filter: brightness(0.9); }
   .cell-override-dot::after { content: '•'; font-size:.55rem; vertical-align:super; margin-left:1px; opacity:.6; }
@@ -69,6 +73,19 @@
 </div>
 {% endif %}
 
+<!-- Role group filter -->
+{% if role_groups_distinct and role_groups_distinct | length > 1 %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <label class="text-muted small fw-medium mb-0">Filter group:</label>
+  <select class="form-select form-select-sm" style="width:auto;max-width:200px;" id="roleGroupFilter" onchange="filterByRoleGroup(this.value)">
+    <option value="all">All groups</option>
+    {% for rg in role_groups_distinct %}
+    <option value="{{ rg }}">{{ rg }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+
 <!-- Schedule grid -->
 <div class="sched-wrapper mb-4">
   <table class="sched-table">
@@ -109,11 +126,12 @@
     </thead>
     <tbody>
       {% for role_name, emps in roles_grouped %}
-      <tr class="role-header">
+      {% set role_group = role_group_map.get(role_name, role_name) if role_group_map is defined else role_name %}
+      <tr class="role-header sched-group-row" data-role-group="{{ role_group }}">
         <td colspan="{{ date_list|length + 1 }}">{{ role_name }}</td>
       </tr>
       {% for emp in emps %}
-      <tr>
+      <tr class="sched-emp-row" data-role-group="{{ role_group }}">
         <td class="emp-name" title="{{ emp.name }}">{{ emp.name }}</td>
         {% for d in date_list %}
         {% set ds = d.isoformat() %}
@@ -447,6 +465,17 @@ setInterval(pollGrid, POLL_INTERVAL);
 pollGrid().then(() => { lastGridHash = lastGridHash; });
 
 // ── Override modal (AJAX) ────────────────────────────────────────────────────
+// ── Role group filter ─────────────────────────────────────────────────────
+function filterByRoleGroup(groupName) {
+  document.querySelectorAll('.sched-group-row, .sched-emp-row').forEach(row => {
+    if (groupName === 'all') {
+      row.style.display = '';
+    } else {
+      row.style.display = row.dataset.roleGroup === groupName ? '' : 'none';
+    }
+  });
+}
+
 function schedStatusChanged(sel) {
   document.getElementById('schedProjectDiv').style.display = sel.value === 'project' ? '' : 'none';
 }
