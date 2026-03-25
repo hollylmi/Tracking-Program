@@ -4,19 +4,119 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="fw-bold mb-0"><i class="bi bi-tools me-2 text-primary"></i>Equipment List (Owned)</h2>
+  <div class="d-flex gap-2">
+    <button class="btn btn-info text-white btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#addGroupPanel">
+      <i class="bi bi-collection me-1"></i>Add Group
+    </button>
+    <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#addEquipPanel">
+      <i class="bi bi-plus-circle me-1"></i>Add Equipment
+    </button>
+  </div>
 </div>
 
-<!-- Equipment Groups -->
+<!-- Collapsible: Add/Edit Group -->
+<div class="collapse mb-3" id="addGroupPanel">
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-2">
+      <span class="fw-semibold" id="groupFormTitle"><i class="bi bi-collection me-2 text-info"></i>Add Group</span>
+    </div>
+    <div class="card-body">
+      <form method="POST" id="groupForm">
+        <input type="hidden" name="action" id="groupFormAction" value="add_group">
+        <input type="hidden" name="group_id" id="groupEditId" value="">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small">Group Name <span class="text-danger">*</span></label>
+            <input type="text" name="group_name" id="groupName" class="form-control form-control-sm" required
+                   placeholder="e.g. Welding Setup, Deployment">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small">Description</label>
+            <input type="text" name="group_description" id="groupDescription" class="form-control form-control-sm"
+                   placeholder="What this group includes...">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-semibold small">Delay Rate ($/hr)</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text">$</span>
+              <input type="number" name="group_delay_rate" id="groupDelayRate" class="form-control"
+                     min="0" step="0.01" placeholder="0.00">
+            </div>
+          </div>
+          <div class="col-md-2 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-info text-white btn-sm" id="groupSubmitBtn">Create</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="cancelGroupBtn" onclick="cancelGroupEdit()">Cancel</button>
+          </div>
+        </div>
+        <div class="form-text mt-1">Items in this group inherit the delay rate unless they have their own.</div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Collapsible: Add/Edit Equipment -->
+<div class="collapse mb-3" id="addEquipPanel">
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-2">
+      <span class="fw-semibold" id="formTitle"><i class="bi bi-plus-circle me-2 text-primary"></i>Add Equipment</span>
+    </div>
+    <div class="card-body">
+      <form method="POST" id="machineForm">
+        <input type="hidden" name="action" id="formAction" value="add">
+        <input type="hidden" name="id" id="editId" value="">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label fw-semibold small">Name <span class="text-danger">*</span></label>
+            <input type="text" name="name" id="machineName" class="form-control form-control-sm" required placeholder="e.g. Welding Machine">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-semibold small">Group</label>
+            <select name="group_id" id="machineGroupId" class="form-select form-select-sm">
+              <option value="">— None —</option>
+              {% for grp in groups %}
+              <option value="{{ grp.id }}">{{ grp.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-semibold small">Plant ID</label>
+            <input type="text" name="plant_id" id="machinePlantId" class="form-control form-control-sm" placeholder="e.g. EX-042">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-semibold small">Type</label>
+            <input type="text" name="machine_type" id="machineType" class="form-control form-control-sm" placeholder="e.g. Excavator">
+          </div>
+          <div class="col-md-1">
+            <label class="form-label fw-semibold small">Rate</label>
+            <input type="number" name="delay_rate" id="machineDelayRate" class="form-control form-control-sm"
+                   min="0" step="0.01" placeholder="$/hr">
+          </div>
+          <div class="col-md-2 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary btn-sm" id="submitBtn">Add</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="cancelEditBtn" onclick="cancelEdit()">Cancel</button>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold small">Description</label>
+            <input type="text" name="description" id="machineDescription" class="form-control form-control-sm"
+                   placeholder="e.g. 8t excavator with tilt hitch">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Equipment Groups summary -->
 {% if groups %}
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-collection me-2 text-info"></i>Equipment Groups</h5>
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-header bg-white py-2">
+    <span class="fw-semibold small"><i class="bi bi-collection me-2 text-info"></i>Equipment Groups</span>
   </div>
   <div class="card-body p-0">
-    <table class="table table-hover align-middle mb-0">
+    <table class="table table-sm table-hover align-middle mb-0">
       <thead class="table-light">
         <tr>
-          <th>Group Name</th>
+          <th>Group</th>
           <th>Description</th>
           <th>Rate/hr</th>
           <th>Items</th>
@@ -31,34 +131,25 @@
           <td>
             {% if grp.delay_rate %}
               <span class="text-success fw-semibold">${{ '%.2f'|format(grp.delay_rate) }}/hr</span>
-            {% else %}
-              <span class="text-muted">—</span>
-            {% endif %}
+            {% else %}—{% endif %}
           </td>
           <td>
             {% set grp_machines = grp.machines | selectattr('active') | list %}
-            {% if grp_machines %}
-              {% for m in grp_machines %}
-              <span class="badge bg-light text-dark border me-1">{{ m.name }}</span>
-              {% endfor %}
-            {% else %}
-              <span class="text-muted small">No items</span>
-            {% endif %}
+            {% for m in grp_machines %}
+            <span class="badge bg-light text-dark border me-1">{{ m.name }}</span>
+            {% endfor %}
+            {% if not grp_machines %}<span class="text-muted small">No items</span>{% endif %}
           </td>
           <td class="text-end">
             <div class="d-flex gap-1 justify-content-end">
-              <button class="btn btn-sm btn-outline-secondary" type="button"
+              <button class="btn btn-sm btn-outline-secondary py-0" type="button"
                       onclick="openEditGroup({{ grp.id }}, '{{ grp.name|replace("'", "\\'") }}', '{{ (grp.description or '')|replace("'", "\\'") }}', '{{ grp.delay_rate or '' }}')"
-                      title="Edit group">
-                <i class="bi bi-pencil"></i>
-              </button>
+                      title="Edit"><i class="bi bi-pencil"></i></button>
               <form method="POST" class="d-inline"
-                    onsubmit="return confirm('Delete group \'{{ grp.name }}\'? Machines will be moved to ungrouped.')">
+                    onsubmit="return confirm('Delete group? Machines will be moved to ungrouped.')">
                 <input type="hidden" name="action" value="delete_group">
                 <input type="hidden" name="group_id" value="{{ grp.id }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete group">
-                  <i class="bi bi-trash"></i>
-                </button>
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0" title="Delete"><i class="bi bi-trash"></i></button>
               </form>
             </div>
           </td>
@@ -70,243 +161,138 @@
 </div>
 {% endif %}
 
-<div class="row g-4">
-
-  <!-- Machine List -->
-  <div class="col-lg-8">
-    <div class="card border-0 shadow-sm">
-      <div class="card-header bg-white py-3">
-        <h5 class="mb-0 fw-semibold">All Equipment</h5>
-      </div>
-      <div class="card-body p-0">
-        {% if machines %}
-        <table class="table table-hover align-middle mb-0">
-          <thead class="table-light">
-            <tr>
-              <th>Name</th>
-              <th>Plant ID</th>
-              <th>Type</th>
-              <th>Group</th>
-              <th>Rate/hr</th>
-              <th>Assigned To</th>
-              <th>Status</th>
-              <th class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for machine in machines %}
-            {% set machine_assignments = assignments_by_machine.get(machine.id, []) %}
-            {% set assigned_project_ids = machine_assignments | map(attribute='project_id') | list %}
-            <tr>
-              <td class="fw-semibold">
-                {{ machine.name }}
-                {% if machine.description %}<br><small class="text-muted fw-normal">{{ machine.description }}</small>{% endif %}
-              </td>
-              <td class="text-muted">{{ machine.plant_id or '—' }}</td>
-              <td class="text-muted">{{ machine.machine_type or '—' }}</td>
-              <td>
-                {% if machine.group %}
-                  <span class="badge bg-info-subtle text-info border border-info-subtle">{{ machine.group.name }}</span>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-              <td>
-                {% set rate = machine.effective_delay_rate %}
-                {% if rate %}
-                  <span class="text-success fw-semibold">${{ '%.2f'|format(rate) }}/hr</span>
-                  {% if machine.delay_rate is none and machine.group %}
-                    <br><small class="text-muted">from group</small>
-                  {% endif %}
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-              <td style="min-width:200px;">
-                <div class="d-flex flex-wrap gap-1 align-items-center">
-                  {% for pm in machine_assignments %}
-                  <span class="badge bg-primary-subtle text-primary border border-primary-subtle d-inline-flex align-items-center gap-1">
-                    {{ pm.project.name }}
-                    <form method="POST" class="d-inline m-0 p-0">
-                      <input type="hidden" name="action" value="unassign">
-                      <input type="hidden" name="pm_id" value="{{ pm.id }}">
-                      <button type="submit" class="btn btn-link p-0 m-0 text-danger" style="font-size:0.7rem;line-height:1;"
-                              title="Remove assignment" onclick="return confirm('Remove from {{ pm.project.name }}?')">
-                        <i class="bi bi-x-lg"></i>
-                      </button>
-                    </form>
-                  </span>
-                  {% endfor %}
-                  <form method="POST" class="d-inline-flex gap-1 align-items-center">
-                    <input type="hidden" name="action" value="assign">
-                    <input type="hidden" name="machine_id" value="{{ machine.id }}">
-                    <select name="project_id" class="form-select form-select-sm" style="width:auto;max-width:140px;">
-                      <option value="">+ Add project</option>
-                      {% for p in projects %}
-                      {% if p.id not in assigned_project_ids %}
-                      <option value="{{ p.id }}">{{ p.name }}</option>
-                      {% endif %}
-                      {% endfor %}
-                    </select>
-                    <button type="submit" class="btn btn-sm btn-outline-primary py-0 px-2">Assign</button>
+<!-- All Equipment table (full width) -->
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white py-2">
+    <span class="fw-semibold small">All Equipment</span>
+  </div>
+  <div class="card-body p-0">
+    {% if machines %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th>
+            <th>Plant ID</th>
+            <th>Type</th>
+            <th>Group</th>
+            <th>Rate/hr</th>
+            <th>Assigned To</th>
+            <th>Entries</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for machine in machines %}
+          {% set machine_assignments = assignments_by_machine.get(machine.id, []) %}
+          {% set assigned_project_ids = machine_assignments | map(attribute='project_id') | list %}
+          <tr>
+            <td class="fw-semibold">
+              {{ machine.name }}
+              {% if machine.description %}<br><small class="text-muted fw-normal">{{ machine.description }}</small>{% endif %}
+            </td>
+            <td class="text-muted small">{{ machine.plant_id or '—' }}</td>
+            <td class="text-muted small">{{ machine.machine_type or '—' }}</td>
+            <td class="small">
+              {% if machine.group %}
+                <span class="badge bg-info-subtle text-info border border-info-subtle">{{ machine.group.name }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="small">
+              {% set rate = machine.effective_delay_rate %}
+              {% if rate %}
+                <span class="text-success fw-semibold">${{ '%.2f'|format(rate) }}/hr</span>
+                {% if machine.delay_rate is none and machine.group %}<br><small class="text-muted">from group</small>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td style="min-width:180px;">
+              <div class="d-flex flex-wrap gap-1 align-items-center">
+                {% for pm in machine_assignments %}
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle d-inline-flex align-items-center gap-1">
+                  {{ pm.project.name }}
+                  <form method="POST" class="d-inline m-0 p-0">
+                    <input type="hidden" name="action" value="unassign">
+                    <input type="hidden" name="pm_id" value="{{ pm.id }}">
+                    <button type="submit" class="btn btn-link p-0 m-0 text-danger" style="font-size:0.7rem;line-height:1;"
+                            title="Remove" onclick="return confirm('Remove from {{ pm.project.name }}?')">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
                   </form>
-                </div>
-              </td>
-              <td>
-                {% if machine.active %}
-                  <span class="badge bg-success-subtle text-success">Active</span>
-                {% else %}
-                  <span class="badge bg-secondary-subtle text-secondary">Inactive</span>
-                {% endif %}
-              </td>
-              <td class="text-end">
-                <div class="d-flex gap-1 justify-content-end">
-                  <button class="btn btn-sm btn-outline-secondary" type="button"
-                          onclick="openEditMachine({{ machine.id }}, '{{ machine.name|replace("'", "\\'") }}', '{{ (machine.plant_id or '')|replace("'", "\\'") }}', '{{ (machine.machine_type or '')|replace("'", "\\'") }}', '{{ machine.delay_rate or '' }}', '{{ (machine.description or '')|replace("'", "\\'") }}', '{{ machine.group_id or '' }}')"
-                          title="Edit">
-                    <i class="bi bi-pencil"></i>
+                </span>
+                {% endfor %}
+                <form method="POST" class="d-inline-flex gap-1 align-items-center">
+                  <input type="hidden" name="action" value="assign">
+                  <input type="hidden" name="machine_id" value="{{ machine.id }}">
+                  <select name="project_id" class="form-select form-select-sm" style="width:auto;max-width:120px;font-size:.75rem;">
+                    <option value="">+ Add</option>
+                    {% for p in projects %}
+                    {% if p.id not in assigned_project_ids %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endif %}
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn btn-sm btn-outline-primary py-0 px-1" style="font-size:.75rem;">Go</button>
+                </form>
+              </div>
+            </td>
+            <td class="small">{{ machine.entries|length }}</td>
+            <td>
+              {% if machine.active %}
+                <span class="badge bg-success-subtle text-success">Active</span>
+              {% else %}
+                <span class="badge bg-secondary-subtle text-secondary">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <div class="d-flex gap-1 justify-content-end">
+                <button class="btn btn-sm btn-outline-secondary py-0" type="button"
+                        onclick="openEditMachine({{ machine.id }}, '{{ machine.name|replace("'", "\\'") }}', '{{ (machine.plant_id or '')|replace("'", "\\'") }}', '{{ (machine.machine_type or '')|replace("'", "\\'") }}', '{{ machine.delay_rate or '' }}', '{{ (machine.description or '')|replace("'", "\\'") }}', '{{ machine.group_id or '' }}')"
+                        title="Edit"><i class="bi bi-pencil"></i></button>
+                <form method="POST" class="d-inline">
+                  <input type="hidden" name="action" value="toggle">
+                  <input type="hidden" name="id" value="{{ machine.id }}">
+                  <button type="submit" class="btn btn-sm btn-outline-{% if machine.active %}warning{% else %}success{% endif %} py-0"
+                          title="{% if machine.active %}Deactivate{% else %}Activate{% endif %}">
+                    <i class="bi bi-{% if machine.active %}pause{% else %}play{% endif %}"></i>
                   </button>
-                  <form method="POST" class="d-inline">
-                    <input type="hidden" name="action" value="toggle">
-                    <input type="hidden" name="id" value="{{ machine.id }}">
-                    <button type="submit" class="btn btn-sm btn-outline-{% if machine.active %}warning{% else %}success{% endif %}"
-                            title="{% if machine.active %}Deactivate{% else %}Activate{% endif %}">
-                      <i class="bi bi-{% if machine.active %}pause{% else %}play{% endif %}"></i>
-                    </button>
-                  </form>
-                  {% if not machine.entries %}
-                  <form method="POST" class="d-inline"
-                        onsubmit="return confirm('Delete machine \'{{ machine.name }}\'?')">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="id" value="{{ machine.id }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
-                  {% endif %}
-                </div>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        <div class="text-center py-5 text-muted">
-          <i class="bi bi-tools fs-1 d-block mb-2"></i>
-          No equipment yet. Add your first item.
-        </div>
-        {% endif %}
-      </div>
+                </form>
+                {% if not machine.entries %}
+                <form method="POST" class="d-inline"
+                      onsubmit="return confirm('Delete \'{{ machine.name }}\'?')">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="id" value="{{ machine.id }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger py-0" title="Delete">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-tools fs-1 d-block mb-2"></i>
+      No equipment yet. Click "Add Equipment" above.
+    </div>
+    {% endif %}
   </div>
-
-  <!-- Add / Edit Forms -->
-  <div class="col-lg-4">
-
-    <!-- Add/Edit Group -->
-    <div class="card border-0 shadow-sm mb-4">
-      <div class="card-header bg-white py-3">
-        <h5 class="mb-0 fw-semibold" id="groupFormTitle"><i class="bi bi-collection me-2 text-info"></i>Add Group</h5>
-      </div>
-      <div class="card-body">
-        <form method="POST" id="groupForm">
-          <input type="hidden" name="action" id="groupFormAction" value="add_group">
-          <input type="hidden" name="group_id" id="groupEditId" value="">
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Group Name <span class="text-danger">*</span></label>
-            <input type="text" name="group_name" id="groupName" class="form-control" required
-                   placeholder="e.g. Welding Setup, Deployment">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Description <span class="text-muted fw-normal">(optional)</span></label>
-            <input type="text" name="group_description" id="groupDescription" class="form-control"
-                   placeholder="What this group includes...">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">
-              Delay Rate ($/hr) <span class="text-muted fw-normal">(shared by all items)</span>
-            </label>
-            <div class="input-group">
-              <span class="input-group-text">$</span>
-              <input type="number" name="group_delay_rate" id="groupDelayRate" class="form-control"
-                     min="0" step="0.01" placeholder="0.00">
-              <span class="input-group-text">/hr</span>
-            </div>
-            <div class="form-text">Items in this group inherit this rate unless they have their own.</div>
-          </div>
-          <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-info text-white" id="groupSubmitBtn">Create Group</button>
-            <button type="button" class="btn btn-outline-secondary d-none" id="cancelGroupBtn" onclick="cancelGroupEdit()">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Add/Edit Equipment -->
-    <div class="card border-0 shadow-sm">
-      <div class="card-header bg-white py-3">
-        <h5 class="mb-0 fw-semibold" id="formTitle">Add Equipment</h5>
-      </div>
-      <div class="card-body">
-        <form method="POST" id="machineForm">
-          <input type="hidden" name="action" id="formAction" value="add">
-          <input type="hidden" name="id" id="editId" value="">
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
-            <input type="text" name="name" id="machineName" class="form-control" required placeholder="e.g. Welding Machine">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Group <span class="text-muted fw-normal">(optional)</span></label>
-            <select name="group_id" id="machineGroupId" class="form-select">
-              <option value="">— No group —</option>
-              {% for grp in groups %}
-              <option value="{{ grp.id }}">{{ grp.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Plant ID <span class="text-muted fw-normal">(optional)</span></label>
-            <input type="text" name="plant_id" id="machinePlantId" class="form-control"
-                   placeholder="e.g. EX-042">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Type <span class="text-muted fw-normal">(optional)</span></label>
-            <input type="text" name="machine_type" id="machineType" class="form-control"
-                   placeholder="e.g. Excavator, Roller, Paver...">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Description <span class="text-muted fw-normal">(optional)</span></label>
-            <input type="text" name="description" id="machineDescription" class="form-control"
-                   placeholder="e.g. 8t excavator with tilt hitch">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">
-              Delay Rate ($/hr) <span class="text-muted fw-normal">(optional — inherits from group if blank)</span>
-            </label>
-            <div class="input-group">
-              <span class="input-group-text">$</span>
-              <input type="number" name="delay_rate" id="machineDelayRate" class="form-control"
-                     min="0" step="0.01" placeholder="0.00">
-              <span class="input-group-text">/hr</span>
-            </div>
-          </div>
-          <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-primary" id="submitBtn">Add Equipment</button>
-            <button type="button" class="btn btn-outline-secondary d-none" id="cancelEditBtn" onclick="cancelEdit()">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-  </div>
-
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
   function openEditMachine(id, name, plantId, type, delayRate, description, groupId) {
-    document.getElementById('formTitle').textContent = 'Edit Equipment';
+    // Show the panel if collapsed
+    const panel = document.getElementById('addEquipPanel');
+    if (!panel.classList.contains('show')) {
+      new bootstrap.Collapse(panel, { toggle: true });
+    }
+    document.getElementById('formTitle').innerHTML = '<i class="bi bi-pencil me-2 text-primary"></i>Edit Equipment';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
     document.getElementById('machineName').value = name;
@@ -315,14 +301,13 @@
     document.getElementById('machineDescription').value = description;
     document.getElementById('machineDelayRate').value = delayRate;
     document.getElementById('machineGroupId').value = groupId || '';
-    document.getElementById('submitBtn').textContent = 'Save Changes';
+    document.getElementById('submitBtn').textContent = 'Save';
     document.getElementById('cancelEditBtn').classList.remove('d-none');
-    document.getElementById('machineName').focus();
-    document.getElementById('machineForm').scrollIntoView({ behavior: 'smooth' });
+    setTimeout(() => document.getElementById('machineName').focus(), 300);
   }
 
   function cancelEdit() {
-    document.getElementById('formTitle').textContent = 'Add Equipment';
+    document.getElementById('formTitle').innerHTML = '<i class="bi bi-plus-circle me-2 text-primary"></i>Add Equipment';
     document.getElementById('formAction').value = 'add';
     document.getElementById('editId').value = '';
     document.getElementById('machineName').value = '';
@@ -331,21 +316,24 @@
     document.getElementById('machineDescription').value = '';
     document.getElementById('machineDelayRate').value = '';
     document.getElementById('machineGroupId').value = '';
-    document.getElementById('submitBtn').textContent = 'Add Equipment';
+    document.getElementById('submitBtn').textContent = 'Add';
     document.getElementById('cancelEditBtn').classList.add('d-none');
   }
 
   function openEditGroup(id, name, description, delayRate) {
-    document.getElementById('groupFormTitle').innerHTML = '<i class="bi bi-collection me-2 text-info"></i>Edit Group';
+    const panel = document.getElementById('addGroupPanel');
+    if (!panel.classList.contains('show')) {
+      new bootstrap.Collapse(panel, { toggle: true });
+    }
+    document.getElementById('groupFormTitle').innerHTML = '<i class="bi bi-pencil me-2 text-info"></i>Edit Group';
     document.getElementById('groupFormAction').value = 'edit_group';
     document.getElementById('groupEditId').value = id;
     document.getElementById('groupName').value = name;
     document.getElementById('groupDescription').value = description;
     document.getElementById('groupDelayRate').value = delayRate;
-    document.getElementById('groupSubmitBtn').textContent = 'Save Group';
+    document.getElementById('groupSubmitBtn').textContent = 'Save';
     document.getElementById('cancelGroupBtn').classList.remove('d-none');
-    document.getElementById('groupName').focus();
-    document.getElementById('groupForm').scrollIntoView({ behavior: 'smooth' });
+    setTimeout(() => document.getElementById('groupName').focus(), 300);
   }
 
   function cancelGroupEdit() {
@@ -355,7 +343,7 @@
     document.getElementById('groupName').value = '';
     document.getElementById('groupDescription').value = '';
     document.getElementById('groupDelayRate').value = '';
-    document.getElementById('groupSubmitBtn').textContent = 'Create Group';
+    document.getElementById('groupSubmitBtn').textContent = 'Create';
     document.getElementById('cancelGroupBtn').classList.add('d-none');
   }
 </script>
