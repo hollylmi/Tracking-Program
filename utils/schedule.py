@@ -2,7 +2,8 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from models import (db, ProjectAssignment, EmployeeLeave, EmployeeSwing,
-                    ScheduleDayOverride, Project, PublicHoliday, CFMEUDate)
+                    ScheduleDayOverride, Project, PublicHoliday, CFMEUDate,
+                    ProjectWorkedSunday)
 
 
 def build_day_summary(hm, date_from, date_to):
@@ -121,6 +122,13 @@ def build_schedule_grid(employees, date_list):
         for s in c.states_list():
             cfmeu_by_state[s].add(c.date)
 
+    # Worked Sundays by project
+    worked_sundays_by_project = defaultdict(set)
+    for ws in ProjectWorkedSunday.query.filter(
+            ProjectWorkedSunday.date >= min_date,
+            ProjectWorkedSunday.date <= max_date).all():
+        worked_sundays_by_project[ws.project_id].add(ws.date)
+
     grid = {}
     for emp in employees:
         grid[emp.id] = {}
@@ -214,7 +222,21 @@ def build_schedule_grid(employees, date_list):
                         }
                         continue
 
-            # Priority 5: Project assignment
+            # Priority 5: Sunday check — off unless it's a worked Sunday for that project
+            if d.weekday() == 6:
+                is_worked_sunday = (
+                    active_assign and
+                    d in worked_sundays_by_project.get(active_assign.project_id, set())
+                )
+                if not is_worked_sunday:
+                    grid[emp.id][date_str] = {
+                        'status': 'sunday',
+                        'label': 'Sun',
+                        'project_name': ''
+                    }
+                    continue
+
+            # Priority 6: Project assignment
             if active_assign:
                 grid[emp.id][date_str] = {
                     'status': 'assigned',
@@ -224,7 +246,7 @@ def build_schedule_grid(employees, date_list):
                 }
                 continue
 
-            # Default: sunday rest or available
+            # Default: available
             if d.weekday() == 6:
                 grid[emp.id][date_str] = {
                     'status': 'sunday',
