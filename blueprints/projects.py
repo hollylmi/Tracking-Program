@@ -45,20 +45,41 @@ def api_progress():
         planned_q = planned_q.filter_by(material=material)
     planned_sqm = sum(p.planned_sqm or 0 for p in planned_q.all())
 
-    # Installed SQM so far
-    actual_q = (DailyEntry.query
-                .filter_by(project_id=int(project_id))
-                .filter(DailyEntry.install_sqm > 0))
+    # Installed SQM so far — query production lines first, then legacy entries
+    from models import EntryProductionLine
+    pl_q = (db.session.query(db.func.sum(EntryProductionLine.install_sqm))
+            .join(DailyEntry, EntryProductionLine.entry_id == DailyEntry.id)
+            .filter(DailyEntry.project_id == int(project_id)))
     if lot:
-        actual_q = actual_q.filter(DailyEntry.lot_number == lot)
+        pl_q = pl_q.filter(EntryProductionLine.lot_number == lot)
     if material:
-        actual_q = actual_q.filter(DailyEntry.material == material)
+        pl_q = pl_q.filter(EntryProductionLine.material == material)
     if exclude_entry_id:
         try:
-            actual_q = actual_q.filter(DailyEntry.id != int(exclude_entry_id))
+            pl_q = pl_q.filter(DailyEntry.id != int(exclude_entry_id))
         except ValueError:
             pass
-    installed_sqm = sum(e.install_sqm or 0 for e in actual_q.all())
+    pl_total = pl_q.scalar() or 0
+
+    # Legacy entries (no production lines)
+    legacy_q = (DailyEntry.query
+                .filter_by(project_id=int(project_id))
+                .filter(DailyEntry.install_sqm > 0)
+                .filter(~DailyEntry.id.in_(
+                    db.session.query(EntryProductionLine.entry_id).distinct()
+                )))
+    if lot:
+        legacy_q = legacy_q.filter(DailyEntry.lot_number == lot)
+    if material:
+        legacy_q = legacy_q.filter(DailyEntry.material == material)
+    if exclude_entry_id:
+        try:
+            legacy_q = legacy_q.filter(DailyEntry.id != int(exclude_entry_id))
+        except ValueError:
+            pass
+    legacy_total = sum(e.install_sqm or 0 for e in legacy_q.all())
+
+    installed_sqm = pl_total + legacy_total
 
     remaining = max(0, planned_sqm - installed_sqm)
     pct = round(installed_sqm / planned_sqm * 100, 1) if planned_sqm > 0 else None

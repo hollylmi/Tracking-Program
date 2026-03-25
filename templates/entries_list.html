@@ -76,8 +76,24 @@
             <td>
               <span class="badge bg-dark text-white fw-semibold">{{ entry.project.name }}</span>
             </td>
-            <td>{{ entry.lot_number or '—' }}</td>
-            <td>{{ entry.material or '—' }}</td>
+            <td>
+              {% if entry.production_lines %}
+                {% for pl in entry.production_lines %}
+                <div>{{ pl.lot_number or '—' }}</div>
+                {% endfor %}
+              {% else %}
+                {{ entry.lot_number or '—' }}
+              {% endif %}
+            </td>
+            <td>
+              {% if entry.production_lines %}
+                {% for pl in entry.production_lines %}
+                <div>{{ pl.material or '—' }}{% if pl.install_sqm %} <small class="text-muted">({{ pl.install_sqm }} m²)</small>{% endif %}</div>
+                {% endfor %}
+              {% else %}
+                {{ entry.material or '—' }}
+              {% endif %}
+            </td>
             <td>
               {% if entry.employees %}
                 <span class="text-nowrap" title="{{ entry.employees|map(attribute='name')|join(', ') }}">

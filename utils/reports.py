@@ -549,15 +549,11 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
 
         for entry in period_entries:
             date_str = entry.entry_date.strftime('%A, %d %B %Y')
-            lot_str = entry.lot_number or ''
             loc_str = entry.location or ''
-            mat_str = entry.material or ''
 
             pdf.set_fill_color(228, 238, 255)
             pdf.set_font('Helvetica', 'B', 9)
             hdr_parts = [safe(date_str)]
-            if lot_str:
-                hdr_parts.append(safe(f'Lot {lot_str}'))
             if loc_str:
                 hdr_parts.append(safe(loc_str))
             pdf.cell(0, 6, '  |  '.join(hdr_parts), new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
@@ -565,15 +561,25 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
             pdf.set_font('Helvetica', '', 8)
             pdf.set_text_color(0, 0, 0)
 
-            work_parts = []
-            if mat_str:
-                work_parts.append(safe(f'Material: {mat_str}'))
+            # Production lines (or legacy single lot/material)
+            prod_lines = entry.production_lines if entry.production_lines else [
+                type('PL', (), {'lot_number': entry.lot_number, 'material': entry.material, 'install_sqm': entry.install_sqm})()
+            ] if (entry.lot_number or entry.material) else []
+
+            for pl in prod_lines:
+                work_parts = []
+                if pl.lot_number:
+                    work_parts.append(safe(f'Lot {pl.lot_number}'))
+                if pl.material:
+                    work_parts.append(safe(f'{pl.material}'))
+                if pl.install_sqm:
+                    work_parts.append(safe(f'{pl.install_sqm} m\u00b2'))
+                if work_parts:
+                    pdf.cell(0, 5, '   '.join(work_parts), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
             if entry.install_hours:
-                work_parts.append(safe(f'Install: {entry.install_hours}h'))
-            if entry.install_sqm:
-                work_parts.append(safe(f'{entry.install_sqm} m\u00b2'))
-            if work_parts:
-                pdf.cell(0, 5, '   '.join(work_parts), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.cell(0, 5, safe(f'Install: {entry.install_hours}h  |  Total: {entry.total_sqm} m\u00b2'),
+                         new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
             if entry.delay_hours and entry.delay_hours > 0:
                 delay_type = 'Client (Billable)' if entry.delay_billable else 'Own (Non-billable)'
@@ -684,10 +690,10 @@ def generate_weekly_report_pdf(project, week_start, week_end, entries, settings)
     pdf.cell(0, 6, period, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
     pdf.ln(4)
 
-    total_sqm = sum(e.install_sqm or 0 for e in entries)
+    total_sqm = sum(e.total_sqm for e in entries)
     total_hours = sum(e.install_hours or 0 for e in entries)
     total_delay = sum(e.delay_hours or 0 for e in entries)
-    days_with_install = len({e.entry_date for e in entries if (e.install_sqm or 0) > 0})
+    days_with_install = len({e.entry_date for e in entries if e.total_sqm > 0})
 
     pdf.set_fill_color(240, 244, 255)
     pdf.set_font('Helvetica', 'B', 10)
@@ -723,14 +729,19 @@ def generate_weekly_report_pdf(project, week_start, week_end, entries, settings)
         sorted_entries = sorted(entries, key=lambda e: e.entry_date)
         pdf.set_font('Helvetica', '', 8)
         for e in sorted_entries:
-            pdf.cell(col_w[0], 5, e.entry_date.strftime('%d/%m/%y'), border=1, align='C')
-            pdf.cell(col_w[1], 5, e.entry_date.strftime('%a'), border=1, align='C')
-            pdf.cell(col_w[2], 5, safe(e.lot_number or '-'), border=1)
-            pdf.cell(col_w[3], 5, safe(e.material or '-'), border=1)
-            pdf.cell(col_w[4], 5, str(round(e.install_hours or 0, 1)), border=1, align='R')
-            pdf.cell(col_w[5], 5, str(round(e.install_sqm or 0, 1)), border=1, align='R')
-            pdf.cell(col_w[6], 5, str(round(e.delay_hours or 0, 1)) if e.delay_hours else '-', border=1, align='R')
-            pdf.ln()
+            # Use production lines if available
+            lines = e.production_lines if e.production_lines else [
+                type('PL', (), {'lot_number': e.lot_number, 'material': e.material, 'install_sqm': e.install_sqm})()
+            ]
+            for i, pl in enumerate(lines):
+                pdf.cell(col_w[0], 5, e.entry_date.strftime('%d/%m/%y') if i == 0 else '', border=1, align='C')
+                pdf.cell(col_w[1], 5, e.entry_date.strftime('%a') if i == 0 else '', border=1, align='C')
+                pdf.cell(col_w[2], 5, safe(pl.lot_number or '-'), border=1)
+                pdf.cell(col_w[3], 5, safe(pl.material or '-'), border=1)
+                pdf.cell(col_w[4], 5, str(round(e.install_hours or 0, 1)) if i == 0 else '', border=1, align='R')
+                pdf.cell(col_w[5], 5, str(round(pl.install_sqm or 0, 1)), border=1, align='R')
+                pdf.cell(col_w[6], 5, (str(round(e.delay_hours or 0, 1)) if e.delay_hours else '-') if i == 0 else '', border=1, align='R')
+                pdf.ln()
 
             note_parts = []
             if e.delay_reason and e.delay_hours and e.delay_hours > 0:
