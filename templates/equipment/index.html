@@ -202,6 +202,20 @@
         </select>
       </div>
       {% endif %}
+      {# Build unique types list #}
+      {% set machine_types = own_machines | map(attribute='machine_type') | select('string') | unique | sort | list %}
+      {% if machine_types %}
+      <div class="d-flex align-items-center gap-2">
+        <label class="text-muted small fw-medium mb-0">Type:</label>
+        <select class="form-select form-select-sm" style="width:auto;max-width:180px;" id="filterType" onchange="applyFleetFilters()">
+          <option value="all">All types</option>
+          {% for t in machine_types %}
+          <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+          <option value="none">No type</option>
+        </select>
+      </div>
+      {% endif %}
       {% if projects %}
       <div class="d-flex align-items-center gap-2">
         <label class="text-muted small fw-medium mb-0">Site:</label>
@@ -248,6 +262,7 @@
             {% set proj_ids = projs | map(attribute=0) | map(attribute='id') | list %}
             <tr class="fleet-row {{ 'table-danger' if bd else ('table-secondary opacity-75' if not m.active else '') }}"
                 data-group-id="{{ m.group_id or '' }}"
+                data-machine-type="{{ m.machine_type or '' }}"
                 data-project-ids="{{ proj_ids | join(',') }}">
               <td class="fw-semibold">
                 {{ m.name }}
@@ -714,23 +729,30 @@
 
   function applyFleetFilters() {
     const groupSel = document.getElementById('filterGroup');
+    const typeSel = document.getElementById('filterType');
     const siteSel = document.getElementById('filterSite');
     const groupVal = groupSel ? groupSel.value : 'all';
+    const typeVal = typeSel ? typeSel.value : 'all';
     const siteVal = siteSel ? siteSel.value : 'all';
 
     document.querySelectorAll('.fleet-row').forEach(row => {
       const rowGroup = row.dataset.groupId || '';
+      const rowType = row.dataset.machineType || '';
       const rowProjects = (row.dataset.projectIds || '').split(',').filter(Boolean);
 
       let showGroup = true;
       if (groupVal === 'none') showGroup = rowGroup === '';
       else if (groupVal !== 'all') showGroup = rowGroup === groupVal;
 
+      let showType = true;
+      if (typeVal === 'none') showType = rowType === '';
+      else if (typeVal !== 'all') showType = rowType === typeVal;
+
       let showSite = true;
       if (siteVal === 'none') showSite = rowProjects.length === 0;
       else if (siteVal !== 'all') showSite = rowProjects.includes(siteVal);
 
-      row.style.display = (showGroup && showSite) ? '' : 'none';
+      row.style.display = (showGroup && showType && showSite) ? '' : 'none';
     });
   }
 
