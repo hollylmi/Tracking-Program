@@ -9,7 +9,7 @@ from flask_login import current_user
 from blueprints.auth import require_role
 from utils.helpers import get_active_project_id
 
-from models import (db, Machine, Project, HiredMachine, MachineBreakdown,
+from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBreakdown,
                     BreakdownPhoto, ProjectEquipmentAssignment, ProjectEquipmentRequirement,
                     ProjectMachine)
 import storage
@@ -28,12 +28,14 @@ def equipment_machine_save():
         if not name:
             flash('Machine name is required.', 'danger')
             return redirect(url_for('equipment.equipment_overview') + '#tab-own')
+        group_id = request.form.get('group_id', '').strip()
         m = Machine(
             name=name,
             plant_id=request.form.get('plant_id', '').strip() or None,
             machine_type=request.form.get('machine_type', '').strip() or None,
             description=request.form.get('description', '').strip() or None,
             delay_rate=float(request.form.get('delay_rate')) if request.form.get('delay_rate') else None,
+            group_id=int(group_id) if group_id else None,
         )
         db.session.add(m)
         db.session.commit()
@@ -45,6 +47,8 @@ def equipment_machine_save():
         m.machine_type = request.form.get('machine_type', '').strip() or None
         m.description = request.form.get('description', '').strip() or None
         m.delay_rate = float(request.form.get('delay_rate')) if request.form.get('delay_rate') else None
+        group_id = request.form.get('group_id', '').strip()
+        m.group_id = int(group_id) if group_id else None
         db.session.commit()
         flash('Machine updated.', 'success')
     elif action == 'toggle':
@@ -116,9 +120,12 @@ def equipment_overview():
     ).order_by(MachineBreakdown.incident_date.desc()).all():
         hired_bd_history[b.hired_machine_id].append(b)
 
+    groups = MachineGroup.query.order_by(MachineGroup.name).all()
+
     return render_template('equipment/index.html',
                            own_machines=own_machines,
                            hired_machines=hired_machines,
+                           groups=groups,
                            projects=projects,
                            own_breakdowns=own_breakdowns,
                            hired_breakdowns=hired_breakdowns,

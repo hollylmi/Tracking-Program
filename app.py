@@ -228,6 +228,7 @@ with app.app_context():
         "ALTER TABLE cfmeu_date ALTER COLUMN state TYPE VARCHAR(200)",
         # Machine groups
         "ALTER TABLE machine ADD COLUMN group_id INTEGER REFERENCES machine_group(id)",
+        "ALTER TABLE hired_machine ADD COLUMN group_id INTEGER REFERENCES machine_group(id)",
     ]:
         try:
             db.session.execute(db.text(stmt))

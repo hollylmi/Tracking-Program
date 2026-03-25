@@ -223,6 +223,7 @@ class HiredMachine(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     machine_name = db.Column(db.String(200), nullable=False)
     plant_id = db.Column(db.String(100))           # plant/fleet ID from hire company
+    group_id = db.Column(db.Integer, db.ForeignKey('machine_group.id'), nullable=True)
     machine_type = db.Column(db.String(100))
     description = db.Column(db.Text)               # description of the item
     hire_company = db.Column(db.String(200))
@@ -240,11 +241,20 @@ class HiredMachine(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     project = db.relationship('Project', backref='hired_machines')
+    group = db.relationship('MachineGroup', backref='hired_machines')
     stand_downs = db.relationship(
         'StandDown', backref='hired_machine',
         cascade='all, delete-orphan',
         order_by='StandDown.stand_down_date'
     )
+
+    @property
+    def effective_delay_rate(self):
+        if self.cost_per_day is not None:
+            return self.cost_per_day
+        if self.group and self.group.delay_rate is not None:
+            return self.group.delay_rate
+        return None
 
     def __repr__(self):
         return f'<HiredMachine {self.machine_name} - {self.hire_company}>'
