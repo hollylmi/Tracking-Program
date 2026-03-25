@@ -281,7 +281,7 @@
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
                   <button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button"
-                          onclick='openMachineEdit({{ m.id }}, {{ m.name|tojson }}, {{ (m.plant_id or "")|tojson }}, {{ (m.machine_type or "")|tojson }}, {{ (m.description or "")|tojson }}, {{ m.delay_rate or "" }}, {{ m.group_id or "null" }})'
+                          onclick='openMachineEdit({{ m.id }}, {{ m.name|tojson }}, {{ (m.plant_id or "")|tojson }}, {{ (m.machine_type or "")|tojson }}, {{ (m.description or "")|tojson }}, {{ m.delay_rate|tojson }}, {{ m.group_id|tojson }})'
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -665,12 +665,12 @@
 
   function openMachineEdit(id, name, plantId, type, description, rate, groupId) {
     document.getElementById('editMachineId').value = id;
-    document.getElementById('editMachineName').value = name;
-    document.getElementById('editMachinePlantId').value = plantId;
-    document.getElementById('editMachineType').value = type;
-    document.getElementById('editMachineDesc').value = description;
-    document.getElementById('editMachineRate').value = rate || '';
-    document.getElementById('editMachineGroupId').value = groupId || '';
+    document.getElementById('editMachineName').value = name || '';
+    document.getElementById('editMachinePlantId').value = plantId || '';
+    document.getElementById('editMachineType').value = type || '';
+    document.getElementById('editMachineDesc').value = description || '';
+    document.getElementById('editMachineRate').value = (rate !== null && rate !== undefined) ? rate : '';
+    document.getElementById('editMachineGroupId').value = (groupId !== null && groupId !== undefined) ? groupId : '';
     new bootstrap.Modal(document.getElementById('editMachineModal')).show();
   }
 
