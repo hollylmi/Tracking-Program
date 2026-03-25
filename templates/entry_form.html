@@ -301,6 +301,7 @@
         </div>
         <div class="card-body p-0">
           {% if employees %}
+          <div id="employeeHint" class="px-3 py-2 text-muted small border-bottom bg-light" style="display:none"></div>
           <div class="checkbox-scroll-list">
             {% for employee in employees %}
             <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2">
@@ -655,10 +656,56 @@
     filterMachinesByProject();
     fetchPlannedOptions();
     scheduleProgress();
+    filterEmployeesByProject();
   });
+
+  document.getElementById('entryDate').addEventListener('change', () => {
+    filterEmployeesByProject();
+  });
+
+  // Filter employees to those assigned to the project on the selected date
+  let allEmployeesShown = false;
+  function filterEmployeesByProject() {
+    const projectId = document.getElementById('projectSelect').value;
+    const entryDate = document.getElementById('entryDate').value;
+    if (!projectId || !entryDate) return;
+
+    fetch(`/api/project-employees?project_id=${projectId}&date=${entryDate}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.filtered) return; // no assignments — show all
+        const assignedIds = new Set(data.employees.map(e => String(e.id)));
+        const hint = document.getElementById('employeeHint');
+        document.querySelectorAll('.employee-check').forEach(cb => {
+          const item = cb.closest('.checkbox-item');
+          if (!item) return;
+          const empId = cb.value;
+          if (assignedIds.has(empId)) {
+            item.style.display = '';
+          } else {
+            item.style.display = 'none';
+            if (!cb.checked) cb.checked = false; // don't uncheck already selected
+          }
+        });
+        if (hint) {
+          hint.style.display = '';
+          hint.innerHTML = '<i class="bi bi-info-circle me-1"></i>Showing crew assigned to this project on ' + entryDate + '. <a href="#" id="showAllEmployeesLink">Show all</a>';
+          document.getElementById('showAllEmployeesLink')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelectorAll('.employee-check').forEach(cb => {
+              cb.closest('.checkbox-item').style.display = '';
+            });
+            hint.style.display = 'none';
+          });
+        }
+        updateEmployeeCount();
+      })
+      .catch(() => {});
+  }
 
   // Run on page load
   filterMachinesByProject();
+  filterEmployeesByProject();
   document.getElementById('lotInput').addEventListener('change', () => {
     fetchPlannedOptions(document.getElementById('lotInput').value.trim());
     scheduleProgress();

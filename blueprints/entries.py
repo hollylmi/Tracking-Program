@@ -10,13 +10,58 @@ from werkzeug.utils import secure_filename
 from datetime import date, datetime
 
 from models import (db, Project, Employee, Machine, MachineGroup, DailyEntry, HiredMachine,
-                    StandDown, EntryPhoto, ProjectMachine)
+                    StandDown, EntryPhoto, ProjectMachine, ProjectAssignment)
 import storage
 from utils.files import allowed_photo
 
 entries_bp = Blueprint('entries', __name__)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance', 'uploads')
+
+
+# ---------------------------------------------------------------------------
+# AJAX helper — employees assigned to a project on a date
+# ---------------------------------------------------------------------------
+
+@entries_bp.route('/api/project-employees')
+@require_role('admin', 'supervisor', 'site')
+def project_employees_json():
+    """Return employees assigned to a project on a given date."""
+    from flask import jsonify
+    project_id = request.args.get('project_id', type=int)
+    date_str = request.args.get('date', '')
+    if not project_id:
+        return jsonify({'employees': []})
+
+    try:
+        entry_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        entry_date = date.today()
+
+    # Find employees assigned to this project on this date
+    assignments = ProjectAssignment.query.filter(
+        ProjectAssignment.project_id == project_id,
+        ProjectAssignment.date_from <= entry_date,
+        db.or_(ProjectAssignment.date_to.is_(None), ProjectAssignment.date_to >= entry_date)
+    ).all()
+
+    assigned_emp_ids = {a.employee_id for a in assignments}
+
+    if assigned_emp_ids:
+        employees = Employee.query.filter(
+            Employee.id.in_(assigned_emp_ids), Employee.active == True
+        ).order_by(Employee.name).all()
+    else:
+        # Fallback — if no assignments, show all active employees
+        employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
+
+    return jsonify({
+        'employees': [
+            {'id': e.id, 'name': e.name, 'role': e.role or ''}
+            for e in employees
+        ],
+        'filtered': len(assigned_emp_ids) > 0,
+    })
 
 
 # ---------------------------------------------------------------------------
