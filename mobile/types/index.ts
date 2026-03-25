@@ -107,6 +107,8 @@ export interface Machine {
   name: string
   type: string
   active: boolean
+  group_id: number | null
+  group_name: string | null
 }
 
 export interface Breakdown {
@@ -238,6 +240,6 @@ export interface ReferenceData {
   roles: string[]
   projects: { id: number; name: string }[]
   employees: { id: number; name: string; role: string }[]
-  machines: { id: number; name: string; type: string }[]
+  machines: { id: number; name: string; type: string; group_id: number | null; group_name: string | null }[]
   hired_machines: { id: number; machine_name: string; hire_company: string }[]
 }

@@ -226,6 +226,8 @@ with app.app_context():
         # Widen legacy state column — was VARCHAR(10), too small for comma-separated values
         "ALTER TABLE public_holiday ALTER COLUMN state TYPE VARCHAR(200)",
         "ALTER TABLE cfmeu_date ALTER COLUMN state TYPE VARCHAR(200)",
+        # Machine groups
+        "ALTER TABLE machine ADD COLUMN group_id INTEGER REFERENCES machine_group(id)",
     ]:
         try:
             db.session.execute(db.text(stmt))

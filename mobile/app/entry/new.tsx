@@ -851,9 +851,13 @@ export default function NewEntryScreen() {
     id: e.id, label: e.name, sublabel: e.role || undefined,
   }))
 
-  const machineItems: ChecklistItem[] = allMachines.map((m) => ({
-    id: m.id, label: m.name, sublabel: m.type || undefined,
-  }))
+  const machineItems: ChecklistItem[] = [...allMachines]
+    .sort((a, b) => (a.group_name || 'zzz').localeCompare(b.group_name || 'zzz') || a.name.localeCompare(b.name))
+    .map((m) => ({
+      id: m.id,
+      label: m.name,
+      sublabel: [m.group_name, m.type].filter(Boolean).join(' — ') || undefined,
+    }))
 
   const hiredMachineItems: ChecklistItem[] = allHiredMachines.map((h) => ({
     id: h.id,

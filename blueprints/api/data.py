@@ -741,7 +741,14 @@ def get_equipment():
 
     return {
         'machines': [
-            {'id': m.id, 'name': m.name, 'type': m.machine_type, 'active': m.active}
+            {
+                'id': m.id,
+                'name': m.name,
+                'type': m.machine_type,
+                'active': m.active,
+                'group_id': m.group_id,
+                'group_name': m.group.name if m.group else None,
+            }
             for m in machines
         ]
     }, 200
@@ -1735,7 +1742,8 @@ def get_reference():
             for e in employees
         ],
         'machines': [
-            {'id': m.id, 'name': m.name, 'type': m.machine_type or ''}
+            {'id': m.id, 'name': m.name, 'type': m.machine_type or '',
+             'group_id': m.group_id, 'group_name': m.group.name if m.group else None}
             for m in machines
         ],
         'hired_machines': [

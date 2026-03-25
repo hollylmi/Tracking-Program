@@ -6,10 +6,74 @@
   <h2 class="fw-bold mb-0"><i class="bi bi-tools me-2 text-primary"></i>Equipment List (Owned)</h2>
 </div>
 
+<!-- Equipment Groups -->
+{% if groups %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h5 class="mb-0 fw-semibold"><i class="bi bi-collection me-2 text-info"></i>Equipment Groups</h5>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Group Name</th>
+          <th>Description</th>
+          <th>Rate/hr</th>
+          <th>Items</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for grp in groups %}
+        <tr>
+          <td class="fw-semibold">{{ grp.name }}</td>
+          <td class="text-muted small">{{ grp.description or '—' }}</td>
+          <td>
+            {% if grp.delay_rate %}
+              <span class="text-success fw-semibold">${{ '%.2f'|format(grp.delay_rate) }}/hr</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% set grp_machines = grp.machines | selectattr('active') | list %}
+            {% if grp_machines %}
+              {% for m in grp_machines %}
+              <span class="badge bg-light text-dark border me-1">{{ m.name }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="text-muted small">No items</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="d-flex gap-1 justify-content-end">
+              <button class="btn btn-sm btn-outline-secondary" type="button"
+                      onclick="openEditGroup({{ grp.id }}, '{{ grp.name|replace("'", "\\'") }}', '{{ (grp.description or '')|replace("'", "\\'") }}', '{{ grp.delay_rate or '' }}')"
+                      title="Edit group">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <form method="POST" class="d-inline"
+                    onsubmit="return confirm('Delete group \'{{ grp.name }}\'? Machines will be moved to ungrouped.')">
+                <input type="hidden" name="action" value="delete_group">
+                <input type="hidden" name="group_id" value="{{ grp.id }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete group">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="row g-4">
 
   <!-- Machine List -->
-  <div class="col-lg-9">
+  <div class="col-lg-8">
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-white py-3">
         <h5 class="mb-0 fw-semibold">All Equipment</h5>
@@ -22,9 +86,9 @@
               <th>Name</th>
               <th>Plant ID</th>
               <th>Type</th>
+              <th>Group</th>
               <th>Rate/hr</th>
               <th>Assigned To</th>
-              <th>Entries</th>
               <th>Status</th>
               <th class="text-end">Actions</th>
             </tr>
@@ -41,8 +105,19 @@
               <td class="text-muted">{{ machine.plant_id or '—' }}</td>
               <td class="text-muted">{{ machine.machine_type or '—' }}</td>
               <td>
-                {% if machine.delay_rate %}
-                  <span class="text-success fw-semibold">${{ '%.2f'|format(machine.delay_rate) }}/hr</span>
+                {% if machine.group %}
+                  <span class="badge bg-info-subtle text-info border border-info-subtle">{{ machine.group.name }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% set rate = machine.effective_delay_rate %}
+                {% if rate %}
+                  <span class="text-success fw-semibold">${{ '%.2f'|format(rate) }}/hr</span>
+                  {% if machine.delay_rate is none and machine.group %}
+                    <br><small class="text-muted">from group</small>
+                  {% endif %}
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
@@ -77,7 +152,6 @@
                   </form>
                 </div>
               </td>
-              <td>{{ machine.entries|length }}</td>
               <td>
                 {% if machine.active %}
                   <span class="badge bg-success-subtle text-success">Active</span>
@@ -88,7 +162,7 @@
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
                   <button class="btn btn-sm btn-outline-secondary" type="button"
-                          onclick="openEditMachine({{ machine.id }}, '{{ machine.name|replace("'", "\\'") }}', '{{ (machine.plant_id or '')|replace("'", "\\'") }}', '{{ (machine.machine_type or '')|replace("'", "\\'") }}', '{{ machine.delay_rate or '' }}', '{{ (machine.description or '')|replace("'", "\\'") }}')"
+                          onclick="openEditMachine({{ machine.id }}, '{{ machine.name|replace("'", "\\'") }}', '{{ (machine.plant_id or '')|replace("'", "\\'") }}', '{{ (machine.machine_type or '')|replace("'", "\\'") }}', '{{ machine.delay_rate or '' }}', '{{ (machine.description or '')|replace("'", "\\'") }}', '{{ machine.group_id or '' }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -126,8 +200,49 @@
     </div>
   </div>
 
-  <!-- Add / Edit Form -->
-  <div class="col-lg-3">
+  <!-- Add / Edit Forms -->
+  <div class="col-lg-4">
+
+    <!-- Add/Edit Group -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold" id="groupFormTitle"><i class="bi bi-collection me-2 text-info"></i>Add Group</h5>
+      </div>
+      <div class="card-body">
+        <form method="POST" id="groupForm">
+          <input type="hidden" name="action" id="groupFormAction" value="add_group">
+          <input type="hidden" name="group_id" id="groupEditId" value="">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Group Name <span class="text-danger">*</span></label>
+            <input type="text" name="group_name" id="groupName" class="form-control" required
+                   placeholder="e.g. Welding Setup, Deployment">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Description <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" name="group_description" id="groupDescription" class="form-control"
+                   placeholder="What this group includes...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">
+              Delay Rate ($/hr) <span class="text-muted fw-normal">(shared by all items)</span>
+            </label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" name="group_delay_rate" id="groupDelayRate" class="form-control"
+                     min="0" step="0.01" placeholder="0.00">
+              <span class="input-group-text">/hr</span>
+            </div>
+            <div class="form-text">Items in this group inherit this rate unless they have their own.</div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-info text-white" id="groupSubmitBtn">Create Group</button>
+            <button type="button" class="btn btn-outline-secondary d-none" id="cancelGroupBtn" onclick="cancelGroupEdit()">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Add/Edit Equipment -->
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-white py-3">
         <h5 class="mb-0 fw-semibold" id="formTitle">Add Equipment</h5>
@@ -138,7 +253,16 @@
           <input type="hidden" name="id" id="editId" value="">
           <div class="mb-3">
             <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
-            <input type="text" name="name" id="machineName" class="form-control" required placeholder="e.g. Excavator #1">
+            <input type="text" name="name" id="machineName" class="form-control" required placeholder="e.g. Welding Machine">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Group <span class="text-muted fw-normal">(optional)</span></label>
+            <select name="group_id" id="machineGroupId" class="form-select">
+              <option value="">— No group —</option>
+              {% for grp in groups %}
+              <option value="{{ grp.id }}">{{ grp.name }}</option>
+              {% endfor %}
+            </select>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Plant ID <span class="text-muted fw-normal">(optional)</span></label>
@@ -157,7 +281,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">
-              Delay Rate ($/hr) <span class="text-muted fw-normal">(optional)</span>
+              Delay Rate ($/hr) <span class="text-muted fw-normal">(optional — inherits from group if blank)</span>
             </label>
             <div class="input-group">
               <span class="input-group-text">$</span>
@@ -165,7 +289,6 @@
                      min="0" step="0.01" placeholder="0.00">
               <span class="input-group-text">/hr</span>
             </div>
-            <div class="form-text">Rate charged to client per hour of delay.</div>
           </div>
           <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary" id="submitBtn">Add Equipment</button>
@@ -174,6 +297,7 @@
         </form>
       </div>
     </div>
+
   </div>
 
 </div>
@@ -181,7 +305,7 @@
 
 {% block scripts %}
 <script>
-  function openEditMachine(id, name, plantId, type, delayRate, description) {
+  function openEditMachine(id, name, plantId, type, delayRate, description, groupId) {
     document.getElementById('formTitle').textContent = 'Edit Equipment';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
@@ -190,6 +314,7 @@
     document.getElementById('machineType').value = type;
     document.getElementById('machineDescription').value = description;
     document.getElementById('machineDelayRate').value = delayRate;
+    document.getElementById('machineGroupId').value = groupId || '';
     document.getElementById('submitBtn').textContent = 'Save Changes';
     document.getElementById('cancelEditBtn').classList.remove('d-none');
     document.getElementById('machineName').focus();
@@ -205,8 +330,33 @@
     document.getElementById('machineType').value = '';
     document.getElementById('machineDescription').value = '';
     document.getElementById('machineDelayRate').value = '';
+    document.getElementById('machineGroupId').value = '';
     document.getElementById('submitBtn').textContent = 'Add Equipment';
     document.getElementById('cancelEditBtn').classList.add('d-none');
+  }
+
+  function openEditGroup(id, name, description, delayRate) {
+    document.getElementById('groupFormTitle').innerHTML = '<i class="bi bi-collection me-2 text-info"></i>Edit Group';
+    document.getElementById('groupFormAction').value = 'edit_group';
+    document.getElementById('groupEditId').value = id;
+    document.getElementById('groupName').value = name;
+    document.getElementById('groupDescription').value = description;
+    document.getElementById('groupDelayRate').value = delayRate;
+    document.getElementById('groupSubmitBtn').textContent = 'Save Group';
+    document.getElementById('cancelGroupBtn').classList.remove('d-none');
+    document.getElementById('groupName').focus();
+    document.getElementById('groupForm').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function cancelGroupEdit() {
+    document.getElementById('groupFormTitle').innerHTML = '<i class="bi bi-collection me-2 text-info"></i>Add Group';
+    document.getElementById('groupFormAction').value = 'add_group';
+    document.getElementById('groupEditId').value = '';
+    document.getElementById('groupName').value = '';
+    document.getElementById('groupDescription').value = '';
+    document.getElementById('groupDelayRate').value = '';
+    document.getElementById('groupSubmitBtn').textContent = 'Create Group';
+    document.getElementById('cancelGroupBtn').classList.add('d-none');
   }
 </script>
 {% endblock %}

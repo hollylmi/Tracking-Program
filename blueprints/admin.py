@@ -8,7 +8,7 @@ from flask_login import current_user
 
 from blueprints.auth import require_role
 
-from models import (db, Project, Employee, Machine, DailyEntry, HiredMachine,
+from models import (db, Project, Employee, Machine, MachineGroup, DailyEntry, HiredMachine,
                     StandDown, Role, PlannedData, ProjectNonWorkDate,
                     ProjectBudgetedRole, ProjectMachine, ProjectWorkedSunday,
                     PublicHoliday, CFMEUDate, AUSTRALIAN_STATES,
@@ -817,11 +817,13 @@ def admin_machines():
             plant_id = request.form.get('plant_id', '').strip()
             description = request.form.get('description', '').strip()
             delay_rate = request.form.get('delay_rate', '').strip()
+            group_id = request.form.get('group_id', '').strip()
             if name:
                 db.session.add(Machine(name=name, plant_id=plant_id or None,
                                        machine_type=machine_type or None,
                                        description=description or None,
-                                       delay_rate=float(delay_rate) if delay_rate else None))
+                                       delay_rate=float(delay_rate) if delay_rate else None,
+                                       group_id=int(group_id) if group_id else None))
                 db.session.commit()
                 flash(f'Machine "{name}" added.', 'success')
             else:
@@ -834,8 +836,36 @@ def admin_machines():
             machine.description = request.form.get('description', '').strip() or None
             delay_rate = request.form.get('delay_rate', '').strip()
             machine.delay_rate = float(delay_rate) if delay_rate else None
+            group_id = request.form.get('group_id', '').strip()
+            machine.group_id = int(group_id) if group_id else None
             db.session.commit()
             flash('Machine updated.', 'success')
+        elif action == 'add_group':
+            gname = request.form.get('group_name', '').strip()
+            gdesc = request.form.get('group_description', '').strip()
+            grate = request.form.get('group_delay_rate', '').strip()
+            if gname:
+                db.session.add(MachineGroup(name=gname, description=gdesc or None,
+                                             delay_rate=float(grate) if grate else None))
+                db.session.commit()
+                flash(f'Group "{gname}" created.', 'success')
+            else:
+                flash('Group name is required.', 'danger')
+        elif action == 'edit_group':
+            grp = MachineGroup.query.get_or_404(int(request.form.get('group_id')))
+            grp.name = request.form.get('group_name', '').strip()
+            grp.description = request.form.get('group_description', '').strip() or None
+            grate = request.form.get('group_delay_rate', '').strip()
+            grp.delay_rate = float(grate) if grate else None
+            db.session.commit()
+            flash(f'Group "{grp.name}" updated.', 'success')
+        elif action == 'delete_group':
+            grp = MachineGroup.query.get_or_404(int(request.form.get('group_id')))
+            # Unlink machines from this group (don't delete them)
+            Machine.query.filter_by(group_id=grp.id).update({'group_id': None})
+            db.session.delete(grp)
+            db.session.commit()
+            flash(f'Group deleted. Machines moved to ungrouped.', 'info')
         elif action == 'toggle':
             machine = Machine.query.get_or_404(int(request.form.get('id')))
             machine.active = not machine.active
@@ -867,13 +897,14 @@ def admin_machines():
         return redirect(url_for('admin.admin_machines'))
 
     machines = Machine.query.order_by(Machine.name).all()
+    groups = MachineGroup.query.order_by(MachineGroup.name).all()
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
     all_assignments = ProjectMachine.query.all()
     assignments_by_machine = {}
     for pm in all_assignments:
         assignments_by_machine.setdefault(pm.machine_id, []).append(pm)
-    return render_template('admin/machines.html', machines=machines, projects=projects,
-                           assignments_by_machine=assignments_by_machine)
+    return render_template('admin/machines.html', machines=machines, groups=groups,
+                           projects=projects, assignments_by_machine=assignments_by_machine)
 
 
 @admin_bp.route('/admin/roles', methods=['GET', 'POST'])

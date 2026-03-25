@@ -243,9 +243,43 @@ export default function EquipmentScreen() {
   const isLoading = activeTab === 'fleet' ? fleetLoading : hireLoading
 
   const openCount = breakdowns.filter(b => !b.resolved).length
-  const active = machines.filter(m => m.active)
-  const inactive = machines.filter(m => !m.active)
-  const sorted = [...active, ...inactive]
+
+  // Build grouped + ungrouped lists for Fleet tab
+  type FleetItem = { type: 'header'; label: string } | { type: 'machine'; machine: Machine }
+  const fleetItems: FleetItem[] = (() => {
+    const active = machines.filter(m => m.active)
+    const inactive = machines.filter(m => !m.active)
+
+    // Group active machines by group_name
+    const groups: Record<string, Machine[]> = {}
+    const ungrouped: Machine[] = []
+    for (const m of active) {
+      if (m.group_name) {
+        if (!groups[m.group_name]) groups[m.group_name] = []
+        groups[m.group_name].push(m)
+      } else {
+        ungrouped.push(m)
+      }
+    }
+
+    const items: FleetItem[] = []
+    // Grouped machines first
+    for (const [groupName, groupMachines] of Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))) {
+      items.push({ type: 'header', label: `${groupName} (${groupMachines.length})` })
+      groupMachines.forEach(m => items.push({ type: 'machine', machine: m }))
+    }
+    // Ungrouped active
+    if (ungrouped.length > 0 && Object.keys(groups).length > 0) {
+      items.push({ type: 'header', label: `Other Equipment (${ungrouped.length})` })
+    }
+    ungrouped.forEach(m => items.push({ type: 'machine', machine: m }))
+    // Inactive
+    if (inactive.length > 0) {
+      items.push({ type: 'header', label: `Inactive (${inactive.length})` })
+      inactive.forEach(m => items.push({ type: 'machine', machine: m }))
+    }
+    return items
+  })()
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -275,25 +309,20 @@ export default function EquipmentScreen() {
           <EmptyState icon="🔧" title="No equipment" subtitle="No machines assigned to your projects" />
         ) : (
           <FlatList
-            data={sorted}
-            keyExtractor={m => String(m.id)}
-            renderItem={({ item, index }) => (
-              <>
-                {index === 0 && active.length > 0 && inactive.length > 0 && (
-                  <Text style={styles.sectionLabel}>Active ({active.length})</Text>
-                )}
-                {index === active.length && inactive.length > 0 && (
-                  <Text style={[styles.sectionLabel, { marginTop: Spacing.md }]}>
-                    Inactive ({inactive.length})
-                  </Text>
-                )}
+            data={fleetItems}
+            keyExtractor={(item, index) => item.type === 'header' ? `h-${index}` : `m-${item.machine.id}`}
+            renderItem={({ item }) => {
+              if (item.type === 'header') {
+                return <Text style={styles.sectionLabel}>{item.label}</Text>
+              }
+              return (
                 <MachineCard
-                  machine={item}
+                  machine={item.machine}
                   breakdowns={breakdowns}
-                  onPress={() => router.push({ pathname: '/machine/[id]', params: { id: item.id } })}
+                  onPress={() => router.push({ pathname: '/machine/[id]', params: { id: item.machine.id } })}
                 />
-              </>
-            )}
+              )
+            }}
             contentContainerStyle={styles.list}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
