@@ -1,7 +1,7 @@
 import math
 from datetime import date, timedelta
 
-from models import PlannedData, DailyEntry, ProjectWorkedSunday, Project
+from models import PlannedData, DailyEntry, ProjectWorkedSunday, Project, PublicHoliday, CFMEUDate
 from utils.helpers import _natural_key
 
 
@@ -26,7 +26,17 @@ def compute_gantt_data(project_id):
                .order_by(DailyEntry.entry_date)
                .all())
 
+    # Non-work dates: manual + public holidays + CFMEU dates
     non_work_set = {nwd.date for nwd in project.non_work_dates}
+    all_public = PublicHoliday.query.all()
+    if project.state:
+        non_work_set |= {h.date for h in all_public
+                         if 'ALL' in h.states_list() or project.state in h.states_list()}
+        if project.is_cfmeu:
+            non_work_set |= {c.date for c in CFMEUDate.query.all()
+                             if 'ALL' in c.states_list() or project.state in c.states_list()}
+    else:
+        non_work_set |= {h.date for h in all_public if 'ALL' in h.states_list()}
     worked_sundays_set = {ws.date for ws in ProjectWorkedSunday.query.filter_by(project_id=project_id).all()}
 
     # Map day number → calendar date (skip Sundays unless worked, and non-work dates)
