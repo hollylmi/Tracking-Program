@@ -164,11 +164,24 @@
                 <label class="form-label small fw-semibold mb-1">Filter by Type</label>
                 <select class="form-select form-select-sm" id="bulkTypeFilter" onchange="filterBulkList()">
                   <option value="all">All types</option>
-                  {% set bulk_types = own_machines | selectattr('active') | map(attribute='machine_type') | select('string') | unique | sort | list %}
-                  {% for t in bulk_types %}
-                  <option value="{{ t }}">{{ t }}</option>
-                  {% endfor %}
                 </select>
+                <script>
+                  // Populate type filter from actual machine data (avoids Jinja filter issues)
+                  (function() {
+                    const types = new Set();
+                    document.querySelectorAll('.bulk-machine-item').forEach(item => {
+                      const t = item.dataset.machineType;
+                      if (t) types.add(t);
+                    });
+                    const sel = document.getElementById('bulkTypeFilter');
+                    [...types].sort().forEach(t => {
+                      const opt = document.createElement('option');
+                      opt.value = t;
+                      opt.textContent = t;
+                      sel.appendChild(opt);
+                    });
+                  })();
+                </script>
               </div>
               <div class="col-sm-5 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-info text-white btn-sm" id="bulkSaveBtn" disabled>
