@@ -187,13 +187,17 @@ def project_dashboard(project_id):
                    if project.quoted_days and daily_cost > 0 else None)
     # Public holidays and CFMEU dates for this project's state
     state_holidays = []
+    all_public = PublicHoliday.query.order_by(PublicHoliday.date).all()
     if project.state:
-        state_holidays = [h for h in PublicHoliday.query.order_by(PublicHoliday.date).all()
-                          if project.state in h.states_list()]
+        state_holidays = [h for h in all_public
+                          if 'ALL' in h.states_list() or project.state in h.states_list()]
         if project.is_cfmeu:
             cfmeu = [c for c in CFMEUDate.query.order_by(CFMEUDate.date).all()
                      if 'ALL' in c.states_list() or project.state in c.states_list()]
             state_holidays = sorted(state_holidays + cfmeu, key=lambda x: x.date)
+    else:
+        # No state set — still show national (ALL) holidays
+        state_holidays = [h for h in all_public if 'ALL' in h.states_list()]
     # Build non-work date set including state holidays
     holiday_dates = {h.date for h in state_holidays}
     non_work_set_dates = {nwd.date for nwd in non_work_dates} | holiday_dates
