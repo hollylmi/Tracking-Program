@@ -596,6 +596,34 @@ def update_entry(entry_id):
     if 'other_work_description' in data:
         entry.other_work_description = _str('other_work_description')
 
+    # Update many-to-many relationships
+    if 'employee_ids' in data:
+        emp_ids = data['employee_ids'] or []
+        entry.employees = Employee.query.filter(Employee.id.in_(emp_ids)).all() if emp_ids else []
+        entry.num_people = len(entry.employees) if entry.employees else entry.num_people
+
+    if 'machine_ids' in data:
+        mach_ids = data['machine_ids'] or []
+        entry.machines = Machine.query.filter(Machine.id.in_(mach_ids)).all() if mach_ids else []
+
+    if 'standdown_machine_ids' in data:
+        sd_ids = data['standdown_machine_ids'] or []
+        entry.machines_stood_down = len(sd_ids) > 0
+        # Create stand-down records for newly selected hired machines
+        if sd_ids and entry.delay_hours and entry.delay_hours > 0:
+            sd_reason = entry.delay_description or entry.delay_reason or 'Delay'
+            for hm_id in sd_ids:
+                hm_obj = HiredMachine.query.get(int(hm_id))
+                if hm_obj:
+                    existing = StandDown.query.filter_by(
+                        hired_machine_id=hm_obj.id, stand_down_date=entry.entry_date).first()
+                    if not existing:
+                        db.session.add(StandDown(
+                            hired_machine_id=hm_obj.id,
+                            entry_id=entry.id,
+                            stand_down_date=entry.entry_date,
+                            reason=sd_reason))
+
     entry.updated_at = datetime.utcnow()
     db.session.commit()
 

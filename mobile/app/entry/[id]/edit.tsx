@@ -19,7 +19,9 @@ import { Ionicons } from '@expo/vector-icons'
 import Button from '../../../components/ui/Button'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../../constants/theme'
 import { useReference } from '../../../hooks/useReference'
+import { useHire } from '../../../hooks/useHire'
 import { useToastStore } from '../../../store/toast'
+import { useProjectStore } from '../../../store/project'
 import { api } from '../../../lib/api'
 import { cachedQuery } from '../../../lib/cachedQuery'
 import { LotMaterialProgress } from '../../../types'
@@ -43,14 +45,15 @@ const DELAY_REASONS = [
   'Other',
 ]
 
+const STEP_LABELS = ['Details', 'Production', 'Crew', 'Equipment', 'Delays']
 const STEP_HEADER_TITLES: Record<number, string> = {
   1: 'Entry Details',
   2: 'Production',
-  3: 'Delays & Notes',
+  3: 'Crew',
+  4: 'Equipment',
+  5: 'Delays & Notes',
 }
-
-const STEP_LABELS = ['Details', 'Production', 'Delays']
-const TOTAL_STEPS = 3
+const TOTAL_STEPS = 5
 
 // ── InternalHeader ─────────────────────────────────────────────────────────────
 
@@ -68,11 +71,8 @@ function InternalHeader({ step, onBack }: { step: number; onBack: () => void }) 
 
 const ih = StyleSheet.create({
   bar: {
-    backgroundColor: SLATE,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 13,
+    backgroundColor: SLATE, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: Spacing.md, paddingVertical: 13,
   },
   backBtn: { width: 32, alignItems: 'flex-start' },
   title: {
@@ -129,30 +129,18 @@ const si = StyleSheet.create({
 
 // ── SelectField ────────────────────────────────────────────────────────────────
 
-interface SelectFieldProps {
-  label: string
-  value: string
-  options: string[]
-  onChange: (v: string) => void
-  placeholder?: string
-  optional?: boolean
-  error?: string
-}
-
-function SelectField({ label, value, options, onChange, placeholder = 'Select...', optional, error }: SelectFieldProps) {
+function SelectField({ label, value, options, onChange, placeholder = 'Select...', optional, error }: {
+  label: string; value: string; options: string[]; onChange: (v: string) => void;
+  placeholder?: string; optional?: boolean; error?: string;
+}) {
   const [open, setOpen] = useState(false)
 
   if (options.length === 0) {
     return (
       <View style={sf.group}>
         <Text style={sf.label}>{label}{!optional && ' *'}</Text>
-        <TextInput
-          style={[sf.input, !!error && sf.inputError]}
-          value={value}
-          onChangeText={onChange}
-          placeholder={placeholder}
-          placeholderTextColor={Colors.textLight}
-        />
+        <TextInput style={[sf.input, !!error && sf.inputError]} value={value}
+          onChangeText={onChange} placeholder={placeholder} placeholderTextColor={Colors.textLight} />
         {error && <Text style={sf.error}>{error}</Text>}
       </View>
     )
@@ -161,16 +149,11 @@ function SelectField({ label, value, options, onChange, placeholder = 'Select...
   return (
     <View style={sf.group}>
       <Text style={sf.label}>{label}{!optional && ' *'}</Text>
-      <TouchableOpacity
-        style={[sf.select, !!error && sf.inputError]}
-        onPress={() => setOpen(true)}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity style={[sf.select, !!error && sf.inputError]} onPress={() => setOpen(true)} activeOpacity={0.7}>
         <Text style={[sf.selectText, !value && sf.placeholder]}>{value || placeholder}</Text>
         <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
       </TouchableOpacity>
       {error && <Text style={sf.error}>{error}</Text>}
-
       <Modal visible={open} transparent animationType="slide">
         <TouchableOpacity style={sf.backdrop} onPress={() => setOpen(false)} activeOpacity={1}>
           <View style={sf.sheet}>
@@ -204,10 +187,7 @@ function SelectField({ label, value, options, onChange, placeholder = 'Select...
 
 const sf = StyleSheet.create({
   group: { marginBottom: Spacing.md },
-  label: {
-    ...Typography.label, color: Colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
-  },
+  label: { ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   input: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md, paddingVertical: 12,
@@ -224,8 +204,7 @@ const sf = StyleSheet.create({
   error: { ...Typography.bodySmall, color: Colors.error, marginTop: 4 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: BorderRadius.lg, borderTopRightRadius: BorderRadius.lg,
+    backgroundColor: Colors.white, borderTopLeftRadius: BorderRadius.lg, borderTopRightRadius: BorderRadius.lg,
     maxHeight: '60%', paddingBottom: Spacing.xl,
   },
   sheetHeader: {
@@ -246,48 +225,26 @@ const sf = StyleSheet.create({
 
 // ── FieldInput ─────────────────────────────────────────────────────────────────
 
-interface FieldInputProps {
-  label: string
-  value: string
-  onChangeText: (v: string) => void
-  placeholder?: string
-  keyboardType?: 'default' | 'decimal-pad' | 'number-pad'
-  multiline?: boolean
-  optional?: boolean
-  minHeight?: number
-  error?: string
-  returnKeyType?: 'next' | 'done' | 'default'
-  onSubmitEditing?: () => void
-  readOnly?: boolean
-}
-
-const FieldInput = forwardRef<TextInput, FieldInputProps>(function FieldInput(
+const FieldInput = forwardRef<TextInput, {
+  label: string; value: string; onChangeText: (v: string) => void;
+  placeholder?: string; keyboardType?: 'default' | 'decimal-pad' | 'number-pad';
+  multiline?: boolean; optional?: boolean; minHeight?: number; error?: string;
+  returnKeyType?: 'next' | 'done' | 'default'; onSubmitEditing?: () => void; readOnly?: boolean;
+}>(function FieldInput(
   { label, value, onChangeText, placeholder, keyboardType = 'default', multiline,
-    optional, minHeight, error, returnKeyType = 'default', onSubmitEditing, readOnly },
-  ref,
+    optional, minHeight, error, returnKeyType = 'default', onSubmitEditing, readOnly }, ref,
 ) {
   return (
     <View style={fi.group}>
       <Text style={fi.label}>{label}{!optional && ' *'}</Text>
-      <TextInput
-        ref={ref}
-        style={[
-          fi.input,
-          multiline && { minHeight: minHeight ?? 80, textAlignVertical: 'top', paddingTop: 12 },
-          !!error && fi.inputError,
-          readOnly && fi.readOnly,
-        ]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={Colors.textLight}
-        keyboardType={keyboardType}
-        multiline={multiline}
+      <TextInput ref={ref}
+        style={[fi.input, multiline && { minHeight: minHeight ?? 80, textAlignVertical: 'top', paddingTop: 12 },
+          !!error && fi.inputError, readOnly && fi.readOnly]}
+        value={value} onChangeText={onChangeText} placeholder={placeholder}
+        placeholderTextColor={Colors.textLight} keyboardType={keyboardType} multiline={multiline}
         returnKeyType={multiline ? 'default' : returnKeyType}
         onSubmitEditing={multiline ? undefined : onSubmitEditing}
-        blurOnSubmit={multiline ? false : returnKeyType === 'done'}
-        editable={!readOnly}
-      />
+        blurOnSubmit={multiline ? false : returnKeyType === 'done'} editable={!readOnly} />
       {error && <Text style={fi.error}>{error}</Text>}
     </View>
   )
@@ -295,10 +252,7 @@ const FieldInput = forwardRef<TextInput, FieldInputProps>(function FieldInput(
 
 const fi = StyleSheet.create({
   group: { marginBottom: Spacing.md },
-  label: {
-    ...Typography.label, color: Colors.textSecondary,
-    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
-  },
+  label: { ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   input: {
     borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md, paddingVertical: 12,
@@ -328,19 +282,87 @@ function YesNoToggle({ label, value, onChange }: { label: string; value: boolean
 }
 
 const yn = StyleSheet.create({
-  container: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: Spacing.md, paddingVertical: 2,
-  },
+  container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md, paddingVertical: 2 },
   label: { ...Typography.body, color: Colors.textPrimary, flex: 1, marginRight: Spacing.md },
-  toggle: {
-    flexDirection: 'row', borderWidth: 1.5, borderColor: Colors.border,
-    borderRadius: BorderRadius.md, overflow: 'hidden',
-  },
+  toggle: { flexDirection: 'row', borderWidth: 1.5, borderColor: Colors.border, borderRadius: BorderRadius.md, overflow: 'hidden' },
   btn: { paddingVertical: 8, paddingHorizontal: Spacing.md, backgroundColor: Colors.surface },
   btnActive: { backgroundColor: Colors.primary },
   btnText: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '600' },
   btnTextActive: { color: Colors.dark },
+})
+
+// ── ChecklistSection ───────────────────────────────────────────────────────────
+
+interface ChecklistItem { id: number; label: string; sublabel?: string }
+
+function ChecklistSection({ title, items, selectedIds, onToggle, emptyMessage }: {
+  title: string; items: ChecklistItem[]; selectedIds: number[];
+  onToggle: (id: number) => void; emptyMessage: string;
+}) {
+  return (
+    <View style={cl.container}>
+      <View style={cl.header}>
+        <Text style={cl.title}>{title}</Text>
+        {selectedIds.length > 0 && (
+          <View style={cl.badge}><Text style={cl.badgeText}>{selectedIds.length}</Text></View>
+        )}
+      </View>
+      {items.length === 0 ? (
+        <Text style={cl.empty}>{emptyMessage}</Text>
+      ) : (
+        items.map((item) => {
+          const selected = selectedIds.includes(item.id)
+          return (
+            <TouchableOpacity key={item.id} style={[cl.row, selected && cl.rowSelected]}
+              onPress={() => onToggle(item.id)} activeOpacity={0.7}>
+              <View style={[cl.check, selected && cl.checkSelected]}>
+                {selected && <Ionicons name="checkmark" size={13} color={Colors.white} />}
+              </View>
+              <View style={cl.rowText}>
+                <Text style={[cl.rowLabel, selected && cl.rowLabelSelected]}>{item.label}</Text>
+                {item.sublabel ? <Text style={cl.rowSublabel}>{item.sublabel}</Text> : null}
+              </View>
+            </TouchableOpacity>
+          )
+        })
+      )}
+    </View>
+  )
+}
+
+const cl = StyleSheet.create({
+  container: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface, marginBottom: Spacing.md, overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2,
+    borderBottomWidth: 1, borderBottomColor: Colors.border, backgroundColor: Colors.background,
+  },
+  title: { ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  badge: {
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.full,
+    minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
+  },
+  badgeText: { ...Typography.label, color: Colors.dark, fontWeight: '700' },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingHorizontal: Spacing.md, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  rowSelected: { backgroundColor: 'rgba(255,183,197,0.1)' },
+  check: {
+    width: 22, height: 22, borderRadius: 4, borderWidth: 2,
+    borderColor: Colors.border, backgroundColor: 'transparent',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  rowText: { flex: 1 },
+  rowLabel: { ...Typography.body, color: Colors.textPrimary },
+  rowLabelSelected: { color: Colors.primary, fontWeight: '600' },
+  rowSublabel: { ...Typography.bodySmall, color: Colors.textSecondary, marginTop: 1 },
+  empty: { ...Typography.bodySmall, color: Colors.textSecondary, padding: Spacing.md },
 })
 
 // ── LotProgressCard ────────────────────────────────────────────────────────────
@@ -350,9 +372,7 @@ function LotProgressCard({ data }: { data: LotMaterialProgress }) {
   const fmt = (n: number) => n.toLocaleString('en-AU', { maximumFractionDigits: 1 })
   return (
     <View style={lp.card}>
-      <View style={lp.barBg}>
-        <View style={[lp.barFill, { width: `${pct}%` as any }]} />
-      </View>
+      <View style={lp.barBg}><View style={[lp.barFill, { width: `${pct}%` as any }]} /></View>
       <View style={lp.stats}>
         <View style={lp.stat}><Text style={lp.statVal}>{fmt(data.planned_sqm)} m²</Text><Text style={lp.statLabel}>Planned</Text></View>
         <View style={[lp.stat, lp.statCenter]}><Text style={[lp.statVal, lp.statInstalled]}>{fmt(data.actual_sqm)} m²</Text><Text style={lp.statLabel}>Installed</Text></View>
@@ -364,10 +384,7 @@ function LotProgressCard({ data }: { data: LotMaterialProgress }) {
 }
 
 const lp = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border,
-    borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md,
-  },
+  card: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md },
   barBg: { height: 8, backgroundColor: Colors.surface, borderRadius: 4, overflow: 'hidden', marginBottom: Spacing.sm },
   barFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 4 },
   stats: { flexDirection: 'row', marginBottom: 4 },
@@ -386,12 +403,18 @@ export default function EntryEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
   const showToast = useToastStore((s) => s.show)
+  const activeProject = useProjectStore((s) => s.activeProject)
 
   const refQuery = useReference()
   const lots = refQuery.data?.lots ?? []
   const materials = refQuery.data?.materials ?? []
   const lotMaterials = refQuery.data?.lot_materials ?? {}
   const lotProgress = refQuery.data?.lot_progress ?? {}
+  const allEmployees = refQuery.data?.employees ?? []
+  const allMachines = refQuery.data?.machines ?? []
+
+  const hireQuery = useHire(activeProject?.id)
+  const allHiredMachines = hireQuery.data ?? []
 
   const queryClient = useQueryClient()
 
@@ -420,12 +443,19 @@ export default function EntryEditScreen() {
   const [installHours, setInstallHours] = useState('')
   const [installSqm, setInstallSqm] = useState('')
 
-  // Step 3
+  // Step 3 — Crew
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([])
+
+  // Step 4 — Equipment
+  const [selectedMachineIds, setSelectedMachineIds] = useState<number[]>([])
+
+  // Step 5 — Delays & Notes
   const [hasDelays, setHasDelays] = useState(false)
   const [delayHours, setDelayHours] = useState('')
   const [delayReason, setDelayReason] = useState('')
   const [delayBillable, setDelayBillable] = useState(true)
   const [delayDescription, setDelayDescription] = useState('')
+  const [selectedStanddownIds, setSelectedStanddownIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
   const [otherWork, setOtherWork] = useState('')
 
@@ -441,6 +471,11 @@ export default function EntryEditScreen() {
   const notesRef = useRef<TextInput>(null)
   const otherWorkRef = useRef<TextInput>(null)
 
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function toggleId(ids: number[], tid: number): number[] {
+    return ids.includes(tid) ? ids.filter((x) => x !== tid) : [...ids, tid]
+  }
+
   // ── Populate from loaded entry ────────────────────────────────────────────────
   useEffect(() => {
     if (!entry || ready) return
@@ -450,6 +485,9 @@ export default function EntryEditScreen() {
     setMaterial(entry.material ?? '')
     setInstallHours(entry.install_hours != null ? String(entry.install_hours) : '')
     setInstallSqm(entry.install_sqm != null ? String(entry.install_sqm) : '')
+    setSelectedEmployeeIds((entry.employees ?? []).map((e: any) => e.id))
+    setSelectedMachineIds((entry.machines ?? []).map((m: any) => m.id))
+    setSelectedStanddownIds((entry.standdown_machines ?? []).map((h: any) => h.id))
     const dh = entry.delay_hours ?? 0
     setHasDelays(dh > 0)
     setDelayHours(dh > 0 ? String(dh) : '')
@@ -461,10 +499,23 @@ export default function EntryEditScreen() {
     setReady(true)
   }, [entry])
 
+  // ── Derived checklist items ──────────────────────────────────────────────────
+  const employeeItems: ChecklistItem[] = allEmployees.map((e) => ({
+    id: e.id, label: e.name, sublabel: e.role || undefined,
+  }))
+
+  const machineItems: ChecklistItem[] = allMachines.map((m) => ({
+    id: m.id, label: m.name, sublabel: m.type || undefined,
+  }))
+
+  const hiredMachineItems: ChecklistItem[] = allHiredMachines.map((h) => ({
+    id: h.id, label: h.machine_name, sublabel: h.hire_company || undefined,
+  }))
+
   // ── Validation & navigation ───────────────────────────────────────────────────
   function validateStep(): boolean {
     const errs: Record<string, string> = {}
-    if (step === 3 && hasDelays) {
+    if (step === 5 && hasDelays) {
       if (!delayHours) errs.delayHours = 'Delay hours required'
       if (!delayReason) errs.delayReason = 'Delay reason required'
     }
@@ -506,8 +557,12 @@ export default function EntryEditScreen() {
         delay_description: hasDelays ? delayDescription || undefined : undefined,
         notes: notes || undefined,
         other_work_description: otherWork || undefined,
-      })
+        employee_ids: selectedEmployeeIds,
+        machine_ids: selectedMachineIds,
+        standdown_machine_ids: selectedStanddownIds.length > 0 ? selectedStanddownIds : [],
+      } as any)
       queryClient.invalidateQueries({ queryKey: ['entry', id] })
+      queryClient.invalidateQueries({ queryKey: ['entries'] })
       showToast('Entry updated', 'success')
       router.back()
     } catch {
@@ -549,161 +604,117 @@ export default function EntryEditScreen() {
       <StepIndicator current={step} />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
 
           {/* ── Step 1: Entry Details ── */}
           {step === 1 && (
             <View>
-              {/* Date is read-only — backend does not support changing it */}
-              <FieldInput
-                label="Date"
-                value={entry.date}
-                onChangeText={() => {}}
-                readOnly
-                optional
-              />
-              <FieldInput
-                ref={locationRef}
-                label="Location"
-                value={location}
-                onChangeText={setLocation}
-                placeholder="e.g. Cell 3 North"
-                optional
-                returnKeyType="done"
-              />
-              <SelectField
-                label="Weather"
-                value={weather}
-                options={WEATHER_OPTIONS}
-                onChange={setWeather}
-                placeholder="Select weather..."
-                optional
-              />
+              <FieldInput label="Date" value={entry.date} onChangeText={() => {}} readOnly optional />
+              <FieldInput ref={locationRef} label="Location" value={location}
+                onChangeText={setLocation} placeholder="e.g. Cell 3 North" optional returnKeyType="done" />
+              <SelectField label="Weather" value={weather} options={WEATHER_OPTIONS}
+                onChange={setWeather} placeholder="Select weather..." optional />
             </View>
           )}
 
           {/* ── Step 2: Production ── */}
           {step === 2 && (
             <View>
-              <SelectField
-                label="Lot Number"
-                value={lotNumber}
-                options={lots}
+              <SelectField label="Lot Number" value={lotNumber} options={lots}
                 onChange={(v) => {
                   setLotNumber(v)
-                  if (v && lotMaterials[v] && material && !lotMaterials[v].includes(material)) {
-                    setMaterial('')
-                  }
+                  if (v && lotMaterials[v] && material && !lotMaterials[v].includes(material)) setMaterial('')
                 }}
-                placeholder="Select lot..."
-                optional
-              />
-              <SelectField
-                label="Material"
-                value={material}
+                placeholder="Select lot..." optional />
+              <SelectField label="Material" value={material}
                 options={lotNumber && lotMaterials[lotNumber] ? lotMaterials[lotNumber] : materials}
-                onChange={setMaterial}
-                placeholder="Select material..."
-                optional
-              />
+                onChange={setMaterial} placeholder="Select material..." optional />
               {lotNumber && lotMaterials[lotNumber] && (
                 <Text style={styles.filterHint}>Showing materials for Lot {lotNumber}</Text>
               )}
               {lotNumber && material && lotProgress[lotNumber]?.[material] && (
                 <LotProgressCard data={lotProgress[lotNumber][material]} />
               )}
-              <FieldInput
-                ref={installHoursRef}
-                label="Install Hours"
-                value={installHours}
-                onChangeText={setInstallHours}
-                placeholder="0.0"
-                keyboardType="decimal-pad"
-                optional
-                returnKeyType="next"
-                onSubmitEditing={() => installSqmRef.current?.focus()}
-              />
-              <FieldInput
-                ref={installSqmRef}
-                label="Area Installed (m²)"
-                value={installSqm}
-                onChangeText={setInstallSqm}
-                placeholder="0.0"
-                keyboardType="decimal-pad"
-                optional
-                returnKeyType="done"
-              />
+              <FieldInput ref={installHoursRef} label="Install Hours" value={installHours}
+                onChangeText={setInstallHours} placeholder="0.0" keyboardType="decimal-pad"
+                optional returnKeyType="next" onSubmitEditing={() => installSqmRef.current?.focus()} />
+              <FieldInput ref={installSqmRef} label="Area Installed (m²)" value={installSqm}
+                onChangeText={setInstallSqm} placeholder="0.0" keyboardType="decimal-pad"
+                optional returnKeyType="done" />
             </View>
           )}
 
-          {/* ── Step 3: Delays & Notes ── */}
+          {/* ── Step 3: Crew ── */}
           {step === 3 && (
+            <ChecklistSection
+              title="Crew Members"
+              items={employeeItems}
+              selectedIds={selectedEmployeeIds}
+              onToggle={(tid) => setSelectedEmployeeIds((prev) => toggleId(prev, tid))}
+              emptyMessage="No active employees found."
+            />
+          )}
+
+          {/* ── Step 4: Equipment ── */}
+          {step === 4 && (
+            <ChecklistSection
+              title="Machines Used"
+              items={machineItems}
+              selectedIds={selectedMachineIds}
+              onToggle={(tid) => setSelectedMachineIds((prev) => toggleId(prev, tid))}
+              emptyMessage="No active machines found."
+            />
+          )}
+
+          {/* ── Step 5: Delays & Notes ── */}
+          {step === 5 && (
             <View>
-              <YesNoToggle
-                label="Any delays today?"
-                value={hasDelays}
+              <YesNoToggle label="Any delays today?" value={hasDelays}
                 onChange={(v) => {
                   setHasDelays(v)
                   if (!v) { setDelayHours(''); setDelayReason(''); setDelayDescription('') }
-                }}
-              />
+                }} />
               {hasDelays && (
                 <View>
-                  <FieldInput
-                    ref={delayHoursRef}
-                    label="Delay Hours"
-                    value={delayHours}
-                    onChangeText={setDelayHours}
-                    placeholder="0.0"
-                    keyboardType="decimal-pad"
-                    returnKeyType="next"
-                    onSubmitEditing={() => delayDescRef.current?.focus()}
-                    error={errors.delayHours}
-                  />
-                  <SelectField
-                    label="Delay Reason"
-                    value={delayReason}
-                    options={DELAY_REASONS}
-                    onChange={setDelayReason}
-                    placeholder="Select reason..."
-                    error={errors.delayReason}
-                  />
+                  <FieldInput ref={delayHoursRef} label="Delay Hours" value={delayHours}
+                    onChangeText={setDelayHours} placeholder="0.0" keyboardType="decimal-pad"
+                    returnKeyType="next" onSubmitEditing={() => delayDescRef.current?.focus()}
+                    error={errors.delayHours} />
+                  <SelectField label="Delay Reason" value={delayReason} options={DELAY_REASONS}
+                    onChange={setDelayReason} placeholder="Select reason..." error={errors.delayReason} />
                   <YesNoToggle label="Charged to client?" value={delayBillable} onChange={setDelayBillable} />
-                  <FieldInput
-                    ref={delayDescRef}
-                    label="Delay Description"
-                    value={delayDescription}
-                    onChangeText={setDelayDescription}
-                    placeholder="Additional details..."
-                    multiline
-                    optional
+                  <FieldInput ref={delayDescRef} label="Delay Description" value={delayDescription}
+                    onChangeText={setDelayDescription} placeholder="Additional details..." multiline optional />
+                </View>
+              )}
+
+              {hiredMachineItems.length > 0 && (
+                <View>
+                  {hasDelays && selectedStanddownIds.length === 0 && (
+                    <View style={styles.hireHelper}>
+                      <Ionicons name="information-circle-outline" size={16} color={Colors.warning} />
+                      <Text style={styles.hireHelperText}>
+                        Don't forget to mark which machines below
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.standdownLabel}>
+                    Mark any hired machines that were stood down today
+                  </Text>
+                  <ChecklistSection
+                    title="Hired Equipment Stand-Downs"
+                    items={hiredMachineItems}
+                    selectedIds={selectedStanddownIds}
+                    onToggle={(tid) => setSelectedStanddownIds((prev) => toggleId(prev, tid))}
+                    emptyMessage="No hired machines for this project."
                   />
                 </View>
               )}
-              <FieldInput
-                ref={notesRef}
-                label="Notes"
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Any additional notes..."
-                multiline
-                minHeight={100}
-                optional
-              />
-              <FieldInput
-                ref={otherWorkRef}
-                label="Other Work Description"
-                value={otherWork}
-                onChangeText={setOtherWork}
-                placeholder="Other work completed..."
-                multiline
-                minHeight={100}
-                optional
-              />
+
+              <FieldInput ref={notesRef} label="Notes" value={notes}
+                onChangeText={setNotes} placeholder="Any additional notes..." multiline minHeight={100} optional />
+              <FieldInput ref={otherWorkRef} label="Other Work Description" value={otherWork}
+                onChangeText={setOtherWork} placeholder="Other work completed..." multiline minHeight={100} optional />
             </View>
           )}
 
@@ -720,13 +731,7 @@ export default function EntryEditScreen() {
         {step < TOTAL_STEPS ? (
           <Button title="NEXT →" onPress={handleNext} fullWidth={false} style={styles.navBtn} />
         ) : (
-          <Button
-            title="SAVE CHANGES"
-            onPress={handleSave}
-            loading={saving}
-            fullWidth={false}
-            style={styles.navBtn}
-          />
+          <Button title="SAVE CHANGES" onPress={handleSave} loading={saving} fullWidth={false} style={styles.navBtn} />
         )}
       </View>
     </SafeAreaView>
@@ -745,6 +750,13 @@ const styles = StyleSheet.create({
     ...Typography.caption, color: Colors.textSecondary, fontStyle: 'italic',
     marginTop: -Spacing.sm, marginBottom: Spacing.md, paddingHorizontal: 2,
   },
+  hireHelper: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,152,0,0.1)', borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2, marginBottom: Spacing.sm,
+  },
+  hireHelperText: { ...Typography.bodySmall, color: Colors.warning, fontWeight: '500', flex: 1 },
+  standdownLabel: { ...Typography.bodySmall, color: Colors.textSecondary, marginBottom: Spacing.sm },
   nav: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: Spacing.md, backgroundColor: Colors.white,
