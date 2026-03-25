@@ -62,7 +62,7 @@
               </a>
             </td>
             <td class="text-muted">{{ hm.machine_type or '—' }}</td>
-            <td><span class="badge bg-primary-subtle text-primary fw-semibold">{{ hm.project.name }}</span></td>
+            <td><span class="badge bg-dark text-white fw-semibold">{{ hm.project.name }}</span></td>
             <td>{{ hm.hire_company or '—' }}</td>
             <td class="text-nowrap">{{ hm.delivery_date.strftime('%d/%m/%Y') if hm.delivery_date else '—' }}</td>
             <td class="text-nowrap">{{ hm.return_date.strftime('%d/%m/%Y') if hm.return_date else '—' }}</td>

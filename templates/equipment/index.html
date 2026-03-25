@@ -308,9 +308,13 @@
               </td>
               <td>
                 {% if projs %}
+                  {% set seen_pids = [] %}
                   {% for p, lbl in projs %}
+                    {% if p.id not in seen_pids %}
+                    {% set _ = seen_pids.append(p.id) %}
                     <a href="{{ url_for('projects.project_dashboard', project_id=p.id) }}#tab-scheduling"
                        class="badge bg-dark text-white text-decoration-none me-1">{{ p.name }}</a>
+                    {% endif %}
                   {% endfor %}
                 {% else %}<span class="text-muted fst-italic">Unassigned</span>{% endif %}
               </td>

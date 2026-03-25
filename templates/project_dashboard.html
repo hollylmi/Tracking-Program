@@ -166,7 +166,7 @@
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <span class="fw-semibold">Overall Progress</span>
-          <span class="badge bg-primary-subtle text-primary fs-6">{{ progress.overall_pct }}%</span>
+          <span class="badge bg-dark text-white fs-6">{{ progress.overall_pct }}%</span>
         </div>
         <div class="progress mb-3" style="height:20px;">
           <div class="progress-bar bg-success" style="width:{{ progress.overall_pct }}%">
@@ -878,11 +878,36 @@
           <div class="px-3 py-2">
             {% if row.assignments %}
             <div class="d-flex flex-wrap gap-2 mb-2">
+              {# Group assignments by machine group — show group name once #}
+              {% set seen_grps = {} %}
+              {% set ungrouped = [] %}
               {% for a in row.assignments %}
-              <span class="badge bg-primary-subtle text-primary d-flex align-items-center gap-1 px-2 py-1">
+                {% set grp = a.machine.group if a.machine and a.machine.group else (a.hired_machine.group if a.hired_machine and a.hired_machine.group else None) %}
+                {% if grp %}
+                  {% if grp.id not in seen_grps %}
+                    {% set _ = seen_grps.update({grp.id: {'group': grp, 'assign_ids': []}}) %}
+                  {% endif %}
+                  {% set _ = seen_grps[grp.id]['assign_ids'].append(a.id) %}
+                {% else %}
+                  {% set _ = ungrouped.append(a) %}
+                {% endif %}
+              {% endfor %}
+
+              {# Group badges #}
+              {% for gid, gdata in seen_grps.items() %}
+              <span class="badge bg-info text-white d-flex align-items-center gap-1 px-2 py-1">
+                <i class="bi bi-collection me-1"></i>
+                {{ gdata.group.name }}
+                {% if gdata.group.delay_rate %}<small class="opacity-75">${{ '%.0f'|format(gdata.group.delay_rate) }}/hr</small>{% endif %}
+                <small class="opacity-75">({{ gdata.assign_ids | length }} items)</small>
+              </span>
+              {% endfor %}
+
+              {# Ungrouped individual machines #}
+              {% for a in ungrouped %}
+              <span class="badge bg-dark text-white d-flex align-items-center gap-1 px-2 py-1">
                 <i class="bi bi-{{ 'wrench' if a.machine_id else 'building' }} me-1"></i>
                 {{ a.display_name }}
-                <span class="text-muted small">({{ a.source }})</span>
                 <form method="POST" action="{{ url_for('projects.equipment_req_unassign', project_id=project.id, assign_id=a.id) }}"
                       class="d-inline ms-1">
                   <button type="submit" class="btn btn-link p-0 text-danger" style="font-size:.7rem;" title="Remove">

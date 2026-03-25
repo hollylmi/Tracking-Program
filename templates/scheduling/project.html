@@ -258,21 +258,46 @@
             {% endif %}
           </td>
           <td>
+            {# Group machines by their group — show group name once, ungrouped individually #}
+            {% set seen_groups = {} %}
+            {% set ungrouped_items = [] %}
             {% for item in row.machines %}
+              {% set a = item.assignment %}
+              {% set grp = a.machine.group if a.machine and a.machine.group else (a.hired_machine.group if a.hired_machine and a.hired_machine.group else None) %}
+              {% if grp %}
+                {% if grp.id not in seen_groups %}
+                  {% set _ = seen_groups.update({grp.id: grp}) %}
+                {% endif %}
+              {% else %}
+                {% set _ = ungrouped_items.append(item) %}
+              {% endif %}
+            {% endfor %}
+
+            {# Show group badges #}
+            {% for gid, grp in seen_groups.items() %}
+            <span class="badge bg-info text-white me-1">
+              <i class="bi bi-collection me-1"></i>{{ grp.name }}
+              {% if grp.delay_rate %}<span class="fw-normal opacity-75">${{ '%.0f'|format(grp.delay_rate) }}/hr</span>{% endif %}
+            </span>
+            {% endfor %}
+
+            {# Show ungrouped machines individually #}
+            {% for item in ungrouped_items %}
             {% set a = item.assignment %}
-            {% set plant = (a.machine.plant_id if a.machine and a.machine.plant_id else (a.hired_machine.plant_id if a.hired_machine and a.hired_machine.plant_id else None)) %}
             <span class="badge {{ 'bg-danger text-white' if item.broken else 'bg-dark text-white' }} me-1">
               <i class="bi bi-{{ 'tools' if item.broken else ('wrench' if a.machine_id else 'building') }} me-1"></i>
-              {{ a.display_name }}{% if plant %} <span class="fw-normal opacity-75">({{ plant }})</span>{% endif %}
+              {{ a.display_name }}
               {% if item.broken %}
-                <span class="fw-normal">(Broken Down{% if item.broken.anticipated_return %} — est. {{ item.broken.anticipated_return.strftime('%d/%m') }}{% endif %})</span>
+                <span class="fw-normal">(Down{% if item.broken.anticipated_return %} — est. {{ item.broken.anticipated_return.strftime('%d/%m') }}{% endif %})</span>
               {% endif %}
             </span>
-            {% else %}
+            {% endfor %}
+
+            {% if not row.machines %}
             <span class="text-muted small fst-italic">None assigned —
               <a href="{{ url_for('projects.project_dashboard', project_id=project.id) }}#tab-scheduling">assign now</a>
             </span>
-            {% endfor %}
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -307,7 +332,7 @@
           <td>{{ a.employee.name }}</td>
           <td class="text-muted">
             {% if a.scheduled_role %}
-              <span class="badge bg-primary-subtle text-primary">{{ a.scheduled_role.name }}</span>
+              <span class="badge bg-dark text-white">{{ a.scheduled_role.name }}</span>
               {% if a.scheduled_role.delay_rate %}
                 <small class="text-success ms-1">${{ '%.2f'|format(a.scheduled_role.delay_rate) }}/hr</small>
               {% endif %}

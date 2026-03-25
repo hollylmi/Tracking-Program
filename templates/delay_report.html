@@ -106,7 +106,7 @@
           <span class="fw-bold text-danger me-2">
             {{ row.entry.entry_date.strftime('%d/%m/%Y') }} &mdash; {{ row.entry.day_name }}
           </span>
-          <span class="badge bg-primary-subtle text-primary">{{ row.entry.project.name }}</span>
+          <span class="badge bg-dark text-white">{{ row.entry.project.name }}</span>
           <span class="ms-2 text-muted small">{{ row.entry.delay_hours }} hrs</span>
           {% if row.entry.delay_reason %}
           <span class="ms-2 badge bg-danger-subtle text-danger">{{ row.entry.delay_reason }}</span>
