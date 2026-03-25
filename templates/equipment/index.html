@@ -137,19 +137,33 @@
       </div>
     </div>
 
-    <!-- Group filter -->
-    {% if groups %}
-    <div class="d-flex align-items-center gap-2 mb-3">
-      <label class="text-muted small fw-medium mb-0">Filter:</label>
-      <select class="form-select form-select-sm" style="width:auto;max-width:200px;" onchange="filterFleet(this.value)">
-        <option value="all">All groups</option>
-        {% for g in groups %}
-        <option value="{{ g.id }}">{{ g.name }}</option>
-        {% endfor %}
-        <option value="none">Ungrouped</option>
-      </select>
+    <!-- Filters -->
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+      {% if groups %}
+      <div class="d-flex align-items-center gap-2">
+        <label class="text-muted small fw-medium mb-0">Group:</label>
+        <select class="form-select form-select-sm" style="width:auto;max-width:180px;" id="filterGroup" onchange="applyFleetFilters()">
+          <option value="all">All groups</option>
+          {% for g in groups %}
+          <option value="{{ g.id }}">{{ g.name }}</option>
+          {% endfor %}
+          <option value="none">Ungrouped</option>
+        </select>
+      </div>
+      {% endif %}
+      {% if projects %}
+      <div class="d-flex align-items-center gap-2">
+        <label class="text-muted small fw-medium mb-0">Site:</label>
+        <select class="form-select form-select-sm" style="width:auto;max-width:180px;" id="filterSite" onchange="applyFleetFilters()">
+          <option value="all">All sites</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+          {% endfor %}
+          <option value="none">Unassigned</option>
+        </select>
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
 
     <!-- Own fleet table -->
     <div class="card border-0 shadow-sm">
@@ -179,8 +193,11 @@
             {% for pm_item in (own_machine_projects.get(m.id, []) or []) %}
               {% set _ = machine_assignments.append(pm_item) %}
             {% endfor %}
+            {% set projs = own_machine_projects.get(m.id, []) %}
+            {% set proj_ids = projs | map(attribute=0) | map(attribute='id') | list %}
             <tr class="fleet-row {{ 'table-danger' if bd else ('table-secondary opacity-75' if not m.active else '') }}"
-                data-group-id="{{ m.group_id or '' }}">
+                data-group-id="{{ m.group_id or '' }}"
+                data-project-ids="{{ proj_ids | join(',') }}">
               <td class="fw-semibold">
                 {{ m.name }}
                 {% if m.description %}<br><small class="text-muted fw-normal">{{ m.description }}</small>{% endif %}
@@ -201,7 +218,6 @@
                 {% else %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td>
-                {% set projs = own_machine_projects.get(m.id, []) %}
                 {% if projs %}
                   {% for p, lbl in projs %}
                     <a href="{{ url_for('projects.project_dashboard', project_id=p.id) }}#tab-scheduling"
@@ -625,16 +641,25 @@
     });
   });
 
-  function filterFleet(groupId) {
+  function applyFleetFilters() {
+    const groupSel = document.getElementById('filterGroup');
+    const siteSel = document.getElementById('filterSite');
+    const groupVal = groupSel ? groupSel.value : 'all';
+    const siteVal = siteSel ? siteSel.value : 'all';
+
     document.querySelectorAll('.fleet-row').forEach(row => {
       const rowGroup = row.dataset.groupId || '';
-      if (groupId === 'all') {
-        row.style.display = '';
-      } else if (groupId === 'none') {
-        row.style.display = rowGroup === '' ? '' : 'none';
-      } else {
-        row.style.display = rowGroup === groupId ? '' : 'none';
-      }
+      const rowProjects = (row.dataset.projectIds || '').split(',').filter(Boolean);
+
+      let showGroup = true;
+      if (groupVal === 'none') showGroup = rowGroup === '';
+      else if (groupVal !== 'all') showGroup = rowGroup === groupVal;
+
+      let showSite = true;
+      if (siteVal === 'none') showSite = rowProjects.length === 0;
+      else if (siteVal !== 'all') showSite = rowProjects.includes(siteVal);
+
+      row.style.display = (showGroup && showSite) ? '' : 'none';
     });
   }
 
