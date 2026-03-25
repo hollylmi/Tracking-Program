@@ -137,11 +137,24 @@
       </div>
     </div>
 
+    <!-- Group filter -->
+    {% if groups %}
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+      <span class="text-muted small fw-medium">Filter by group:</span>
+      <button class="btn btn-sm btn-outline-secondary py-0 fleet-filter active" data-group="all" onclick="filterFleet('all', this)">All</button>
+      {% for g in groups %}
+      <button class="btn btn-sm btn-outline-info py-0 fleet-filter" data-group="{{ g.id }}" onclick="filterFleet('{{ g.id }}', this)">{{ g.name }}</button>
+      {% endfor %}
+      <button class="btn btn-sm btn-outline-secondary py-0 fleet-filter" data-group="none" onclick="filterFleet('none', this)">Ungrouped</button>
+    </div>
+    {% endif %}
+
     <!-- Own fleet table -->
     <div class="card border-0 shadow-sm">
       <div class="card-body p-0">
         {% if own_machines %}
-        <table class="table table-sm table-hover mb-0 align-middle">
+        <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle" style="font-size:.82rem;">
           <thead class="table-light">
             <tr>
               <th>Name / Description</th>
@@ -160,27 +173,39 @@
             {% for m in own_machines %}
             {% set bd = own_breakdowns.get(m.id) %}
             {% set history = own_bd_history.get(m.id, []) %}
-            <tr class="{{ 'table-danger' if bd else ('table-secondary opacity-75' if not m.active else '') }}">
-              <td class="fw-semibold small">
+            {% set machine_assignments = [] %}
+            {% for pm_item in (own_machine_projects.get(m.id, []) or []) %}
+              {% set _ = machine_assignments.append(pm_item) %}
+            {% endfor %}
+            <tr class="fleet-row {{ 'table-danger' if bd else ('table-secondary opacity-75' if not m.active else '') }}"
+                data-group-id="{{ m.group_id or '' }}">
+              <td class="fw-semibold">
                 {{ m.name }}
                 {% if m.description %}<br><small class="text-muted fw-normal">{{ m.description }}</small>{% endif %}
               </td>
-              <td class="text-muted small">{{ m.plant_id or '—' }}</td>
-              <td class="text-muted small">{{ m.machine_type or '—' }}</td>
-              <td class="small">
-                {% if m.group %}
-                  <span class="badge bg-info-subtle text-info border border-info-subtle">{{ m.group.name }}</span>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
+              <td class="text-muted">{{ m.plant_id or '—' }}</td>
+              <td class="text-muted">{{ m.machine_type or '—' }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('equipment.equipment_machine_save') }}" class="d-inline">
+                  <input type="hidden" name="action" value="edit">
+                  <input type="hidden" name="machine_id" value="{{ m.id }}">
+                  <input type="hidden" name="name" value="{{ m.name }}">
+                  <select name="group_id" class="form-select form-select-sm py-0" style="width:auto;min-width:90px;font-size:.78rem;"
+                          onchange="this.form.submit()">
+                    <option value="">— None —</option>
+                    {% for g in groups %}
+                    <option value="{{ g.id }}" {{ 'selected' if m.group_id == g.id else '' }}>{{ g.name }}</option>
+                    {% endfor %}
+                  </select>
+                </form>
               </td>
-              <td class="small">
+              <td>
                 {% set rate = m.effective_delay_rate %}
                 {% if rate %}<span class="text-success">${{ '%.2f'|format(rate) }}/hr</span>
                   {% if m.delay_rate is none and m.group %}<br><small class="text-muted">from group</small>{% endif %}
                 {% else %}<span class="text-muted">—</span>{% endif %}
               </td>
-              <td class="small">
+              <td>
                 {% set projs = own_machine_projects.get(m.id, []) %}
                 {% if projs %}
                   {% for p, lbl in projs %}
@@ -198,7 +223,7 @@
                   <span class="badge bg-secondary">Inactive</span>
                 {% endif %}
               </td>
-              <td class="small">
+              <td>
                 {% if bd %}
                 <div>
                   <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
@@ -213,10 +238,10 @@
                   </button>
                 </div>
                 {% else %}
-                <span class="text-muted small">—</span>
+                <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td class="small">
+              <td>
                 {% set past = history | selectattr('repair_status', 'equalto', 'completed') | list %}
                 {% if past %}
                 <button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button"
@@ -244,13 +269,11 @@
               </td>
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
-                  <!-- Edit button → triggers modal -->
                   <button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button"
                           onclick='openMachineEdit({{ m.id }}, {{ m.name|tojson }}, {{ (m.plant_id or "")|tojson }}, {{ (m.machine_type or "")|tojson }}, {{ (m.description or "")|tojson }}, {{ m.delay_rate or "" }}, {{ m.group_id or "null" }})'
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
-                  <!-- Toggle active -->
                   <form method="POST" action="{{ url_for('equipment.equipment_machine_save') }}" class="d-inline">
                     <input type="hidden" name="action" value="toggle">
                     <input type="hidden" name="machine_id" value="{{ m.id }}">
@@ -259,7 +282,6 @@
                       <i class="bi bi-{{ 'pause' if m.active else 'play' }}"></i>
                     </button>
                   </form>
-                  <!-- Delete (only if no entries) -->
                   {% if not m.entries %}
                   <form method="POST" action="{{ url_for('equipment.equipment_machine_save') }}" class="d-inline"
                         onsubmit="return confirm('Delete {{ m.name }}?')">
@@ -276,6 +298,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
         {% else %}
         <div class="text-center py-5 text-muted">
           <i class="bi bi-wrench fs-1 d-block mb-2"></i>
@@ -606,6 +629,21 @@
       history.replaceState(null, '', e.target.dataset.bsTarget);
     });
   });
+
+  function filterFleet(groupId, btn) {
+    document.querySelectorAll('.fleet-filter').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.fleet-row').forEach(row => {
+      const rowGroup = row.dataset.groupId || '';
+      if (groupId === 'all') {
+        row.style.display = '';
+      } else if (groupId === 'none') {
+        row.style.display = rowGroup === '' ? '' : 'none';
+      } else {
+        row.style.display = rowGroup === groupId ? '' : 'none';
+      }
+    });
+  }
 
   function openMachineEdit(id, name, plantId, type, description, rate, groupId) {
     document.getElementById('editMachineId').value = id;
