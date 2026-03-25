@@ -131,7 +131,13 @@
         <td colspan="{{ date_list|length + 1 }}">{{ role_name }}</td>
       </tr>
       {% for emp in emps %}
-      <tr class="sched-emp-row" data-role-group="{{ role_group }}">
+      {% set emp_groups = [] %}
+      {% for r in emp.roles %}
+        {% set grp = role_group_map.get(r.name, r.name) if role_group_map is defined else r.name %}
+        {% if grp not in emp_groups %}{% set _ = emp_groups.append(grp) %}{% endif %}
+      {% endfor %}
+      {% if role_group not in emp_groups %}{% set _ = emp_groups.append(role_group) %}{% endif %}
+      <tr class="sched-emp-row" data-role-groups="{{ emp_groups | join(',') }}">
         <td class="emp-name" title="{{ emp.name }}">{{ emp.name }}</td>
         {% for d in date_list %}
         {% set ds = d.isoformat() %}
@@ -467,11 +473,19 @@ pollGrid().then(() => { lastGridHash = lastGridHash; });
 // ── Override modal (AJAX) ────────────────────────────────────────────────────
 // ── Role group filter ─────────────────────────────────────────────────────
 function filterByRoleGroup(groupName) {
-  document.querySelectorAll('.sched-group-row, .sched-emp-row').forEach(row => {
+  document.querySelectorAll('.sched-group-row').forEach(row => {
     if (groupName === 'all') {
       row.style.display = '';
     } else {
       row.style.display = row.dataset.roleGroup === groupName ? '' : 'none';
+    }
+  });
+  document.querySelectorAll('.sched-emp-row').forEach(row => {
+    if (groupName === 'all') {
+      row.style.display = '';
+    } else {
+      const groups = (row.dataset.roleGroups || '').split(',');
+      row.style.display = groups.includes(groupName) ? '' : 'none';
     }
   });
 }
