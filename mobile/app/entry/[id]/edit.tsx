@@ -438,9 +438,8 @@ export default function EntryEditScreen() {
   const [weather, setWeather] = useState('')
 
   // Step 2 — Production (multiple lines)
-  const [installHours, setInstallHours] = useState('')
-  const [productionLines, setProductionLines] = useState<{ lot: string; material: string; sqm: string }[]>(
-    [{ lot: '', material: '', sqm: '' }]
+  const [productionLines, setProductionLines] = useState<{ lot: string; material: string; hours: string; sqm: string }[]>(
+    [{ lot: '', material: '', hours: '', sqm: '' }]
   )
 
   // Step 3 — Crew
@@ -464,7 +463,7 @@ export default function EntryEditScreen() {
 
   // ── Keyboard refs ─────────────────────────────────────────────────────────────
   const locationRef = useRef<TextInput>(null)
-  const installHoursRef = useRef<TextInput>(null)
+  // installHoursRef removed — hours are per production line
   // installSqmRef removed — sqm is per production line
   const delayHoursRef = useRef<TextInput>(null)
   const delayDescRef = useRef<TextInput>(null)
@@ -476,12 +475,12 @@ export default function EntryEditScreen() {
     return ids.includes(tid) ? ids.filter((x) => x !== tid) : [...ids, tid]
   }
 
-  function updateLine(index: number, field: 'lot' | 'material' | 'sqm', value: string) {
+  function updateLine(index: number, field: 'lot' | 'material' | 'hours' | 'sqm', value: string) {
     setProductionLines(prev => prev.map((line, i) => i === index ? { ...line, [field]: value } : line))
   }
 
   function addLine() {
-    setProductionLines(prev => [...prev, { lot: '', material: '', sqm: '' }])
+    setProductionLines(prev => [...prev, { lot: '', material: '', hours: '', sqm: '' }])
   }
 
   function removeLine(index: number) {
@@ -489,22 +488,24 @@ export default function EntryEditScreen() {
   }
 
   const totalSqm = productionLines.reduce((sum, l) => sum + (parseFloat(l.sqm) || 0), 0)
+  const totalHours = productionLines.reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0)
 
   // ── Populate from loaded entry ────────────────────────────────────────────────
   useEffect(() => {
     if (!entry || ready) return
     setLocation(entry.location ?? '')
     setWeather(entry.weather ?? '')
-    setInstallHours(entry.install_hours != null ? String(entry.install_hours) : '')
     // Load production lines from entry
     if (entry.production_lines && entry.production_lines.length > 0) {
       setProductionLines(entry.production_lines.map((pl: any) => ({
         lot: pl.lot_number ?? '', material: pl.material ?? '',
+        hours: pl.install_hours != null ? String(pl.install_hours) : '',
         sqm: pl.install_sqm != null ? String(pl.install_sqm) : '',
       })))
     } else if (entry.lot_number || entry.material || entry.install_sqm) {
       setProductionLines([{
         lot: entry.lot_number ?? '', material: entry.material ?? '',
+        hours: entry.install_hours != null ? String(entry.install_hours) : '',
         sqm: entry.install_sqm != null ? String(entry.install_sqm) : '',
       }])
     }
@@ -567,11 +568,10 @@ export default function EntryEditScreen() {
     if (!id) return
     setSaving(true)
     try {
-      const validLines = productionLines.filter(l => l.lot || l.material || l.sqm)
+      const validLines = productionLines.filter(l => l.lot || l.material || l.sqm || l.hours)
       await api.entries.update(Number(id), {
         location: location || undefined,
         weather: weather || undefined,
-        install_hours: installHours ? parseFloat(installHours) : undefined,
         delay_hours: hasDelays && delayHours ? parseFloat(delayHours) : 0,
         delay_reason: hasDelays ? delayReason || undefined : undefined,
         delay_billable: hasDelays ? delayBillable : undefined,
@@ -584,6 +584,7 @@ export default function EntryEditScreen() {
         production_lines: validLines.map(l => ({
           lot_number: l.lot || null,
           material: l.material || null,
+          install_hours: parseFloat(l.hours) || 0,
           install_sqm: parseFloat(l.sqm) || 0,
         })),
       } as any)
@@ -646,13 +647,9 @@ export default function EntryEditScreen() {
           {/* ── Step 2: Production ── */}
           {step === 2 && (
             <View>
-              <FieldInput ref={installHoursRef} label="Install Hours" value={installHours}
-                onChangeText={setInstallHours} placeholder="0.0" keyboardType="decimal-pad"
-                optional returnKeyType="done" />
-
               <View style={styles.prodHeader}>
                 <Text style={styles.prodHeaderTitle}>Production Lines</Text>
-                <Text style={styles.prodHeaderTotal}>Total: {totalSqm.toLocaleString('en-AU', { maximumFractionDigits: 1 })} m²</Text>
+                <Text style={styles.prodHeaderTotal}>{totalHours}h  |  {totalSqm.toLocaleString('en-AU', { maximumFractionDigits: 1 })} m²</Text>
               </View>
 
               {productionLines.map((line, index) => (
@@ -676,6 +673,9 @@ export default function EntryEditScreen() {
                   {line.lot && line.material && lotProgress[line.lot]?.[line.material] && (
                     <LotProgressCard data={lotProgress[line.lot][line.material]} />
                   )}
+                  <FieldInput label="Hours" value={line.hours}
+                    onChangeText={(v) => updateLine(index, 'hours', v)} placeholder="0.0"
+                    keyboardType="decimal-pad" optional returnKeyType="next" />
                   <FieldInput label="Area Installed (m²)" value={line.sqm}
                     onChangeText={(v) => updateLine(index, 'sqm', v)} placeholder="0.0"
                     keyboardType="decimal-pad" optional returnKeyType="done" />

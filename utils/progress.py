@@ -28,15 +28,16 @@ def compute_project_progress(project_id):
     actual_by_task = {}
     total_install_hours = 0.0
     for e in entries:
-        total_install_hours += (e.install_hours or 0)
         # Use production lines if available, else fall back to legacy fields
         if e.production_lines:
             for pl in e.production_lines:
                 key = (pl.lot_number or '', pl.material or '')
                 actual_by_task[key] = actual_by_task.get(key, 0.0) + (pl.install_sqm or 0)
+                total_install_hours += (pl.install_hours or 0)
         else:
             key = (e.lot_number or '', e.material or '')
             actual_by_task[key] = actual_by_task.get(key, 0.0) + (e.install_sqm or 0)
+            total_install_hours += (e.install_hours or 0)
 
     tasks = []
     total_planned = 0.0

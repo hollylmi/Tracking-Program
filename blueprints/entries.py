@@ -102,18 +102,22 @@ def new_entry():
         # Parse production lines
         line_lots = request.form.getlist('line_lot[]')
         line_materials = request.form.getlist('line_material[]')
+        line_hours = request.form.getlist('line_hours[]')
         line_sqms = request.form.getlist('line_sqm[]')
         prod_lines = []
         total_sqm = 0
+        total_hours = 0
         first_lot = None
         first_material = None
         for i in range(len(line_lots)):
             lot = (line_lots[i].strip() if i < len(line_lots) else '') or None
             mat = (line_materials[i].strip() if i < len(line_materials) else '') or None
+            hrs = float(line_hours[i] or 0) if i < len(line_hours) else 0
             sqm = float(line_sqms[i] or 0) if i < len(line_sqms) else 0
-            if lot or mat or sqm:
-                prod_lines.append({'lot': lot, 'material': mat, 'sqm': sqm})
+            if lot or mat or sqm or hrs:
+                prod_lines.append({'lot': lot, 'material': mat, 'hours': hrs, 'sqm': sqm})
                 total_sqm += sqm
+                total_hours += hrs
                 if first_lot is None and lot:
                     first_lot = lot
                 if first_material is None and mat:
@@ -126,7 +130,7 @@ def new_entry():
             location=request.form.get('location', '').strip() or None,
             material=first_material,
             num_people=int(request.form.get('num_people')) if request.form.get('num_people') else None,
-            install_hours=float(request.form.get('install_hours') or 0),
+            install_hours=total_hours,
             install_sqm=total_sqm,
             delay_hours=delay_hours,
             delay_billable=delay_billable,
@@ -151,7 +155,8 @@ def new_entry():
         for pl in prod_lines:
             db.session.add(EntryProductionLine(
                 entry_id=entry.id, lot_number=pl['lot'],
-                material=pl['material'], install_sqm=pl['sqm']))
+                material=pl['material'], install_hours=pl['hours'],
+                install_sqm=pl['sqm']))
 
         # Photo uploads
         photos = request.files.getlist('photos')
@@ -225,21 +230,26 @@ def edit_entry(entry_id):
         # Parse production lines
         line_lots = request.form.getlist('line_lot[]')
         line_materials = request.form.getlist('line_material[]')
+        line_hours = request.form.getlist('line_hours[]')
         line_sqms = request.form.getlist('line_sqm[]')
 
         # Clear old production lines and rebuild
         EntryProductionLine.query.filter_by(entry_id=entry.id).delete()
         total_sqm = 0
+        total_hours = 0
         first_lot = None
         first_material = None
         for i in range(len(line_lots)):
             lot = (line_lots[i].strip() if i < len(line_lots) else '') or None
             mat = (line_materials[i].strip() if i < len(line_materials) else '') or None
+            hrs = float(line_hours[i] or 0) if i < len(line_hours) else 0
             sqm = float(line_sqms[i] or 0) if i < len(line_sqms) else 0
-            if lot or mat or sqm:
+            if lot or mat or sqm or hrs:
                 db.session.add(EntryProductionLine(
-                    entry_id=entry.id, lot_number=lot, material=mat, install_sqm=sqm))
+                    entry_id=entry.id, lot_number=lot, material=mat,
+                    install_hours=hrs, install_sqm=sqm))
                 total_sqm += sqm
+                total_hours += hrs
                 if first_lot is None and lot:
                     first_lot = lot
                 if first_material is None and mat:
@@ -248,7 +258,7 @@ def edit_entry(entry_id):
         entry.lot_number = first_lot
         entry.material = first_material
         entry.install_sqm = total_sqm
-        entry.install_hours = float(request.form.get('install_hours') or 0)
+        entry.install_hours = total_hours
         entry.delay_hours = float(request.form.get('delay_hours') or 0)
         entry.delay_billable = request.form.get('delay_billable', 'true') == 'true'
         entry.delay_reason = (request.form.get('delay_reason', '').strip() or None) if entry.delay_hours > 0 else None

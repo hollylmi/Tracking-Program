@@ -78,20 +78,14 @@
                      readonly tabindex="-1">
               <div class="form-text">Auto-counted</div>
             </div>
-            <div class="col-sm-3">
-              <label class="form-label fw-semibold">Install Hours</label>
-              <input type="number" name="install_hours" class="form-control" min="0" step="0.25"
-                     value="{{ entry.install_hours if entry else '' }}"
-                     placeholder="0.00">
-            </div>
-
             <!-- Production Lines (multiple lots/materials) -->
             <div class="col-12">
               <div class="card border shadow-sm">
                 <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
                   <span class="fw-semibold small"><i class="bi bi-layers me-1 text-primary"></i>Production Lines</span>
-                  <div class="d-flex align-items-center gap-2">
-                    <span class="text-muted small" id="totalSqmLabel">Total: 0 m²</span>
+                  <div class="d-flex align-items-center gap-3">
+                    <span class="text-muted small" id="totalHoursLabel">Hours: 0</span>
+                    <span class="text-muted small" id="totalSqmLabel">SQM: 0</span>
                     <button type="button" class="btn btn-sm btn-outline-primary py-0" onclick="addProductionLine()">
                       <i class="bi bi-plus me-1"></i>Add Line
                     </button>
@@ -103,9 +97,10 @@
                   <table class="table table-sm mb-0 align-middle" id="productionTable">
                     <thead class="table-light">
                       <tr>
-                        <th style="width:30%">Lot</th>
-                        <th style="width:35%">Material</th>
-                        <th style="width:25%">SQM</th>
+                        <th style="width:25%">Lot</th>
+                        <th style="width:30%">Material</th>
+                        <th style="width:15%">Hours</th>
+                        <th style="width:20%">SQM</th>
                         <th style="width:10%"></th>
                       </tr>
                     </thead>
@@ -115,33 +110,37 @@
                         <tr class="prod-line">
                           <td><input type="text" name="line_lot[]" class="form-control form-control-sm" value="{{ pl.lot_number or '' }}" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
                           <td><input type="text" name="line_material[]" class="form-control form-control-sm" value="{{ pl.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
-                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ pl.install_sqm or '' }}" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
-                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotalSqm()"><i class="bi bi-x-lg"></i></button></td>
+                          <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" value="{{ pl.install_hours or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
+                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ pl.install_sqm or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
+                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
                         </tr>
                         {% endfor %}
                       {% elif entry and (entry.lot_number or entry.material or entry.install_sqm) %}
                         <tr class="prod-line">
                           <td><input type="text" name="line_lot[]" class="form-control form-control-sm" value="{{ entry.lot_number or '' }}" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
                           <td><input type="text" name="line_material[]" class="form-control form-control-sm" value="{{ entry.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
-                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ entry.install_sqm or '' }}" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
-                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotalSqm()"><i class="bi bi-x-lg"></i></button></td>
+                          <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" value="{{ entry.install_hours or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
+                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ entry.install_sqm or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
+                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
                         </tr>
                       {% else %}
                         <tr class="prod-line">
                           <td><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
                           <td><input type="text" name="line_material[]" class="form-control form-control-sm" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
-                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
-                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotalSqm()"><i class="bi bi-x-lg"></i></button></td>
+                          <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
+                          <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
+                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
                         </tr>
                       {% endif %}
                     </tbody>
+
+            <!-- Hidden fields for totals -->
+            <input type="hidden" name="install_sqm" id="installSqmInput" value="{{ entry.install_sqm if entry else '0' }}">
+            <input type="hidden" name="install_hours" id="installHoursInput" value="{{ entry.install_hours if entry else '0' }}">
                   </table>
                 </div>
               </div>
             </div>
-
-            <!-- Hidden install_sqm field (auto-calculated from production lines) -->
-            <input type="hidden" name="install_sqm" id="installSqmInput" value="{{ entry.install_sqm if entry else '0' }}">
 
             <div class="col-sm-3">
               <label class="form-label fw-semibold">Delay Hours</label>
@@ -541,7 +540,8 @@
     row.innerHTML = `
       <td><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off" onchange="fetchLineProgress(this.closest('tr'))"></td>
       <td><input type="text" name="line_material[]" class="form-control form-control-sm" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off" onchange="fetchLineProgress(this.closest('tr'))"></td>
-      <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotalSqm()" oninput="updateTotalSqm()"></td>
+      <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
+      <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
       <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeProductionLine(this)"><i class="bi bi-x-lg"></i></button></td>
     `;
     // Progress row
@@ -599,14 +599,17 @@
       .catch(() => { progRow.style.display = 'none'; });
   }
 
-  function updateTotalSqm() {
-    let total = 0;
-    document.querySelectorAll('.line-sqm').forEach(input => {
-      total += parseFloat(input.value) || 0;
-    });
-    document.getElementById('totalSqmLabel').textContent = 'Total: ' + total.toLocaleString('en-AU', {maximumFractionDigits:1}) + ' m²';
-    document.getElementById('installSqmInput').value = total;
+  function updateTotals() {
+    let totalSqm = 0, totalHours = 0;
+    document.querySelectorAll('.line-sqm').forEach(input => { totalSqm += parseFloat(input.value) || 0; });
+    document.querySelectorAll('.line-hours').forEach(input => { totalHours += parseFloat(input.value) || 0; });
+    document.getElementById('totalSqmLabel').textContent = 'SQM: ' + totalSqm.toLocaleString('en-AU', {maximumFractionDigits:1});
+    document.getElementById('totalHoursLabel').textContent = 'Hours: ' + totalHours.toLocaleString('en-AU', {maximumFractionDigits:1});
+    document.getElementById('installSqmInput').value = totalSqm;
+    document.getElementById('installHoursInput').value = totalHours;
   }
+  // Alias for backward compat with inline onchange handlers
+  function updateTotalSqm() { updateTotals(); }
 
   // Init: assign lineIds to existing rows and attach progress listeners
   document.querySelectorAll('.prod-line').forEach((row, i) => {
@@ -639,7 +642,7 @@
   });
   lineCounter = document.querySelectorAll('.prod-line').length;
 
-  updateTotalSqm();
+  updateTotals();
 
   function deletePhoto(url, thumbId) {
     if (!confirm('Delete this photo?')) return;

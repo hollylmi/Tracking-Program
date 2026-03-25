@@ -203,6 +203,13 @@ class DailyEntry(db.Model):
             return sum(pl.install_sqm or 0 for pl in self.production_lines)
         return self.install_sqm or 0
 
+    @property
+    def total_hours(self):
+        """Total hours from production lines, falling back to install_hours."""
+        if self.production_lines:
+            return sum(pl.install_hours or 0 for pl in self.production_lines)
+        return self.install_hours or 0
+
     def __repr__(self):
         return f'<DailyEntry {self.entry_date} - {self.project.name}>'
 
@@ -213,10 +220,11 @@ class EntryProductionLine(db.Model):
     entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
     lot_number = db.Column(db.String(100))
     material = db.Column(db.String(200))
+    install_hours = db.Column(db.Float, default=0)
     install_sqm = db.Column(db.Float, default=0)
 
     def __repr__(self):
-        return f'<EntryProductionLine {self.lot_number} {self.material} {self.install_sqm}>'
+        return f'<EntryProductionLine {self.lot_number} {self.material} {self.install_hours}h {self.install_sqm}m2>'
 
 
 class EntryPhoto(db.Model):

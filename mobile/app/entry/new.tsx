@@ -632,9 +632,8 @@ export default function NewEntryScreen() {
   const [weather, setWeather] = useState('')
 
   // Step 2 — Production (multiple lines)
-  const [installHours, setInstallHours] = useState('')
-  const [productionLines, setProductionLines] = useState<{ lot: string; material: string; sqm: string }[]>(
-    [{ lot: '', material: '', sqm: '' }]
+  const [productionLines, setProductionLines] = useState<{ lot: string; material: string; hours: string; sqm: string }[]>(
+    [{ lot: '', material: '', hours: '', sqm: '' }]
   )
 
   // Step 3 — Crew
@@ -663,7 +662,7 @@ export default function NewEntryScreen() {
   // Step 1 — location is the only freetext input; lot/material/weather are selects
   const locationRef = useRef<TextInput>(null)
   // Step 2
-  const installHoursRef = useRef<TextInput>(null)
+  // installHoursRef removed — hours are per production line
   // installSqmRef removed — sqm is per production line
   // Step 5
   const delayHoursRef = useRef<TextInput>(null)
@@ -677,12 +676,12 @@ export default function NewEntryScreen() {
     return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
   }
 
-  function updateLine(index: number, field: 'lot' | 'material' | 'sqm', value: string) {
+  function updateLine(index: number, field: 'lot' | 'material' | 'hours' | 'sqm', value: string) {
     setProductionLines(prev => prev.map((line, i) => i === index ? { ...line, [field]: value } : line))
   }
 
   function addLine() {
-    setProductionLines(prev => [...prev, { lot: '', material: '', sqm: '' }])
+    setProductionLines(prev => [...prev, { lot: '', material: '', hours: '', sqm: '' }])
   }
 
   function removeLine(index: number) {
@@ -690,6 +689,7 @@ export default function NewEntryScreen() {
   }
 
   const totalSqm = productionLines.reduce((sum, l) => sum + (parseFloat(l.sqm) || 0), 0)
+  const totalHours = productionLines.reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0)
 
   async function takePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync()
@@ -785,7 +785,7 @@ export default function NewEntryScreen() {
 
     const localId = uuidv4()
 
-    const validLines = productionLines.filter(l => l.lot || l.material || l.sqm)
+    const validLines = productionLines.filter(l => l.lot || l.material || l.sqm || l.hours)
     const firstLine = validLines[0]
 
     const entryData: LocalEntry = {
@@ -796,7 +796,7 @@ export default function NewEntryScreen() {
       location: location || undefined,
       material: firstLine?.material || undefined,
       num_people: selectedEmployeeIds.length > 0 ? selectedEmployeeIds.length : undefined,
-      install_hours: installHours ? parseFloat(installHours) : undefined,
+      install_hours: totalHours || undefined,
       install_sqm: totalSqm || undefined,
       weather: weather || undefined,
       delay_hours: hasDelays && delayHours ? parseFloat(delayHours) : undefined,
@@ -830,6 +830,7 @@ export default function NewEntryScreen() {
           production_lines: validLines.map(l => ({
             lot_number: l.lot || null,
             material: l.material || null,
+            install_hours: parseFloat(l.hours) || 0,
             install_sqm: parseFloat(l.sqm) || 0,
           })),
         } as any)
@@ -966,21 +967,10 @@ export default function NewEntryScreen() {
           {/* ── Step 2: Production ── */}
           {step === 2 && (
             <View>
-              <FieldInput
-                ref={installHoursRef}
-                label="Install Hours"
-                value={installHours}
-                onChangeText={setInstallHours}
-                placeholder="0.0"
-                keyboardType="decimal-pad"
-                optional
-                returnKeyType="done"
-              />
-
               {/* Production lines header */}
               <View style={styles.prodHeader}>
                 <Text style={styles.prodHeaderTitle}>Production Lines</Text>
-                <Text style={styles.prodHeaderTotal}>Total: {totalSqm.toLocaleString('en-AU', { maximumFractionDigits: 1 })} m²</Text>
+                <Text style={styles.prodHeaderTotal}>{totalHours}h  |  {totalSqm.toLocaleString('en-AU', { maximumFractionDigits: 1 })} m²</Text>
               </View>
 
               {productionLines.map((line, index) => (
@@ -1017,6 +1007,15 @@ export default function NewEntryScreen() {
                   {line.lot && line.material && lotProgress[line.lot]?.[line.material] && (
                     <LotProgressCard data={lotProgress[line.lot][line.material]} />
                   )}
+                  <FieldInput
+                    label="Hours"
+                    value={line.hours}
+                    onChangeText={(v) => updateLine(index, 'hours', v)}
+                    placeholder="0.0"
+                    keyboardType="decimal-pad"
+                    optional
+                    returnKeyType="next"
+                  />
                   <FieldInput
                     label="Area Installed (m²)"
                     value={line.sqm}

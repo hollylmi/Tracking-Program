@@ -122,7 +122,8 @@ def _format_entry(entry, include_detail=False):
             for m in entry.machines
         ]
         base['production_lines'] = [
-            {'lot_number': pl.lot_number, 'material': pl.material, 'install_sqm': pl.install_sqm}
+            {'lot_number': pl.lot_number, 'material': pl.material,
+             'install_hours': pl.install_hours, 'install_sqm': pl.install_sqm}
             for pl in entry.production_lines
         ]
         sd_ids = [sd.hired_machine_id for sd in entry.stand_downs if sd.hired_machine_id]
@@ -544,15 +545,20 @@ def create_entry():
     prod_lines = data.get('production_lines') or []
     if prod_lines:
         total_sqm = 0
+        total_hrs = 0
         for pl in prod_lines:
             sqm = float(pl.get('install_sqm') or 0)
+            hrs = float(pl.get('install_hours') or 0)
             db.session.add(EntryProductionLine(
                 entry_id=entry.id,
                 lot_number=pl.get('lot_number') or None,
                 material=pl.get('material') or None,
+                install_hours=hrs,
                 install_sqm=sqm))
             total_sqm += sqm
+            total_hrs += hrs
         entry.install_sqm = total_sqm
+        entry.install_hours = total_hrs
         if prod_lines[0].get('lot_number'):
             entry.lot_number = prod_lines[0]['lot_number']
         if prod_lines[0].get('material'):
@@ -651,20 +657,25 @@ def update_entry(entry_id):
         EntryProductionLine.query.filter_by(entry_id=entry.id).delete()
         prod_lines = data['production_lines'] or []
         total_sqm = 0
+        total_hrs = 0
         first_lot = None
         first_material = None
         for pl in prod_lines:
             sqm = float(pl.get('install_sqm') or 0)
+            hrs = float(pl.get('install_hours') or 0)
             lot = pl.get('lot_number') or None
             mat = pl.get('material') or None
             db.session.add(EntryProductionLine(
-                entry_id=entry.id, lot_number=lot, material=mat, install_sqm=sqm))
+                entry_id=entry.id, lot_number=lot, material=mat,
+                install_hours=hrs, install_sqm=sqm))
             total_sqm += sqm
+            total_hrs += hrs
             if first_lot is None and lot:
                 first_lot = lot
             if first_material is None and mat:
                 first_material = mat
         entry.install_sqm = total_sqm
+        entry.install_hours = total_hrs
         entry.lot_number = first_lot
         entry.material = first_material
 

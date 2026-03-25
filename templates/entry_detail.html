@@ -52,6 +52,7 @@
                   {% if pl.lot_number %}Lot {{ pl.lot_number }}{% endif %}
                   {% if pl.lot_number and pl.material %} — {% endif %}
                   {% if pl.material %}{{ pl.material }}{% endif %}
+                  {% if pl.install_hours %}<span class="badge bg-secondary text-white ms-1">{{ pl.install_hours }}h</span>{% endif %}
                   {% if pl.install_sqm %}<span class="badge bg-dark text-white ms-1">{{ pl.install_sqm }} m²</span>{% endif %}
                 </div>
                 {% endfor %}
