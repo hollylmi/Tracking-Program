@@ -160,18 +160,29 @@
                   {% endfor %}
                 </select>
               </div>
-              <div class="col-sm-8 d-flex align-items-end gap-2">
+              <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Filter by Type</label>
+                <select class="form-select form-select-sm" id="bulkTypeFilter" onchange="filterBulkList()">
+                  <option value="all">All types</option>
+                  {% set bulk_types = own_machines | selectattr('active') | map(attribute='machine_type') | select('string') | unique | sort | list %}
+                  {% for t in bulk_types %}
+                  <option value="{{ t }}">{{ t }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-5 d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-info text-white btn-sm" id="bulkSaveBtn" disabled>
                   <i class="bi bi-check-lg me-1"></i>Save Group
                 </button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="bulkSelectAll()">Select All</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="bulkSelectAll()">Select All Visible</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="bulkClearAll()">Clear All</button>
               </div>
             </div>
-            <div class="border rounded p-2" style="max-height:250px;overflow-y:auto;" id="bulkMachineList">
+            <div class="border rounded p-2" style="max-height:300px;overflow-y:auto;" id="bulkMachineList">
               {% for m in own_machines if m.active %}
               <label class="d-flex align-items-center gap-2 px-2 py-1 rounded bulk-machine-item" style="cursor:pointer;"
-                     data-machine-id="{{ m.id }}" data-current-group="{{ m.group_id or '' }}">
+                     data-machine-id="{{ m.id }}" data-current-group="{{ m.group_id or '' }}"
+                     data-machine-type="{{ m.machine_type or '' }}">
                 <input type="checkbox" name="machine_ids" value="{{ m.id }}" class="form-check-input mt-0 bulk-check">
                 <span>
                   {{ m.name }}
@@ -719,8 +730,24 @@
     });
   }
 
+  function filterBulkList() {
+    const typeVal = document.getElementById('bulkTypeFilter').value;
+    document.querySelectorAll('.bulk-machine-item').forEach(item => {
+      const itemType = item.dataset.machineType || '';
+      if (typeVal === 'all') {
+        item.style.display = '';
+      } else {
+        item.style.display = itemType === typeVal ? '' : 'none';
+      }
+    });
+  }
+
   function bulkSelectAll() {
-    document.querySelectorAll('.bulk-check').forEach(cb => cb.checked = true);
+    document.querySelectorAll('.bulk-machine-item').forEach(item => {
+      if (item.style.display !== 'none') {
+        item.querySelector('.bulk-check').checked = true;
+      }
+    });
   }
 
   function bulkClearAll() {
