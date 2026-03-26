@@ -494,7 +494,7 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
 .gantt-stripe {{ position:absolute; top:0; height:100%; pointer-events:none; z-index:0; }}
 .gantt-stripe-sun {{ background:rgba(255,105,180,0.18); }}
 .gantt-stripe-nwd {{ background:rgba(100,180,255,0.28); }}
-.gantt-stripe-wwd {{ background:rgba(0,160,210,0.28); }}
+.gantt-stripe-wwd {{ background:rgba(0,180,160,0.30); }}
 .gantt-stripe-cld {{ background:rgba(255,140,0,0.30); }}
 .gantt-today-line {{ position:absolute; top:0; height:100%; width:2px; background:#dc3545; z-index:10; pointer-events:none; }}
 .gantt-target-line {{ position:absolute; top:0; height:100%; width:2px; background:#0d6efd; z-index:9; pointer-events:none; }}
@@ -525,6 +525,17 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
     <div><strong>TARGET FINISH:</strong> {_esc(gantt_data.get("target_finish") or "-")}</div>
     <div><strong>EST. FINISH:</strong> {_esc(gantt_data.get("est_finish") or "-")}</div>
     {summary_var}
+  </div>
+  <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:12px;font-size:0.75rem;color:#495057;align-items:center;">
+    <span><span style="display:inline-block;width:14px;height:10px;background:deeppink;opacity:0.4;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Planned</span>
+    <span><span style="display:inline-block;width:14px;height:10px;background:#00c060;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Actual</span>
+    <span><span style="display:inline-block;width:14px;height:10px;background:gold;border:1px dashed #aaa;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Forecast</span>
+    <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,105,180,0.4);vertical-align:middle;margin-right:3px;"></span>Weekend</span>
+    <span><span style="display:inline-block;width:12px;height:10px;background:rgba(100,180,255,0.45);vertical-align:middle;margin-right:3px;"></span>Non-work</span>
+    <span><span style="display:inline-block;width:12px;height:10px;background:rgba(0,180,160,0.45);vertical-align:middle;margin-right:3px;"></span>Weather</span>
+    <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,140,0,0.4);vertical-align:middle;margin-right:3px;"></span>Delay</span>
+    <span><span style="display:inline-block;width:2px;height:12px;background:#dc3545;vertical-align:middle;margin-right:3px;"></span>Today</span>
+    <span><span style="display:inline-block;width:2px;height:12px;background:#0d6efd;vertical-align:middle;margin-right:3px;"></span>Target</span>
   </div>
 </div>
 </body></html>'''
