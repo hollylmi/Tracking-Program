@@ -691,30 +691,27 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
         pdf.add_page()
         section_header('DAILY ACTIVITIES')
 
-        # Table column widths
-        cw_date = 28
-        cw_prod = (page_w - cw_date) * 0.55
-        cw_other = (page_w - cw_date) * 0.45
-        row_h = 4
+        cw = [24, 22, page_w - 24 - 22]  # Date, SQM, Detail
 
-        # Table header
-        pdf.set_fill_color(50, 55, 65)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font('Helvetica', 'B', 7)
-        pdf.cell(cw_date, 5, 'Date', border=1, fill=True)
-        pdf.cell(cw_prod, 5, 'Production', border=1, fill=True)
-        pdf.cell(cw_other, 5, 'Delays / Variations', border=1, fill=True,
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_text_color(0, 0, 0)
+        def da_header():
+            pdf.set_fill_color(50, 55, 65)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 7)
+            pdf.cell(cw[0], 5, ' Date', border=1, fill=True)
+            pdf.cell(cw[1], 5, ' Total m2', border=1, fill=True)
+            pdf.cell(cw[2], 5, ' Production / Delays / Variations', border=1, fill=True)
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
 
-        for entry in period_entries:
-            # Build production text lines
+        da_header()
+
+        for idx, entry in enumerate(period_entries):
+            # Build detail text
+            lines = []
             prod_lines = entry.production_lines if entry.production_lines else [
                 type('PL', (), {'lot_number': entry.lot_number, 'material': entry.material,
-                                'install_sqm': entry.install_sqm, 'install_hours': None})()
+                                'install_sqm': entry.install_sqm})()
             ] if (entry.lot_number or entry.material) else []
-
-            prod_parts = []
             for pl in prod_lines:
                 p = []
                 if pl.lot_number:
@@ -724,102 +721,47 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                 if pl.install_sqm:
                     p.append(f'{pl.install_sqm} m\u00b2')
                 if p:
-                    prod_parts.append((' ', ' - '.join(p)))
-            if entry.total_sqm:
-                prod_parts.append(('B', f'Total: {entry.total_sqm} m\u00b2'))
+                    lines.append(('P', ' - '.join(p)))
 
-            # Build delay/variation text lines
-            other_parts = []
             if entry.delay_lines:
                 for dl in entry.delay_lines:
                     if (dl.hours or 0) > 0:
-                        desc = dl.description[:35] if dl.description else ''
-                        other_parts.append(('D', f'{dl.reason} {dl.hours}h {desc}'.strip()))
-            elif entry.delay_hours and entry.delay_hours > 0:
-                desc = entry.delay_description[:35] if entry.delay_description else ''
-                other_parts.append(('D', f'{entry.delay_reason or "Delay"} {entry.delay_hours}h {desc}'.strip()))
+                        lines.append(('D', f'{dl.reason} {dl.hours}h'))
+            elif (entry.delay_hours or 0) > 0:
+                lines.append(('D', f'{entry.delay_reason or "Delay"} {entry.delay_hours}h'))
 
             if entry.variation_lines:
                 for vl in entry.variation_lines:
                     if (vl.hours or 0) > 0:
-                        vnum = f'V{vl.variation_number}' if vl.variation_number else 'Var'
-                        desc = vl.description[:30] if vl.description else ''
-                        other_parts.append(('V', f'{vnum} {vl.hours}h {desc}'.strip()))
+                        vn = f'V{vl.variation_number}' if vl.variation_number else 'Var'
+                        lines.append(('V', f'{vn} {vl.hours}h'))
 
             if entry.machines_stood_down:
-                other_parts.append(('S', 'Machines stood down'))
+                lines.append(('S', 'Machines stood down'))
 
-            max_rows = max(len(prod_parts), len(other_parts), 1)
-            block_h = max_rows * row_h + 1
+            detail = '; '.join(t for _, t in lines) if lines else '-'
+            # Truncate to fit cell
+            if len(detail) > 90:
+                detail = detail[:87] + '...'
 
-            # Page break check — if this entry won't fit, start new page
-            if pdf.get_y() + block_h > pdf.h - pdf.b_margin - 5:
+            # Page break
+            if pdf.get_y() + 5 > pdf.h - pdf.b_margin - 3:
                 pdf.add_page()
-                section_header('DAILY ACTIVITIES (continued)')
-                pdf.set_fill_color(50, 55, 65)
-                pdf.set_text_color(255, 255, 255)
-                pdf.set_font('Helvetica', 'B', 7)
-                pdf.cell(cw_date, 5, 'Date', border=1, fill=True)
-                pdf.cell(cw_prod, 5, 'Production', border=1, fill=True)
-                pdf.cell(cw_other, 5, 'Delays / Variations', border=1, fill=True,
-                         new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_text_color(0, 0, 0)
+                section_header('DAILY ACTIVITIES (cont.)')
+                da_header()
 
-            # Alternating row background
-            row_idx = period_entries.index(entry)
-            if row_idx % 2 == 0:
-                pdf.set_fill_color(248, 249, 252)
-            else:
-                pdf.set_fill_color(255, 255, 255)
+            bg = (245, 247, 252) if idx % 2 == 0 else (255, 255, 255)
+            pdf.set_fill_color(*bg)
+            pdf.set_font('Helvetica', 'B', 7)
+            pdf.set_text_color(30, 30, 30)
+            pdf.cell(cw[0], 5, safe(f' {entry.entry_date.strftime("%a %d/%m")}'), border=1, fill=True)
+            pdf.set_font('Helvetica', 'B', 7)
+            pdf.cell(cw[1], 5, safe(f' {entry.total_sqm}'), border=1, fill=True, align='R')
+            pdf.set_font('Helvetica', '', 7)
+            pdf.cell(cw[2], 5, safe(f' {detail}'), border=1, fill=True)
+            pdf.ln()
 
-            start_y = pdf.get_y()
-
-            for i in range(max_rows):
-                x0 = pdf.l_margin
-
-                # Date column (only on first row)
-                pdf.set_xy(x0, start_y + i * row_h)
-                pdf.set_font('Helvetica', 'B' if i == 0 else '', 7)
-                pdf.set_text_color(30, 30, 30)
-                if i == 0:
-                    pdf.cell(cw_date, row_h, safe(entry.entry_date.strftime('%a %d/%m')),
-                             border='L', fill=True)
-                else:
-                    pdf.cell(cw_date, row_h, '', border='L', fill=True)
-
-                # Production column
-                pdf.set_font('Helvetica', '', 7)
-                pdf.set_text_color(30, 30, 30)
-                if i < len(prod_parts):
-                    style, txt = prod_parts[i]
-                    if style == 'B':
-                        pdf.set_font('Helvetica', 'B', 7)
-                    pdf.cell(cw_prod, row_h, safe(txt), border='L', fill=True)
-                else:
-                    pdf.cell(cw_prod, row_h, '', border='L', fill=True)
-
-                # Delays/Variations column
-                if i < len(other_parts):
-                    tag, txt = other_parts[i]
-                    if tag == 'D':
-                        pdf.set_text_color(180, 50, 50)
-                    elif tag == 'V':
-                        pdf.set_text_color(160, 100, 0)
-                    else:
-                        pdf.set_text_color(0, 110, 130)
-                    pdf.set_font('Helvetica', '', 7)
-                    pdf.cell(cw_other, row_h, safe(txt), border='LR', fill=True,
-                             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                else:
-                    pdf.cell(cw_other, row_h, '', border='LR', fill=True,
-                             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-            # Bottom border for the row — solid line to separate days
-            pdf.set_draw_color(160, 160, 160)
-            pdf.set_line_width(0.3)
-            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-            pdf.set_text_color(0, 0, 0)
-            pdf.set_draw_color(200, 200, 200)
+        pdf.set_text_color(0, 0, 0)
 
         # ── Delay & Variation Register (separate page) ──────────────
         delay_entries_all = [e for e in period_entries
@@ -829,80 +771,63 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
             pdf.add_page()
             section_header('DELAY & VARIATION REGISTER')
 
-            def register_header():
+            rcw = [24, 28, 14, page_w - 24 - 28 - 14]
+
+            def reg_header():
                 pdf.set_fill_color(50, 55, 65)
                 pdf.set_text_color(255, 255, 255)
                 pdf.set_font('Helvetica', 'B', 7)
-                pdf.cell(25, 5, 'Date', border=1, fill=True)
-                pdf.cell(28, 5, 'Type', border=1, fill=True)
-                pdf.cell(14, 5, 'Hours', border=1, fill=True, align='C')
-                pdf.cell(page_w - 25 - 28 - 14, 5, 'Description / Notes', border=1, fill=True)
+                pdf.cell(rcw[0], 5, ' Date', border=1, fill=True)
+                pdf.cell(rcw[1], 5, ' Type', border=1, fill=True)
+                pdf.cell(rcw[2], 5, ' Hours', border=1, fill=True, align='C')
+                pdf.cell(rcw[3], 5, ' Description', border=1, fill=True)
                 pdf.ln()
                 pdf.set_text_color(0, 0, 0)
 
-            register_header()
-            dcw = [25, 28, 14, page_w - 25 - 28 - 14]
-            row_idx = 0
+            reg_header()
+            ri = 0
 
-            def render_register_row(date_str, type_label, type_color, hours, description):
-                nonlocal row_idx
-                # Estimate height needed
-                desc_text = safe(description or '-')
-                est_lines = max(1, len(desc_text) // 50 + 1)
-                needed = est_lines * 4 + 2
-                if pdf.get_y() + needed > pdf.h - pdf.b_margin - 5:
+            def reg_row(dt, typ, color, hrs, desc):
+                nonlocal ri
+                if pdf.get_y() + 5 > pdf.h - pdf.b_margin - 3:
                     pdf.add_page()
-                    section_header('DELAY & VARIATION REGISTER (continued)')
-                    register_header()
-
-                bg = (248, 249, 252) if row_idx % 2 == 0 else (255, 255, 255)
+                    section_header('DELAY & VARIATION REGISTER (cont.)')
+                    reg_header()
+                bg = (245, 247, 252) if ri % 2 == 0 else (255, 255, 255)
                 pdf.set_fill_color(*bg)
-                y0 = pdf.get_y()
-
-                # Date
-                pdf.set_font('Helvetica', 'B', 7)
+                pdf.set_font('Helvetica', '', 7)
                 pdf.set_text_color(30, 30, 30)
-                pdf.cell(dcw[0], 4, safe(date_str), border='LB', fill=True)
-                # Type
-                pdf.set_text_color(*type_color)
+                pdf.cell(rcw[0], 5, safe(f' {dt}'), border=1, fill=True)
+                pdf.set_text_color(*color)
                 pdf.set_font('Helvetica', 'B', 7)
-                pdf.cell(dcw[1], 4, safe(type_label), border='LB', fill=True)
-                # Hours
+                pdf.cell(rcw[1], 5, safe(f' {typ}'), border=1, fill=True)
                 pdf.set_text_color(30, 30, 30)
                 pdf.set_font('Helvetica', '', 7)
-                pdf.cell(dcw[2], 4, safe(f'{hours}h'), border='LB', fill=True, align='C')
-                # Description — use multi_cell to wrap
-                pdf.set_text_color(50, 50, 50)
-                pdf.set_font('Helvetica', '', 7)
-                x_desc = pdf.get_x()
-                pdf.multi_cell(dcw[3], 4, desc_text, border='LRB', fill=True,
-                               new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-                row_idx += 1
+                pdf.cell(rcw[2], 5, safe(f'{hrs}h'), border=1, fill=True, align='C')
+                pdf.set_text_color(60, 60, 60)
+                # Truncate desc to fit
+                d = safe(desc or '-')
+                if len(d) > 65:
+                    d = d[:62] + '...'
+                pdf.cell(rcw[3], 5, safe(f' {d}'), border=1, fill=True)
+                pdf.ln()
+                ri += 1
 
             for entry in delay_entries_all:
-                date_str = entry.entry_date.strftime('%a %d/%m')
-
+                dt = entry.entry_date.strftime('%a %d/%m')
                 if entry.delay_lines:
                     for dl in entry.delay_lines:
-                        if (dl.hours or 0) <= 0:
-                            continue
-                        render_register_row(date_str, dl.reason or 'Delay',
-                                            (180, 50, 50), dl.hours,
-                                            dl.description or '')
-                elif entry.delay_hours and entry.delay_hours > 0:
-                    render_register_row(date_str, entry.delay_reason or 'Delay',
-                                        (180, 50, 50), entry.delay_hours,
-                                        entry.delay_description or '')
-
+                        if (dl.hours or 0) > 0:
+                            reg_row(dt, dl.reason or 'Delay', (180, 50, 50),
+                                    dl.hours, dl.description or '')
+                elif (entry.delay_hours or 0) > 0:
+                    reg_row(dt, entry.delay_reason or 'Delay', (180, 50, 50),
+                            entry.delay_hours, entry.delay_description or '')
                 if entry.variation_lines:
                     for vl in entry.variation_lines:
-                        if (vl.hours or 0) <= 0:
-                            continue
-                        vnum = f'V{vl.variation_number}' if vl.variation_number else 'Variation'
-                        render_register_row(date_str, vnum,
-                                            (160, 100, 0), vl.hours,
-                                            vl.description or '')
+                        if (vl.hours or 0) > 0:
+                            vn = f'V{vl.variation_number}' if vl.variation_number else 'Variation'
+                            reg_row(dt, vn, (160, 100, 0), vl.hours, vl.description or '')
 
             pdf.set_text_color(0, 0, 0)
 
