@@ -65,6 +65,77 @@
   </div>
 </div>
 
+<!-- Project Progress -->
+{% if project_data %}
+<h5 class="fw-semibold mb-3"><i class="bi bi-pie-chart me-2 text-primary"></i>Project Progress</h5>
+<div class="row g-3 mb-4">
+  {% for pd in project_data %}
+  {% set p = pd.project %}
+  {% set prog = pd.progress %}
+  <div class="col-sm-6 col-lg-4">
+    <a href="{{ url_for('projects.project_dashboard', project_id=p.id) }}" class="text-decoration-none">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-3">
+            <!-- Progress donut -->
+            <div style="width:70px;height:70px;position:relative;flex-shrink:0;">
+              {% set actual_pct = prog.overall_pct if prog else 0 %}
+              {% set should_pct = prog.should_be_pct if prog and prog.should_be_pct is not none else 0 %}
+              <svg viewBox="0 0 36 36" style="width:100%;height:100%;transform:rotate(-90deg);">
+                <circle cx="18" cy="18" r="15" fill="none" stroke="#e9ecef" stroke-width="3"/>
+                <circle cx="18" cy="18" r="15" fill="none" stroke="#198754" stroke-width="3"
+                        stroke-dasharray="{{ actual_pct }},100" stroke-linecap="round"/>
+                {% if should_pct %}
+                <circle cx="18" cy="18" r="15" fill="none" stroke="#0d6efd" stroke-width="1.5"
+                        stroke-dasharray="{{ should_pct }},100" stroke-linecap="round" opacity="0.4"/>
+                {% endif %}
+              </svg>
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);">
+                <div class="fw-bold" style="font-size:.85rem;">{{ actual_pct | round(0) | int }}%</div>
+              </div>
+            </div>
+            <!-- Info -->
+            <div class="flex-grow-1">
+              <div class="fw-bold text-dark">{{ p.name }}</div>
+              {% if prog %}
+              <div class="small text-muted">
+                {{ prog.total_actual | round(0) | int }} / {{ prog.total_planned | round(0) | int }} m²
+              </div>
+              {% if prog.should_be_pct is not none %}
+              {% set diff = actual_pct - should_pct %}
+              <span class="badge {{ 'bg-success-subtle text-success' if diff >= 0 else 'bg-danger-subtle text-danger' }} mt-1" style="font-size:.7rem;">
+                {% if diff >= 0 %}{{ diff | round(0) | int }}% ahead{% else %}{{ (diff | abs) | round(0) | int }}% behind{% endif %}
+              </span>
+              {% endif %}
+              {% else %}
+              <div class="small text-muted fst-italic">No planned data</div>
+              {% endif %}
+            </div>
+            <!-- Dates -->
+            <div class="text-end" style="flex-shrink:0;">
+              {% if pd.target_finish %}
+              <div class="small text-muted">Target</div>
+              <div class="small fw-semibold">{{ pd.target_finish }}</div>
+              {% endif %}
+              {% if pd.est_finish %}
+              <div class="small text-muted mt-1">Forecast</div>
+              <div class="small fw-semibold {% if pd.variance_days is not none and pd.variance_days > 0 %}text-danger{% elif pd.variance_days is not none and pd.variance_days < 0 %}text-success{% endif %}">
+                {{ pd.est_finish }}
+                {% if pd.variance_days is not none %}
+                <span style="font-size:.65rem;">({% if pd.variance_days > 0 %}+{% endif %}{{ pd.variance_days }}d)</span>
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <!-- Recent Entries -->
 <div class="card border-0 shadow-sm">
   <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
