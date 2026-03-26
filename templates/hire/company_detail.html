@@ -11,12 +11,12 @@
     </div>
   </div>
   <div class="d-flex align-items-center gap-3">
-    {% if company.avg_overall is not none %}
+    {% if company.pct_score is not none %}
     <div class="text-center">
-      <div class="fs-2 fw-bold {% if company.avg_overall >= 7 %}text-success{% elif company.avg_overall >= 5 %}text-warning{% else %}text-danger{% endif %}">
-        {{ company.avg_overall }}<span class="fs-6 text-muted">/10</span>
+      <div class="fs-2 fw-bold {% if company.pct_score >= 70 %}text-success{% elif company.pct_score >= 50 %}text-warning{% else %}text-danger{% endif %}">
+        {{ company.pct_score }}%
       </div>
-      <div class="small text-muted">Overall Rating</div>
+      <div class="small text-muted">Overall Score</div>
     </div>
     {% endif %}
     <a href="{{ url_for('hire.hire_companies') }}" class="btn btn-outline-secondary btn-sm">
@@ -60,16 +60,19 @@
             </div>
             <div class="row g-2 mt-1">
               <div class="col-sm-4">
-                <label class="form-label small fw-semibold mb-1">Standdown Handling <span class="text-muted fw-normal">/10</span></label>
-                <input type="number" name="rating_standdown" class="form-control form-control-sm" min="1" max="10" placeholder="1-10">
+                <label class="form-label small fw-semibold mb-1">Delivery <span class="text-muted fw-normal">/10</span></label>
+                <input type="number" name="rating_delivery" class="form-control form-control-sm" min="1" max="10" placeholder="1-10">
+                <div class="form-text" style="font-size:.6rem;">On-time, equipment condition</div>
               </div>
               <div class="col-sm-4">
                 <label class="form-label small fw-semibold mb-1">Communication <span class="text-muted fw-normal">/10</span></label>
                 <input type="number" name="rating_communication" class="form-control form-control-sm" min="1" max="10" placeholder="1-10">
+                <div class="form-text" style="font-size:.6rem;">Responsiveness, clarity</div>
               </div>
               <div class="col-sm-4">
-                <label class="form-label small fw-semibold mb-1">Delivery & Condition <span class="text-muted fw-normal">/10</span></label>
-                <input type="number" name="rating_delivery" class="form-control form-control-sm" min="1" max="10" placeholder="1-10">
+                <label class="form-label small fw-semibold mb-1">Wet Weather Policy <span class="text-muted fw-normal">/10</span></label>
+                <input type="number" name="rating_standdown" class="form-control form-control-sm" min="1" max="10" placeholder="1-10">
+                <div class="form-text" style="font-size:.6rem;">Standdown handling, flexibility</div>
               </div>
             </div>
             <div class="mt-2">
@@ -92,8 +95,9 @@
             </div>
             <div class="d-flex align-items-center gap-2">
               {% if r.avg_score is not none %}
-              <span class="badge fs-6 {% if r.avg_score >= 7 %}bg-success{% elif r.avg_score >= 5 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-                {{ r.avg_score }}/10
+              {% set rpct = (r.avg_score * 10) | round(0) | int %}
+              <span class="badge fs-6 {% if rpct >= 70 %}bg-success{% elif rpct >= 50 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                {{ rpct }}%
               </span>
               {% endif %}
               <form method="POST" action="{{ url_for('hire.hire_review_delete', review_id=r.id) }}" class="d-inline"
@@ -103,14 +107,14 @@
             </div>
           </div>
           <div class="d-flex gap-3 mt-2 small">
-            {% if r.rating_standdown is not none %}
-            <span class="text-muted">Standdown: <strong>{{ r.rating_standdown }}/10</strong></span>
+            {% if r.rating_delivery is not none %}
+            <span class="text-muted">Delivery: <strong>{{ r.rating_delivery }}/10</strong></span>
             {% endif %}
             {% if r.rating_communication is not none %}
             <span class="text-muted">Comms: <strong>{{ r.rating_communication }}/10</strong></span>
             {% endif %}
-            {% if r.rating_delivery is not none %}
-            <span class="text-muted">Delivery: <strong>{{ r.rating_delivery }}/10</strong></span>
+            {% if r.rating_standdown is not none %}
+            <span class="text-muted">Wet Weather: <strong>{{ r.rating_standdown }}/10</strong></span>
             {% endif %}
           </div>
           {% if r.comments %}

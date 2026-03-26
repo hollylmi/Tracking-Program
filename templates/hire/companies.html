@@ -54,12 +54,12 @@
               {% if c.phone %}<div class="small text-muted"><i class="bi bi-telephone me-1"></i>{{ c.phone }}</div>{% endif %}
               {% if c.email %}<div class="small text-muted"><i class="bi bi-envelope me-1"></i>{{ c.email }}</div>{% endif %}
             </div>
-            {% if c.avg_overall is not none %}
+            {% if c.pct_score is not none %}
             <div class="text-center">
-              <div class="fs-3 fw-bold {% if c.avg_overall >= 7 %}text-success{% elif c.avg_overall >= 5 %}text-warning{% else %}text-danger{% endif %}">
-                {{ c.avg_overall }}
+              <div class="fs-3 fw-bold {% if c.pct_score >= 70 %}text-success{% elif c.pct_score >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                {{ c.pct_score }}%
               </div>
-              <div class="small text-muted">/10</div>
+              <div class="small text-muted">score</div>
             </div>
             {% endif %}
           </div>

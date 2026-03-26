@@ -186,7 +186,7 @@ def equipment_overview():
             hired_machines = []
     else:
         own_machines = Machine.query.order_by(Machine.name).all()
-        hired_machines = HiredMachine.query.order_by(HiredMachine.machine_name).all()
+        hired_machines = HiredMachine.query.filter_by(active=True).order_by(HiredMachine.machine_name).all()
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
     own_breakdowns = {b.machine_id: b for b in

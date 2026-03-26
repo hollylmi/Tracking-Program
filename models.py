@@ -360,10 +360,17 @@ class HireCompany(db.Model):
 
     @property
     def avg_overall(self):
+        """Average score out of 10 across all reviews."""
         if not self.reviews:
             return None
         scores = [r.avg_score for r in self.reviews if r.avg_score is not None]
         return round(sum(scores) / len(scores), 1) if scores else None
+
+    @property
+    def pct_score(self):
+        """Overall percentage score (avg × 10)."""
+        avg = self.avg_overall
+        return round(avg * 10) if avg is not None else None
 
     def __repr__(self):
         return f'<HireCompany {self.name}>'

@@ -264,9 +264,30 @@ def hire_return(hm_id):
     hm.active = False
     if not hm.return_date:
         hm.return_date = date.today()
+
+    # Auto-create the hire company if it doesn't exist
+    company = None
+    if hm.hire_company:
+        company = HireCompany.query.filter_by(name=hm.hire_company).first()
+        if not company:
+            company = HireCompany(
+                name=hm.hire_company,
+                phone=hm.hire_company_phone,
+                email=hm.hire_company_email,
+            )
+            db.session.add(company)
+            db.session.flush()
+
     db.session.commit()
     flash(f'"{hm.machine_name}" marked as returned ({hm.return_date.strftime("%d/%m/%Y")}).', 'success')
-    return redirect(url_for('hire.hire_detail', hm_id=hm_id))
+
+    # Redirect to the company page so user can leave a review
+    if company:
+        flash(f'Please leave a review for {company.name}.', 'info')
+        return redirect(url_for('hire.hire_company_detail', company_id=company.id))
+
+    # Fall back to equipment page
+    return redirect(url_for('equipment.equipment_overview') + '#tab-hired')
 
 
 @hire_bp.route('/hire/<int:hm_id>/reactivate', methods=['POST'])
