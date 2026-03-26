@@ -368,6 +368,61 @@ def generate_project_report_pdf(project, progress, delay_summary, cost_estimate,
             pdf.set_text_color(0, 0, 0)
     pdf.ln(4)
 
+    # ── Project Status Box ─────────────────────────────────────────
+    if progress and progress.get('should_be_pct') is not None:
+        section_header('PROJECT STATUS')
+        pdf.ln(2)
+
+        total_planned_days = progress.get('total_planned_days', 0)
+        site_delay_days = progress.get('site_delay_days', 0)
+        variation_delay_days = progress.get('variation_delay_days', 0)
+        total_delay_days = site_delay_days + variation_delay_days
+        workable_days = total_planned_days  # planned working days (excl weekends/holidays already)
+        actual_pct = progress['overall_pct']
+        should_pct = progress['should_be_pct']
+
+        # Status summary in a box
+        pdf.set_fill_color(248, 250, 255)
+        pdf.set_draw_color(180, 190, 220)
+        x0 = pdf.l_margin
+        box_w = pdf.w - pdf.l_margin - pdf.r_margin
+        box_y = pdf.get_y()
+
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.set_xy(x0, box_y)
+
+        # Row 1: Estimated vs Workable
+        pdf.cell(box_w / 2, 6, safe(f'  Estimated Duration: {total_planned_days} working days'), border='LT')
+        pdf.cell(box_w / 2, 6, safe(f'  Workable Days (excl. delays): {total_planned_days - total_delay_days}'),
+                 border='RT', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        # Row 2: Delay breakdown
+        pdf.set_font('Helvetica', '', 8)
+        pdf.cell(box_w / 2, 5, safe(f'  Site Delays: {site_delay_days} days'),
+                 border='L')
+        pdf.cell(box_w / 2, 5, safe(f'  Client Variations: {variation_delay_days} days'),
+                 border='R', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        # Row 3: Progress
+        pdf.set_font('Helvetica', 'B', 9)
+        actual_color = (0, 140, 60) if actual_pct >= should_pct else (180, 0, 0)
+        pdf.cell(box_w / 2, 6, safe(f'  Actual Progress: {actual_pct}%'), border='L')
+        pdf.cell(box_w / 2, 6, safe(f'  Expected Progress: {should_pct}%'),
+                 border='R', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        # Row 4: Ahead/Behind
+        diff = round(actual_pct - should_pct, 1)
+        if diff >= 0:
+            pdf.set_text_color(0, 140, 60)
+            status_text = f'  STATUS: {diff}% AHEAD OF SCHEDULE'
+        else:
+            pdf.set_text_color(180, 0, 0)
+            status_text = f'  STATUS: {abs(diff)}% BEHIND SCHEDULE'
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(box_w, 7, safe(status_text), border='LRB', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(4)
+
     # Progress by Lot / Material table
     if progress and progress.get('tasks'):
         section_header('PROGRESS BY LOT / MATERIAL')
@@ -677,10 +732,7 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 pdf.set_text_color(0, 0, 0)
 
-            if entry.other_work_description:
-                pdf.set_text_color(50, 100, 50)
-                pdf.multi_cell(0, 4, safe(f'Other work: {entry.other_work_description}'),
-                               new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            # other_work_description removed from report
 
             if entry.notes:
                 pdf.set_text_color(80, 80, 80)
