@@ -699,7 +699,7 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                 for vl in entry.variation_lines:
                     if (vl.hours or 0) > 0:
                         vnum = f'V{vl.variation_number}' if vl.variation_number else 'Variation'
-                        pdf.cell(0, 4, safe(f'  \u2022  {vnum}: {vl.description or ""} - {vl.hours}h'),
+                        pdf.cell(0, 4, safe(f'  *  {vnum}: {vl.description or ""} - {vl.hours}h'),
                                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 pdf.set_text_color(0, 0, 0)
 
@@ -711,13 +711,13 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                 pdf.set_font('Helvetica', '', 8)
                 for dl in entry.delay_lines:
                     if (dl.hours or 0) > 0:
-                        pdf.cell(0, 4, safe(f'  \u2022  {dl.reason}: {dl.description or ""} - {dl.hours}h'),
+                        pdf.cell(0, 4, safe(f'  *  {dl.reason}: {dl.description or ""} - {dl.hours}h'),
                                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 pdf.set_text_color(0, 0, 0)
             elif entry.delay_hours and entry.delay_hours > 0:
                 pdf.set_text_color(180, 50, 50)
                 pdf.cell(0, 5,
-                         safe(f'Delay: {entry.delay_hours}h — {entry.delay_reason or "N/A"}'),
+                         safe(f'Delay: {entry.delay_hours}h - {entry.delay_reason or "N/A"}'),
                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 if entry.delay_description:
                     pdf.set_font('Helvetica', 'I', 8)
@@ -755,11 +755,10 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
 
         for entry in delay_entries:
             date_str = entry.entry_date.strftime('%d/%m/%Y')
-            delay_type = 'Client (Billable)' if entry.delay_billable else 'Own (Non-billable)'
             pdf.set_fill_color(255, 243, 226)
             pdf.set_font('Helvetica', 'B', 8)
             pdf.cell(0, 5,
-                     safe(f'{date_str}  --  {entry.delay_hours}h  {entry.delay_reason or ""}  ({delay_type})'),
+                     safe(f'{date_str}  --  {entry.delay_hours}h  {entry.delay_reason or ""}'),
                      new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
             if entry.delay_description:
                 pdf.set_font('Helvetica', '', 8)
@@ -787,7 +786,7 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
         for cat in delay_summary:
             impact = round(cat['hours'] / hrs_per_day, 1)
             pdf.cell(col_w2[0], 5, safe(cat['reason']), border=1)
-            pdf.cell(col_w2[1], 5, 'Client (Billable)' if cat['billable'] else 'Own (Non-billable)', border=1)
+            pdf.cell(col_w2[1], 5, 'Site Delay', border=1)
             pdf.cell(col_w2[2], 5, str(cat['events']), border=1, align='R')
             pdf.cell(col_w2[3], 5, f"{cat['hours']}h", border=1, align='R')
             pdf.cell(col_w2[4], 5, f"~{impact}d", border=1, align='R')
