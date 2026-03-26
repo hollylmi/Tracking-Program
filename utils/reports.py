@@ -403,6 +403,7 @@ def generate_project_report_pdf(project, progress, delay_summary, cost_estimate,
     # PAGE 2 — Gantt Chart (screenshot via playwright)
     # ════════════════════════════════════════════════════════════════════
     if gantt_data and gantt_data.get('rows'):
+      try:
         from playwright.sync_api import sync_playwright
 
         n_rows = len(gantt_data['rows'])
@@ -571,6 +572,12 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
 
         pdf.set_margins(15, 15, 15)
         pdf.set_auto_page_break(auto=True, margin=15)
+      except Exception:
+        # Playwright/Chromium not available — skip Gantt page
+        pdf.add_page()
+        pdf.set_font('Helvetica', 'I', 10)
+        pdf.cell(0, 10, 'Gantt chart not available (browser rendering unavailable on this server).',
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
 
     # ════════════════════════════════════════════════════════════════════
     # PAGE 3+ — Portrait: Daily Activities
@@ -620,7 +627,7 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                     if pl.install_sqm:
                         parts.append(safe(f'{pl.install_sqm} m\u00b2'))
                     if parts:
-                        pdf.cell(0, 4, safe('  \u2022  ') + '  —  '.join(parts),
+                        pdf.cell(0, 4, safe('  *  ') + '  -  '.join(parts),
                                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 # Total sqm line
                 pdf.set_font('Helvetica', 'B', 8)
@@ -637,7 +644,7 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                 for vl in entry.variation_lines:
                     if (vl.hours or 0) > 0:
                         vnum = f'V{vl.variation_number}' if vl.variation_number else 'Variation'
-                        pdf.cell(0, 4, safe(f'  \u2022  {vnum}: {vl.description or ""} — {vl.hours}h'),
+                        pdf.cell(0, 4, safe(f'  \u2022  {vnum}: {vl.description or ""} - {vl.hours}h'),
                                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 pdf.set_text_color(0, 0, 0)
 
@@ -649,7 +656,7 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                 pdf.set_font('Helvetica', '', 8)
                 for dl in entry.delay_lines:
                     if (dl.hours or 0) > 0:
-                        pdf.cell(0, 4, safe(f'  \u2022  {dl.reason}: {dl.description or ""} — {dl.hours}h'),
+                        pdf.cell(0, 4, safe(f'  \u2022  {dl.reason}: {dl.description or ""} - {dl.hours}h'),
                                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 pdf.set_text_color(0, 0, 0)
             elif entry.delay_hours and entry.delay_hours > 0:
