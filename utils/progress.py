@@ -4,9 +4,15 @@ from utils.helpers import _natural_key
 
 def compute_project_progress(project_id):
     """Return planned vs actual progress data for a project."""
+    project = Project.query.get(project_id)
+    if not project:
+        return None
+
     planned = PlannedData.query.filter_by(project_id=project_id).all()
     if not planned:
         return None
+
+    by_lot = project.track_by_lot if project.track_by_lot is not None else True
 
     entries = (DailyEntry.query
                .filter_by(project_id=project_id)
@@ -15,10 +21,12 @@ def compute_project_progress(project_id):
 
     planned_by_task = {}
     for p in planned:
-        key = (p.lot or '', p.material or '')
+        key = (p.lot or '', p.material or '') if by_lot else ('', p.material or '')
         if key not in planned_by_task:
             planned_by_task[key] = {
-                'lot': p.lot, 'location': p.location, 'material': p.material,
+                'lot': p.lot if by_lot else '',
+                'location': p.location,
+                'material': p.material,
                 'planned_sqm': 0, 'min_day': float('inf'), 'max_day': 0,
             }
         planned_by_task[key]['planned_sqm'] += p.planned_sqm or 0
@@ -28,14 +36,13 @@ def compute_project_progress(project_id):
     actual_by_task = {}
     total_install_hours = 0.0
     for e in entries:
-        # Use production lines if available, else fall back to legacy fields
         if e.production_lines:
             for pl in e.production_lines:
-                key = (pl.lot_number or '', pl.material or '')
+                key = (pl.lot_number or '', pl.material or '') if by_lot else ('', pl.material or '')
                 actual_by_task[key] = actual_by_task.get(key, 0.0) + (pl.install_sqm or 0)
                 total_install_hours += (pl.install_hours or 0)
         else:
-            key = (e.lot_number or '', e.material or '')
+            key = (e.lot_number or '', e.material or '') if by_lot else ('', e.material or '')
             actual_by_task[key] = actual_by_task.get(key, 0.0) + (e.install_sqm or 0)
             total_install_hours += (e.install_hours or 0)
 
@@ -68,16 +75,79 @@ def compute_project_progress(project_id):
     all_entries = DailyEntry.query.filter_by(project_id=project_id).order_by(DailyEntry.entry_date.desc()).first()
     current_crew = all_entries.num_people if all_entries and all_entries.num_people else None
 
-    project = Project.query.get(project_id)
+    # Calculate "where should we be" — working days elapsed excluding delays
+    from models import ProjectNonWorkDate, ProjectWorkedSunday, PublicHoliday, CFMEUDate
+    from datetime import date as _date, timedelta as _td
+    from collections import defaultdict
+
+    all_entries = DailyEntry.query.filter_by(project_id=project_id).all()
+    today = _date.today()
+    total_planned_days = max((p.day_number or 0) for p in planned) if planned else 0
+
+    should_be_pct = None
+    total_weather_days = 0
+    total_variation_days = 0
+    weather_delay_impact = 0
+    variation_delay_impact = 0
+
+    if project.start_date and total_planned_days > 0:
+        # Build non-work date set
+        non_work = {nwd.date for nwd in ProjectNonWorkDate.query.filter_by(project_id=project_id).all()}
+        for h in PublicHoliday.query.all():
+            if 'ALL' in h.states_list() or (project.state and project.state in h.states_list()):
+                non_work.add(h.date)
+        if project.is_cfmeu:
+            for c in CFMEUDate.query.all():
+                if 'ALL' in c.states_list() or (project.state and project.state in c.states_list()):
+                    non_work.add(c.date)
+        worked_sundays = {ws.date for ws in ProjectWorkedSunday.query.filter_by(project_id=project_id).all()}
+
+        # Count weather delay days and variation delay days
+        weather_dates = set()
+        variation_dates = set()
+        for e in all_entries:
+            if (e.delay_hours or 0) > 0 and e.delay_reason and 'weather' in (e.delay_reason or '').lower():
+                weather_dates.add(e.entry_date)
+            if e.variation_lines and sum(vl.hours or 0 for vl in e.variation_lines) > 0:
+                variation_dates.add(e.entry_date)
+
+        total_weather_days = len(weather_dates)
+        total_variation_days = len(variation_dates)
+
+        # Count working days from start to today (excluding Sundays, non-work, weather, variations)
+        working_days_elapsed = 0
+        d = project.start_date
+        end = min(today, project.start_date + _td(days=total_planned_days * 2))  # safety cap
+        while d <= end:
+            is_sunday = d.weekday() == 6 and d not in worked_sundays
+            is_nonwork = d in non_work
+            is_weather = d in weather_dates
+            is_variation = d in variation_dates
+            if not is_sunday and not is_nonwork and not is_weather and not is_variation:
+                working_days_elapsed += 1
+            d += _td(days=1)
+
+        should_be_pct = round(min(working_days_elapsed / total_planned_days * 100, 100), 1)
+
+        # Delay impact on deadline (extra days added)
+        weather_delay_impact = total_weather_days
+        variation_delay_impact = total_variation_days
+
     return {
         'tasks': tasks,
         'total_planned': round(total_planned, 2),
         'total_actual': round(total_actual, 2),
         'total_remaining': round(max(0, total_planned - total_actual), 2),
         'overall_pct': min(overall_pct, 100),
+        'should_be_pct': should_be_pct,
         'install_rate': install_rate,
         'planned_crew': project.planned_crew,
         'current_crew': current_crew,
+        'total_planned_days': total_planned_days,
+        'weather_delay_days': total_weather_days,
+        'variation_delay_days': total_variation_days,
+        'weather_delay_impact': weather_delay_impact,
+        'variation_delay_impact': variation_delay_impact,
     }
 
 

@@ -50,13 +50,19 @@ def compute_gantt_data(project_id):
         current += timedelta(days=1)
 
     # Task info: planned_dates is a set of calendar dates (one per planned row)
+    # When track_by_lot is off, group by material only
+    by_lot = project.track_by_lot if project.track_by_lot is not None else True
     task_info = {}
     task_order_keys = []
     for p in planned:
-        key = (p.lot or '', p.material or '')
-        if key not in task_info:
+        if by_lot:
+            key = (p.lot or '', p.material or '')
             label = (f"{p.lot} — {p.material}" if p.lot and p.material
                      else (p.lot or p.material or 'Unknown'))
+        else:
+            key = ('', p.material or '')
+            label = p.material or 'Unknown'
+        if key not in task_info:
             task_info[key] = {
                 'label': label,
                 'planned_dates': set(),
@@ -75,14 +81,14 @@ def compute_gantt_data(project_id):
     for e in entries:
         if e.production_lines:
             for pl in e.production_lines:
-                key = (pl.lot_number or '', pl.material or '')
+                key = (pl.lot_number or '' if by_lot else '', pl.material or '')
                 if key not in actuals_by_task:
                     actuals_by_task[key] = {'sqm': 0.0, 'hrs': 0.0, 'dates': set()}
                 actuals_by_task[key]['sqm'] += pl.install_sqm or 0
                 actuals_by_task[key]['hrs'] += pl.install_hours or 0
                 actuals_by_task[key]['dates'].add(e.entry_date)
         else:
-            key = (e.lot_number or '', e.material or '')
+            key = (e.lot_number or '' if by_lot else '', e.material or '')
             if key not in actuals_by_task:
                 actuals_by_task[key] = {'sqm': 0.0, 'hrs': 0.0, 'dates': set()}
             actuals_by_task[key]['sqm'] += e.install_sqm or 0
