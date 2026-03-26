@@ -288,7 +288,7 @@
           <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
             <span><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Delay Impact on Deadline</span>
             {% if progress.delay_events %}
-            <span class="badge bg-dark text-white">+{{ progress.weather_delay_impact + progress.variation_delay_impact }}d total</span>
+            <span class="badge bg-dark text-white">{{ progress.total_delay_hours + progress.total_variation_hours }}h lost ({{ progress.delay_impact_days }}d equiv.)</span>
             {% endif %}
           </div>
           <div class="card-body p-0">
@@ -322,8 +322,8 @@
                 <tfoot class="table-light">
                   <tr class="fw-semibold">
                     <td colspan="2">Total: {{ progress.delay_events | length }} events</td>
-                    <td class="text-end">{{ progress.weather_delay_days + progress.variation_delay_days }} days lost</td>
-                    <td class="text-end">+{{ progress.weather_delay_impact + progress.variation_delay_impact }}d to deadline</td>
+                    <td class="text-end">{{ progress.total_delay_hours + progress.total_variation_hours }}h lost</td>
+                    <td class="text-end">+{{ progress.delay_impact_days }}d to deadline</td>
                   </tr>
                 </tfoot>
               </table>
@@ -337,6 +337,80 @@
               No external delays recorded.
             </div>
             {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Hours Breakdown (internal) ────────────────────────────── -->
+    {% if progress.total_available_hours and progress.total_available_hours > 0 %}
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white py-2 fw-semibold small">
+            <i class="bi bi-clock-history me-1 text-secondary"></i>Hours Breakdown
+          </div>
+          <div class="card-body py-3">
+            {% set avail = progress.total_available_hours %}
+            {% set install = progress.total_install_hours %}
+            {% set ext_delay = progress.total_lost_hours %}
+            {% set own_delay = progress.total_own_delay_hours %}
+            {% set non_deploy = progress.non_deploy_hours %}
+            {% set install_pct = (install / avail * 100) if avail > 0 else 0 %}
+            {% set ext_pct = (ext_delay / avail * 100) if avail > 0 else 0 %}
+            {% set own_pct = (own_delay / avail * 100) if avail > 0 else 0 %}
+            {% set nd_pct = (non_deploy / avail * 100) if avail > 0 else 0 %}
+            <!-- Stacked bar -->
+            <div class="d-flex rounded overflow-hidden mb-3" style="height:28px;">
+              {% if install_pct > 0 %}
+              <div class="d-flex align-items-center justify-content-center text-white small fw-semibold" style="width:{{ install_pct }}%;background:#198754;" title="Install: {{ install }}h">
+                {% if install_pct > 8 %}{{ install }}h{% endif %}
+              </div>
+              {% endif %}
+              {% if ext_pct > 0 %}
+              <div class="d-flex align-items-center justify-content-center text-white small fw-semibold" style="width:{{ ext_pct }}%;background:#dc3545;" title="External delays: {{ ext_delay }}h">
+                {% if ext_pct > 8 %}{{ ext_delay }}h{% endif %}
+              </div>
+              {% endif %}
+              {% if own_pct > 0 %}
+              <div class="d-flex align-items-center justify-content-center text-white small fw-semibold" style="width:{{ own_pct }}%;background:#fd7e14;" title="Internal delays: {{ own_delay }}h">
+                {% if own_pct > 8 %}{{ own_delay }}h{% endif %}
+              </div>
+              {% endif %}
+              {% if nd_pct > 0 %}
+              <div class="d-flex align-items-center justify-content-center text-dark small fw-semibold" style="width:{{ nd_pct }}%;background:#e9ecef;" title="Non-deploy: {{ non_deploy }}h">
+                {% if nd_pct > 8 %}{{ non_deploy }}h{% endif %}
+              </div>
+              {% endif %}
+            </div>
+            <!-- Legend + numbers -->
+            <div class="row text-center small">
+              <div class="col">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#198754;" class="me-1"></span>
+                <span class="text-muted">Install</span>
+                <div class="fw-bold">{{ install }}h <small class="text-muted">({{ install_pct | round(0) | int }}%)</small></div>
+              </div>
+              <div class="col">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#dc3545;" class="me-1"></span>
+                <span class="text-muted">External Delays</span>
+                <div class="fw-bold">{{ ext_delay }}h <small class="text-muted">({{ ext_pct | round(0) | int }}%)</small></div>
+              </div>
+              <div class="col">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fd7e14;" class="me-1"></span>
+                <span class="text-muted">Internal Delays</span>
+                <div class="fw-bold">{{ own_delay }}h <small class="text-muted">({{ own_pct | round(0) | int }}%)</small></div>
+              </div>
+              <div class="col">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#e9ecef;border:1px solid #dee2e6;" class="me-1"></span>
+                <span class="text-muted">Non-Deploy</span>
+                <div class="fw-bold">{{ non_deploy }}h <small class="text-muted">({{ nd_pct | round(0) | int }}%)</small></div>
+              </div>
+              <div class="col">
+                <span class="text-muted">Available</span>
+                <div class="fw-bold">{{ avail }}h <small class="text-muted">({{ progress.hours_per_day }}h/day)</small></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

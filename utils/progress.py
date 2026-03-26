@@ -84,11 +84,15 @@ def compute_project_progress(project_id):
     today = _date.today()
     total_planned_days = max((p.day_number or 0) for p in planned) if planned else 0
 
+    hours_per_day = project.hours_per_day or 8
+
     should_be_pct = None
-    total_weather_days = 0
-    total_variation_days = 0
-    weather_delay_impact = 0
-    variation_delay_impact = 0
+    total_delay_hours = 0.0
+    total_variation_hours = 0.0
+    total_own_delay_hours = 0.0
+    delay_impact_days = 0.0
+    total_available_hours = 0.0
+    total_lost_hours = 0.0
     delay_events = []
 
     if project.start_date and total_planned_days > 0:
@@ -103,15 +107,19 @@ def compute_project_progress(project_id):
                     non_work.add(c.date)
         worked_sundays = {ws.date for ws in ProjectWorkedSunday.query.filter_by(project_id=project_id).all()}
 
-        # Count delay days and build event list — use delay_lines if available
-        site_delay_dates = set()
-        variation_dates = set()
+        # Collect delay hours per date and build event list
+        delay_hours_by_date = defaultdict(float)   # date → total delay hours
+        variation_hours_by_date = defaultdict(float)
+        own_delay_hours_by_date = defaultdict(float)
         delay_events = []
         for e in all_entries:
+            # Track internal (own) delay hours
+            if (e.own_delay_hours or 0) > 0:
+                own_delay_hours_by_date[e.entry_date] += e.own_delay_hours
             if e.delay_lines:
                 for dl in e.delay_lines:
                     if (dl.hours or 0) > 0 and dl.reason:
-                        site_delay_dates.add(e.entry_date)
+                        delay_hours_by_date[e.entry_date] += dl.hours
                         delay_events.append({
                             'date': e.entry_date.strftime('%d/%m/%Y'),
                             'day': e.entry_date.strftime('%a'),
@@ -121,7 +129,7 @@ def compute_project_progress(project_id):
                             'type': 'delay',
                         })
             elif (e.delay_hours or 0) > 0 and e.delay_reason:
-                site_delay_dates.add(e.entry_date)
+                delay_hours_by_date[e.entry_date] += e.delay_hours
                 delay_events.append({
                     'date': e.entry_date.strftime('%d/%m/%Y'),
                     'day': e.entry_date.strftime('%a'),
@@ -131,8 +139,8 @@ def compute_project_progress(project_id):
                     'type': 'delay',
                 })
             if e.variation_lines and sum(vl.hours or 0 for vl in e.variation_lines) > 0:
-                variation_dates.add(e.entry_date)
                 var_hrs = sum(vl.hours or 0 for vl in e.variation_lines)
+                variation_hours_by_date[e.entry_date] += var_hrs
                 var_descs = [f"V{vl.variation_number}: {vl.description}" for vl in e.variation_lines if vl.variation_number or vl.description]
                 delay_events.append({
                     'date': e.entry_date.strftime('%d/%m/%Y'),
@@ -144,27 +152,32 @@ def compute_project_progress(project_id):
                 })
         delay_events.sort(key=lambda x: x['date'])
 
-        total_weather_days = len(site_delay_dates)  # renamed but kept for compat
-        total_variation_days = len(variation_dates)
-        all_delay_dates = site_delay_dates | variation_dates
-
-        # Count working days from start to today (excluding Sundays, non-work, ALL site delays)
-        working_days_elapsed = 0
+        # Hours-based "where should we be" — count productive hours, not whole days
+        # For each working day: available = hours_per_day, minus any delay/variation hours
+        total_available_hours = 0.0
+        total_lost_hours = 0.0
         d = project.start_date
         end = min(today, project.start_date + _td(days=total_planned_days * 2))  # safety cap
         while d <= end:
             is_sunday = d.weekday() == 6 and d not in worked_sundays
             is_nonwork = d in non_work
-            is_delay = d in all_delay_dates
-            if not is_sunday and not is_nonwork and not is_delay:
-                working_days_elapsed += 1
+            if not is_sunday and not is_nonwork:
+                total_available_hours += hours_per_day
+                day_delays = delay_hours_by_date.get(d, 0.0) + variation_hours_by_date.get(d, 0.0)
+                # Cap lost hours at hours_per_day (can't lose more than a full day)
+                lost = min(day_delays, hours_per_day)
+                total_lost_hours += lost
             d += _td(days=1)
 
-        should_be_pct = round(min(working_days_elapsed / total_planned_days * 100, 100), 1)
+        productive_hours = total_available_hours - total_lost_hours
+        total_planned_hours = total_planned_days * hours_per_day
+        should_be_pct = round(min(productive_hours / total_planned_hours * 100, 100), 1) if total_planned_hours > 0 else 0
 
-        # Delay impact on deadline (extra days added)
-        weather_delay_impact = total_weather_days
-        variation_delay_impact = total_variation_days
+        # Delay impact on deadline — expressed as equivalent days lost
+        total_delay_hours = sum(delay_hours_by_date.values())
+        total_variation_hours = sum(variation_hours_by_date.values())
+        total_own_delay_hours = sum(own_delay_hours_by_date.values())
+        delay_impact_days = round((total_delay_hours + total_variation_hours) / hours_per_day, 1)
 
     return {
         'tasks': tasks,
@@ -177,11 +190,21 @@ def compute_project_progress(project_id):
         'planned_crew': project.planned_crew,
         'current_crew': current_crew,
         'total_planned_days': total_planned_days,
-        'site_delay_days': total_weather_days,        # all site delays (weather, wind, client, etc.)
-        'variation_delay_days': total_variation_days,
-        'weather_delay_days': total_weather_days,     # kept for backward compat
-        'weather_delay_impact': weather_delay_impact,
-        'variation_delay_impact': variation_delay_impact,
+        'total_delay_hours': round(total_delay_hours, 1),
+        'total_variation_hours': round(total_variation_hours, 1),
+        'delay_impact_days': delay_impact_days,
+        'total_available_hours': round(total_available_hours, 1),
+        'total_lost_hours': round(total_lost_hours, 1),
+        'total_own_delay_hours': round(total_own_delay_hours, 1),
+        'total_install_hours': round(total_install_hours, 1),
+        'non_deploy_hours': round(max(0, total_available_hours - total_install_hours - total_lost_hours - total_own_delay_hours), 1),
+        'hours_per_day': hours_per_day,
+        # Backward compat aliases
+        'site_delay_days': round(total_delay_hours / hours_per_day, 1) if hours_per_day else 0,
+        'variation_delay_days': round(total_variation_hours / hours_per_day, 1) if hours_per_day else 0,
+        'weather_delay_days': round(total_delay_hours / hours_per_day, 1) if hours_per_day else 0,
+        'weather_delay_impact': round(total_delay_hours / hours_per_day, 1) if hours_per_day else 0,
+        'variation_delay_impact': round(total_variation_hours / hours_per_day, 1) if hours_per_day else 0,
         'delay_events': delay_events,
     }
 
