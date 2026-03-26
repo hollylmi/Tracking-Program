@@ -308,30 +308,28 @@ def generate_project_report_pdf(project, progress, delay_summary, cost_estimate,
     # PAGE 1 — Portrait: Summary + Progress + Lot Bars
     # ════════════════════════════════════════════════════════════════════
     pdf.add_page()
-    pdf.set_margins(15, 15, 15)
+    pdf.set_margins(12, 12, 12)
+    page_w = pdf.w - pdf.l_margin - pdf.r_margin
 
     def section_header(title):
-        pdf.ln(1)
-        pdf.set_font('Helvetica', 'B', 9)
+        pdf.set_font('Helvetica', 'B', 8)
         pdf.set_text_color(100, 100, 100)
-        pdf.cell(0, 6, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_draw_color(220, 220, 220)
-        pdf.set_line_width(0.3)
+        pdf.cell(0, 5, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_draw_color(200, 200, 200)
+        pdf.set_line_width(0.2)
         pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
         pdf.set_text_color(0, 0, 0)
-        pdf.ln(1)
 
     def detail_row(label, value):
-        pdf.set_font('Helvetica', '', 8)
-        pdf.set_text_color(120, 120, 120)
-        pdf.cell(50, 5, label)
+        pdf.set_font('Helvetica', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(45, 4, safe(str(label)))
         pdf.set_text_color(30, 30, 30)
-        pdf.set_font('Helvetica', 'B', 8)
-        pdf.cell(0, 5, safe(str(value)) if value is not None else '-',
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(0, 4, safe(str(value)) if value is not None else '-',
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    # Header with logo
-    # Look for logo in common formats
+    # ── Header ────────────────────────────────────────────────────
     _static = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
     logo_path = None
     for ext in ('png', 'jpg', 'jpeg', 'gif'):
@@ -339,82 +337,32 @@ def generate_project_report_pdf(project, progress, delay_summary, cost_estimate,
         if os.path.exists(_p):
             logo_path = _p
             break
+
     header_y = pdf.get_y()
-    page_w = pdf.w - pdf.l_margin - pdf.r_margin
-
+    text_x = pdf.l_margin
     if logo_path:
-        pdf.image(logo_path, x=pdf.l_margin, y=header_y, h=18, keep_aspect_ratio=True)
-        # Company + project name to the right of the logo
-        pdf.set_xy(pdf.l_margin + 45, header_y)
-        pdf.set_font('Helvetica', 'B', 16)
-        pdf.cell(page_w - 45, 7, company, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_x(pdf.l_margin + 45)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.set_text_color(100, 100, 100)
-        pdf.cell(page_w - 45, 5, safe(project.name), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_y(max(pdf.get_y(), header_y + 20))
-    else:
-        pdf.set_font('Helvetica', 'B', 16)
-        pdf.cell(0, 8, company, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.set_text_color(100, 100, 100)
-        pdf.cell(0, 5, safe(project.name), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_text_color(0, 0, 0)
-
-    # Accent line
-    pdf.set_draw_color(135, 200, 235)  # light blue from logo
-    pdf.set_line_width(0.8)
-    pdf.line(pdf.l_margin, pdf.get_y() + 1, pdf.w - pdf.r_margin, pdf.get_y() + 1)
-    pdf.ln(4)
-
-    # Period + date
+        pdf.image(logo_path, x=pdf.l_margin, y=header_y, h=14, keep_aspect_ratio=True)
+        text_x = pdf.l_margin + 38
+    pdf.set_xy(text_x, header_y)
+    tw = page_w - (38 if logo_path else 0)
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.cell(tw, 5, 'PROGRESS REPORT', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_x(text_x)
     pdf.set_font('Helvetica', '', 9)
+    pdf.cell(tw, 4, safe(project.name), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_x(text_x)
+    pdf.set_font('Helvetica', '', 7)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, header_period, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(tw, 3, header_period, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_text_color(0, 0, 0)
+    pdf.set_y(max(pdf.get_y(), header_y + 15))
+    pdf.set_draw_color(135, 200, 235)
+    pdf.set_line_width(0.6)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
     pdf.ln(2)
 
-    # Project Summary
-    section_header('PROJECT SUMMARY')
-    detail_row('Start Date', project.start_date.strftime('%d/%m/%Y') if project.start_date else None)
-    detail_row('Quoted Days', project.quoted_days)
-    detail_row('Hours per Day', project.hours_per_day)
-
-    if progress:
-        all_entries_all = DailyEntry.query.filter_by(project_id=project.id).all()
-        worked_dates = {e.entry_date for e in all_entries_all if e.install_hours and e.install_hours > 0}
-        detail_row('Days Worked', len(worked_dates))
-        detail_row('Overall Progress', f'{progress["overall_pct"]}%')
-        detail_row('Total Planned', f'{progress["total_planned"]} m\u00b2')
-        detail_row('Total Installed', f'{progress["total_actual"]} m\u00b2')
-        detail_row('Remaining', f'{progress["total_remaining"]} m\u00b2')
-        if progress.get('install_rate'):
-            detail_row('Install Rate', f'{progress["install_rate"]} m\u00b2/hr')
-
-    if gantt_data:
-        pdf.ln(2)
-        if gantt_data.get('target_finish'):
-            detail_row('Target Finish', safe(gantt_data['target_finish']))
-        if gantt_data.get('est_finish'):
-            detail_row('Est. Finish', safe(gantt_data['est_finish']))
-        if gantt_data.get('variance_days') is not None:
-            v = gantt_data['variance_days']
-            v_str = f'+{v} days (BEHIND)' if v > 0 else (f'{v} days (AHEAD)' if v < 0 else 'On Schedule')
-            pdf.set_font('Helvetica', 'B', 9)
-            if v > 0:
-                pdf.set_text_color(180, 0, 0)
-            elif v < 0:
-                pdf.set_text_color(0, 140, 60)
-            pdf.cell(55, 6, 'Variance:')
-            pdf.cell(0, 6, safe(v_str), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.set_text_color(0, 0, 0)
-    pdf.ln(4)
-
-    # ── Project Status ──────────────────────────────────────────
+    # ── Status (if available) ─────────────────────────────────────
     if progress and progress.get('should_be_pct') is not None:
-        section_header('STATUS')
-
         total_planned_days = progress.get('total_planned_days', 0)
         site_delay_days = progress.get('site_delay_days', 0)
         variation_delay_days = progress.get('variation_delay_days', 0)
@@ -423,40 +371,107 @@ def generate_project_report_pdf(project, progress, delay_summary, cost_estimate,
         should_pct = progress['should_be_pct']
         diff = round(actual_pct - should_pct, 1)
 
-        # Compact 3-column layout
-        col = (pdf.w - pdf.l_margin - pdf.r_margin) / 3
-        y0 = pdf.get_y()
-
-        # Col 1: Schedule
-        pdf.set_font('Helvetica', 'B', 18)
+        col3 = page_w / 3
+        pdf.set_font('Helvetica', 'B', 16)
         pdf.set_text_color(30, 30, 30)
-        pdf.cell(col, 8, safe(f'{actual_pct}%'), align='C')
-        pdf.cell(col, 8, safe(f'{should_pct}%'), align='C')
+        pdf.cell(col3, 7, safe(f'{actual_pct}%'), align='C')
+        pdf.cell(col3, 7, safe(f'{should_pct}%'), align='C')
         if diff >= 0:
             pdf.set_text_color(0, 140, 60)
-            pdf.cell(col, 8, safe(f'+{diff}%'), align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         else:
             pdf.set_text_color(180, 0, 0)
-            pdf.cell(col, 8, safe(f'{diff}%'), align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(col3, 7, safe(f'{"+%.1f" % diff if diff >= 0 else "%.1f" % diff}%'),
+                 align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_text_color(100, 100, 100)
-        pdf.set_font('Helvetica', '', 7)
-        pdf.cell(col, 4, 'Actual', align='C')
-        pdf.cell(col, 4, 'Expected', align='C')
-        pdf.cell(col, 4, 'Ahead' if diff >= 0 else 'Behind', align='C',
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_font('Helvetica', '', 6)
+        pdf.cell(col3, 3, 'Actual Progress', align='C')
+        pdf.cell(col3, 3, 'Expected Progress', align='C')
+        pdf.cell(col3, 3, 'Ahead' if diff >= 0 else 'Behind',
+                 align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font('Helvetica', '', 6)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 3,
+                 safe(f'{total_planned_days} planned days  |  '
+                      f'{total_delay_days} delay days  |  '
+                      f'{total_planned_days - total_delay_days} workable days'),
+                 align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_text_color(0, 0, 0)
         pdf.ln(2)
 
-        # Compact delay summary
+    # ── Project Summary ───────────────────────────────────────────
+    section_header('PROJECT SUMMARY')
+    col2 = page_w / 2
+    # Row 1
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(45, 4, 'Start Date')
+    pdf.set_text_color(30, 30, 30)
+    pdf.set_font('Helvetica', 'B', 7)
+    pdf.cell(col2 - 45, 4, safe(project.start_date.strftime('%d/%m/%Y') if project.start_date else '-'))
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(35, 4, 'Quoted Days')
+    pdf.set_text_color(30, 30, 30)
+    pdf.set_font('Helvetica', 'B', 7)
+    pdf.cell(0, 4, safe(str(project.quoted_days or '-')), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    if progress:
+        # Row 2
         pdf.set_font('Helvetica', '', 7)
         pdf.set_text_color(100, 100, 100)
-        parts = [f'{total_planned_days} planned days']
-        if total_delay_days:
-            parts.append(f'{total_delay_days} delay days ({site_delay_days} site + {variation_delay_days} variation)')
-        parts.append(f'{total_planned_days - total_delay_days} workable days')
-        pdf.cell(0, 4, '  |  '.join(parts), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        pdf.cell(45, 4, 'Planned')
+        pdf.set_text_color(30, 30, 30)
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(col2 - 45, 4, safe(f'{progress["total_planned"]} m\u00b2'))
+        pdf.set_font('Helvetica', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(35, 4, 'Installed')
+        pdf.set_text_color(30, 30, 30)
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(0, 4, safe(f'{progress["total_actual"]} m\u00b2'),
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        # Row 3
+        pdf.set_font('Helvetica', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(45, 4, 'Remaining')
+        pdf.set_text_color(30, 30, 30)
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(col2 - 45, 4, safe(f'{progress["total_remaining"]} m\u00b2'))
+        if progress.get('install_rate'):
+            pdf.set_font('Helvetica', '', 7)
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(35, 4, 'Rate')
+            pdf.set_text_color(30, 30, 30)
+            pdf.set_font('Helvetica', 'B', 7)
+            pdf.cell(0, 4, safe(f'{progress["install_rate"]} m\u00b2/hr'),
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        else:
+            pdf.ln()
+
+    if gantt_data:
+        pdf.set_font('Helvetica', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(45, 4, 'Target Finish')
+        pdf.set_text_color(30, 30, 30)
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(col2 - 45, 4, safe(gantt_data.get('target_finish') or '-'))
+        pdf.set_font('Helvetica', '', 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(35, 4, 'Est. Finish')
+        pdf.set_text_color(30, 30, 30)
+        pdf.set_font('Helvetica', 'B', 7)
+        v = gantt_data.get('variance_days')
+        est = gantt_data.get('est_finish') or '-'
+        if v is not None and v != 0:
+            if v > 0:
+                pdf.set_text_color(180, 0, 0)
+            else:
+                pdf.set_text_color(0, 140, 60)
+            est += f' ({"+%d" % v if v > 0 else "%d" % v}d)'
+        pdf.cell(0, 4, safe(est), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_text_color(0, 0, 0)
-        pdf.ln(3)
+    pdf.ln(1)
 
     # Progress by Lot / Material table
     if progress and progress.get('tasks'):
@@ -767,14 +782,7 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 pdf.set_text_color(0, 0, 0)
 
-            # other_work_description removed from report
-
-            if entry.notes:
-                pdf.set_text_color(80, 80, 80)
-                pdf.set_font('Helvetica', 'I', 8)
-                pdf.multi_cell(0, 4, safe(f'Notes: {entry.notes}'),
-                               new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_font('Helvetica', '', 8)
+            # notes + other_work removed from report
 
             pdf.set_text_color(0, 0, 0)
             pdf.ln(2)
