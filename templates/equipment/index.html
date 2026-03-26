@@ -578,10 +578,27 @@
                 <span class="text-muted">—</span>
                 {% endif %}
               </td>
-              <td>
+              <td class="text-end text-nowrap">
+                <a href="{{ url_for('hire.hire_detail', hm_id=hm.id) }}" class="btn btn-sm btn-outline-primary py-0 px-1" title="View">
+                  <i class="bi bi-eye"></i>
+                </a>
                 <a href="{{ url_for('hire.hire_edit', hm_id=hm.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Edit">
                   <i class="bi bi-pencil"></i>
                 </a>
+                {% if hm.active %}
+                <form method="POST" action="{{ url_for('hire.hire_return', hm_id=hm.id) }}" class="d-inline"
+                      onsubmit="return confirm('Return {{ hm.machine_name }}?')">
+                  <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-1" title="Return">
+                    <i class="bi bi-box-arrow-right"></i>
+                  </button>
+                </form>
+                {% else %}
+                <form method="POST" action="{{ url_for('hire.hire_reactivate', hm_id=hm.id) }}" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-outline-success py-0 px-1" title="Reactivate">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                  </button>
+                </form>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}

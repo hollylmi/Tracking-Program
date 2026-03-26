@@ -97,6 +97,20 @@
               <a href="{{ url_for('hire.hire_report', hm_id=hm.id) }}" class="btn btn-sm btn-outline-success" title="Report">
                 <i class="bi bi-file-earmark-pdf"></i>
               </a>
+              {% if hm.active %}
+              <form method="POST" action="{{ url_for('hire.hire_return', hm_id=hm.id) }}" class="d-inline"
+                    onsubmit="return confirm('Return {{ hm.machine_name }}?')">
+                <button type="submit" class="btn btn-sm btn-outline-warning" title="Return">
+                  <i class="bi bi-box-arrow-right"></i>
+                </button>
+              </form>
+              {% else %}
+              <form method="POST" action="{{ url_for('hire.hire_reactivate', hm_id=hm.id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-outline-success" title="Reactivate">
+                  <i class="bi bi-arrow-counterclockwise"></i>
+                </button>
+              </form>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
