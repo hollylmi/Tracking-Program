@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ company.name }} — Hire Companies{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h2 class="fw-bold mb-0"><i class="bi bi-building me-2 text-primary"></i>{{ company.name }}</h2>
+    <div class="small text-muted mt-1">
+      {% if company.phone %}<i class="bi bi-telephone me-1"></i>{{ company.phone }} &nbsp; {% endif %}
+      {% if company.email %}<i class="bi bi-envelope me-1"></i>{{ company.email }}{% endif %}
+    </div>
+  </div>
+  <div class="d-flex align-items-center gap-3">
+    {% if company.avg_overall is not none %}
+    <div class="text-center">
+      <div class="fs-2 fw-bold {% if company.avg_overall >= 7 %}text-success{% elif company.avg_overall >= 5 %}text-warning{% else %}text-danger{% endif %}">
+        {{ company.avg_overall }}<span class="fs-6 text-muted">/10</span>
+      </div>
+      <div class="small text-muted">Overall Rating</div>
+    </div>
+    {% endif %}
+    <a href="{{ url_for('hire.hire_companies') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>All Companies
+    </a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Left: Reviews -->
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold">Hire Reviews</h5>
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#addReviewForm">
+          <i class="bi bi-plus me-1"></i>Add Review
+        </button>
+      </div>
+      <div class="collapse" id="addReviewForm">
+        <div class="card-body bg-light border-bottom">
+          <form method="POST" action="{{ url_for('hire.hire_review_add', company_id=company.id) }}">
+            <div class="row g-2">
+              <div class="col-sm-6">
+                <label class="form-label small fw-semibold mb-1">Machine / Item</label>
+                <input type="text" name="machine_description" class="form-control form-control-sm"
+                       placeholder="e.g. 8T Excavator, Telehandler">
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Weekly Rate ($)</label>
+                <input type="number" name="weekly_rate" class="form-control form-control-sm" min="0" step="0.01" placeholder="0.00">
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label small fw-semibold mb-1">Linked Hire</label>
+                <select name="hired_machine_id" class="form-select form-select-sm">
+                  <option value="">— Optional —</option>
+                  {% for hm in hired_history %}
+                  <option value="{{ hm.id }}">{{ hm.machine_name }}{% if hm.plant_id %} ({{ hm.plant_id }}){% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="row g-2 mt-1">
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Standdown Handling <span class="text-muted fw-normal">/10</span></label>
+                <input type="number" name="rating_standdown" class="form-control form-control-sm" min="1" max="10" placeholder="1-10">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Communication <span class="text-muted fw-normal">/10</span></label>
+                <input type="number" name="rating_communication" class="form-control form-control-sm" min="1" max="10" placeholder="1-10">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label small fw-semibold mb-1">Delivery & Condition <span class="text-muted fw-normal">/10</span></label>
+                <input type="number" name="rating_delivery" class="form-control form-control-sm" min="1" max="10" placeholder="1-10">
+              </div>
+            </div>
+            <div class="mt-2">
+              <label class="form-label small fw-semibold mb-1">Comments</label>
+              <textarea name="comments" class="form-control form-control-sm" rows="2" placeholder="Notes about this hire..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm mt-2">Save Review</button>
+          </form>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        {% if company.reviews %}
+        {% for r in company.reviews %}
+        <div class="border-bottom p-3">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="fw-semibold">{{ r.machine_description or 'General' }}</span>
+              {% if r.weekly_rate %}<span class="badge bg-dark text-white ms-2">${{ '%.0f'|format(r.weekly_rate) }}/wk</span>{% endif %}
+              {% if r.hired_machine %}<small class="text-muted ms-1">— {{ r.hired_machine.machine_name }}</small>{% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              {% if r.avg_score is not none %}
+              <span class="badge fs-6 {% if r.avg_score >= 7 %}bg-success{% elif r.avg_score >= 5 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                {{ r.avg_score }}/10
+              </span>
+              {% endif %}
+              <form method="POST" action="{{ url_for('hire.hire_review_delete', review_id=r.id) }}" class="d-inline"
+                    onsubmit="return confirm('Delete this review?')">
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+          </div>
+          <div class="d-flex gap-3 mt-2 small">
+            {% if r.rating_standdown is not none %}
+            <span class="text-muted">Standdown: <strong>{{ r.rating_standdown }}/10</strong></span>
+            {% endif %}
+            {% if r.rating_communication is not none %}
+            <span class="text-muted">Comms: <strong>{{ r.rating_communication }}/10</strong></span>
+            {% endif %}
+            {% if r.rating_delivery is not none %}
+            <span class="text-muted">Delivery: <strong>{{ r.rating_delivery }}/10</strong></span>
+            {% endif %}
+          </div>
+          {% if r.comments %}
+          <div class="small text-muted mt-1 fst-italic">{{ r.comments }}</div>
+          {% endif %}
+          <div class="small text-muted mt-1">{{ r.created_at.strftime('%d/%m/%Y') if r.created_at else '' }}</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-4 text-muted">No reviews yet. Click <strong>Add Review</strong> above.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Hire History -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold">Hire History</h5>
+      </div>
+      <div class="card-body p-0">
+        {% if hired_history %}
+        {% for hm in hired_history %}
+        <a href="{{ url_for('hire.hire_detail', hm_id=hm.id) }}" class="d-block border-bottom px-3 py-2 text-decoration-none">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="fw-semibold text-dark">{{ hm.machine_name }}</div>
+              <div class="small text-muted">
+                {{ hm.project.name }}
+                {% if hm.delivery_date %} · {{ hm.delivery_date.strftime('%d/%m/%Y') }}{% endif %}
+                {% if hm.return_date %} → {{ hm.return_date.strftime('%d/%m/%Y') }}{% endif %}
+              </div>
+            </div>
+            <div>
+              {% if hm.active %}
+              <span class="badge bg-success">Active</span>
+              {% else %}
+              <span class="badge bg-secondary">Returned</span>
+              {% endif %}
+            </div>
+          </div>
+          {% if hm.cost_per_week %}
+          <div class="small text-muted">${{ '%.0f'|format(hm.cost_per_week) }}/wk</div>
+          {% endif %}
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-4 text-muted small">No hire history found for this company.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

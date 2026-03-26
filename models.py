@@ -345,6 +345,54 @@ class StandDown(db.Model):
         return f'<StandDown {self.stand_down_date} - {self.reason[:30]}>'
 
 
+class HireCompany(db.Model):
+    """Database of hire companies for future reference."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False, unique=True)
+    phone = db.Column(db.String(50))
+    email = db.Column(db.String(200))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    reviews = db.relationship('HireReview', backref='company',
+                               cascade='all, delete-orphan', lazy=True,
+                               order_by='HireReview.created_at.desc()')
+
+    @property
+    def avg_overall(self):
+        if not self.reviews:
+            return None
+        scores = [r.avg_score for r in self.reviews if r.avg_score is not None]
+        return round(sum(scores) / len(scores), 1) if scores else None
+
+    def __repr__(self):
+        return f'<HireCompany {self.name}>'
+
+
+class HireReview(db.Model):
+    """Review/rating for a specific hire from a company."""
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('hire_company.id'), nullable=False)
+    hired_machine_id = db.Column(db.Integer, db.ForeignKey('hired_machine.id'), nullable=True)
+    machine_description = db.Column(db.String(300))
+    weekly_rate = db.Column(db.Float)
+    rating_standdown = db.Column(db.Integer)
+    rating_communication = db.Column(db.Integer)
+    rating_delivery = db.Column(db.Integer)
+    comments = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    hired_machine = db.relationship('HiredMachine', backref='reviews')
+
+    @property
+    def avg_score(self):
+        scores = [s for s in [self.rating_standdown, self.rating_communication, self.rating_delivery] if s is not None]
+        return round(sum(scores) / len(scores), 1) if scores else None
+
+    def __repr__(self):
+        return f'<HireReview company={self.company_id}>'
+
+
 class PlannedData(db.Model):
     """Stores planned daily installation data uploaded from spreadsheet."""
     id = db.Column(db.Integer, primary_key=True)

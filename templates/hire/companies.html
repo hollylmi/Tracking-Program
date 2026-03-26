@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Hire Companies — Project Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-building me-2 text-primary"></i>Hire Companies</h2>
+  <a href="{{ url_for('hire.hire_list') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Back to Hired Machines
+  </a>
+</div>
+
+<!-- Add Company -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+    <span class="fw-semibold small">Add Company</span>
+    <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#addCompanyForm">
+      <i class="bi bi-plus me-1"></i>New
+    </button>
+  </div>
+  <div class="collapse" id="addCompanyForm">
+    <div class="card-body bg-light">
+      <form method="POST" action="{{ url_for('hire.hire_company_add') }}" class="row g-2 align-items-end">
+        <div class="col-sm-4">
+          <label class="form-label small fw-semibold mb-1">Company Name *</label>
+          <input type="text" name="name" class="form-control form-control-sm" required placeholder="e.g. Coates Hire">
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-1">Phone</label>
+          <input type="text" name="phone" class="form-control form-control-sm" placeholder="Phone">
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small fw-semibold mb-1">Email</label>
+          <input type="email" name="email" class="form-control form-control-sm" placeholder="Email">
+        </div>
+        <div class="col-sm-2">
+          <button type="submit" class="btn btn-primary btn-sm w-100">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Companies List -->
+{% if companies %}
+<div class="row g-3">
+  {% for c in companies %}
+  <div class="col-sm-6 col-lg-4">
+    <a href="{{ url_for('hire.hire_company_detail', company_id=c.id) }}" class="text-decoration-none">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h5 class="fw-bold text-dark mb-1">{{ c.name }}</h5>
+              {% if c.phone %}<div class="small text-muted"><i class="bi bi-telephone me-1"></i>{{ c.phone }}</div>{% endif %}
+              {% if c.email %}<div class="small text-muted"><i class="bi bi-envelope me-1"></i>{{ c.email }}</div>{% endif %}
+            </div>
+            {% if c.avg_overall is not none %}
+            <div class="text-center">
+              <div class="fs-3 fw-bold {% if c.avg_overall >= 7 %}text-success{% elif c.avg_overall >= 5 %}text-warning{% else %}text-danger{% endif %}">
+                {{ c.avg_overall }}
+              </div>
+              <div class="small text-muted">/10</div>
+            </div>
+            {% endif %}
+          </div>
+          <div class="mt-2 small text-muted">
+            {{ c.reviews | length }} review{{ 's' if c.reviews | length != 1 else '' }}
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-building fs-1 d-block mb-2"></i>
+  No hire companies added yet. Click <strong>New</strong> above to add one.
+</div>
+{% endif %}
+{% endblock %}

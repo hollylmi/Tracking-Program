@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 
 from blueprints.auth import require_role
 from utils.helpers import get_active_project_id
-from models import db, Project, HiredMachine, StandDown
+from models import db, Project, HiredMachine, StandDown, HireCompany, HireReview
 import storage
 from utils.files import allowed_file
 from utils.settings import load_settings
@@ -251,3 +251,104 @@ def hire_report_pdf(hm_id):
     filename = f"standdown_{hm.machine_name.replace(' ', '_')}_{date_from_str}_to_{date_to_str}.pdf"
     return Response(pdf_bytes, mimetype='application/pdf',
                     headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
+
+# ---------------------------------------------------------------------------
+# Return / deactivate hired machine
+# ---------------------------------------------------------------------------
+
+@hire_bp.route('/hire/<int:hm_id>/return', methods=['POST'])
+@require_role('admin', 'supervisor')
+def hire_return(hm_id):
+    hm = HiredMachine.query.get_or_404(hm_id)
+    hm.active = False
+    if not hm.return_date:
+        hm.return_date = date.today()
+    db.session.commit()
+    flash(f'"{hm.machine_name}" marked as returned ({hm.return_date.strftime("%d/%m/%Y")}).', 'success')
+    return redirect(url_for('hire.hire_detail', hm_id=hm_id))
+
+
+@hire_bp.route('/hire/<int:hm_id>/reactivate', methods=['POST'])
+@require_role('admin', 'supervisor')
+def hire_reactivate(hm_id):
+    hm = HiredMachine.query.get_or_404(hm_id)
+    hm.active = True
+    hm.return_date = None
+    db.session.commit()
+    flash(f'"{hm.machine_name}" reactivated.', 'success')
+    return redirect(url_for('hire.hire_detail', hm_id=hm_id))
+
+
+# ---------------------------------------------------------------------------
+# Hire Companies database
+# ---------------------------------------------------------------------------
+
+@hire_bp.route('/hire/companies')
+@require_role('admin', 'supervisor')
+def hire_companies():
+    companies = HireCompany.query.order_by(HireCompany.name).all()
+    return render_template('hire/companies.html', companies=companies)
+
+
+@hire_bp.route('/hire/companies/add', methods=['POST'])
+@require_role('admin', 'supervisor')
+def hire_company_add():
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('Company name is required.', 'danger')
+        return redirect(url_for('hire.hire_companies'))
+    existing = HireCompany.query.filter_by(name=name).first()
+    if existing:
+        flash(f'"{name}" already exists.', 'warning')
+        return redirect(url_for('hire.hire_companies'))
+    company = HireCompany(
+        name=name,
+        phone=request.form.get('phone', '').strip() or None,
+        email=request.form.get('email', '').strip() or None,
+        notes=request.form.get('notes', '').strip() or None,
+    )
+    db.session.add(company)
+    db.session.commit()
+    flash(f'Company "{name}" added.', 'success')
+    return redirect(url_for('hire.hire_companies'))
+
+
+@hire_bp.route('/hire/companies/<int:company_id>')
+@require_role('admin', 'supervisor')
+def hire_company_detail(company_id):
+    company = HireCompany.query.get_or_404(company_id)
+    # Get all hired machines associated with this company name
+    hired_history = HiredMachine.query.filter_by(hire_company=company.name).order_by(HiredMachine.delivery_date.desc()).all()
+    return render_template('hire/company_detail.html', company=company, hired_history=hired_history)
+
+
+@hire_bp.route('/hire/companies/<int:company_id>/review', methods=['POST'])
+@require_role('admin', 'supervisor')
+def hire_review_add(company_id):
+    company = HireCompany.query.get_or_404(company_id)
+    review = HireReview(
+        company_id=company.id,
+        hired_machine_id=request.form.get('hired_machine_id', type=int) or None,
+        machine_description=request.form.get('machine_description', '').strip() or None,
+        weekly_rate=float(request.form.get('weekly_rate')) if request.form.get('weekly_rate') else None,
+        rating_standdown=int(request.form.get('rating_standdown')) if request.form.get('rating_standdown') else None,
+        rating_communication=int(request.form.get('rating_communication')) if request.form.get('rating_communication') else None,
+        rating_delivery=int(request.form.get('rating_delivery')) if request.form.get('rating_delivery') else None,
+        comments=request.form.get('comments', '').strip() or None,
+    )
+    db.session.add(review)
+    db.session.commit()
+    flash('Review added.', 'success')
+    return redirect(url_for('hire.hire_company_detail', company_id=company.id))
+
+
+@hire_bp.route('/hire/reviews/<int:review_id>/delete', methods=['POST'])
+@require_role('admin')
+def hire_review_delete(review_id):
+    review = HireReview.query.get_or_404(review_id)
+    company_id = review.company_id
+    db.session.delete(review)
+    db.session.commit()
+    flash('Review deleted.', 'success')
+    return redirect(url_for('hire.hire_company_detail', company_id=company_id))
