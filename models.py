@@ -375,6 +375,23 @@ class ProjectMachine(db.Model):
         return f'<ProjectMachine project={self.project_id} machine={self.machine_id}>'
 
 
+class EquipmentAssignmentHistory(db.Model):
+    """Tracks every time a machine is assigned/moved between projects."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False)
+    from_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    to_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    moved_at = db.Column(db.DateTime, default=datetime.utcnow)
+    moved_by = db.Column(db.String(200))  # username who made the change
+
+    machine = db.relationship('Machine', backref='assignment_history')
+    from_project = db.relationship('Project', foreign_keys=[from_project_id])
+    to_project = db.relationship('Project', foreign_keys=[to_project_id])
+
+    def __repr__(self):
+        return f'<EquipmentAssignmentHistory machine={self.machine_id}>'
+
+
 class ProjectEquipmentRequirement(db.Model):
     """A named equipment requirement for a project (e.g. 'Excavator x2')."""
     id = db.Column(db.Integer, primary_key=True)

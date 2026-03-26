@@ -9,9 +9,10 @@ from flask_login import current_user
 from blueprints.auth import require_role
 from utils.helpers import get_active_project_id
 
+from flask_login import current_user
 from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBreakdown,
                     BreakdownPhoto, ProjectEquipmentAssignment, ProjectEquipmentRequirement,
-                    ProjectMachine)
+                    ProjectMachine, EquipmentAssignmentHistory)
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -95,6 +96,82 @@ def equipment_group_bulk():
     return redirect(url_for('equipment.equipment_overview') + '#tab-own')
 
 
+@equipment_bp.route('/equipment/assign', methods=['POST'])
+@require_role('admin', 'supervisor')
+def equipment_assign():
+    """Assign or move a machine to a project. Logs history."""
+    from flask import jsonify
+    machine_id = request.form.get('machine_id', type=int)
+    new_project_id = request.form.get('project_id', type=int)
+
+    if not machine_id:
+        flash('Machine not specified.', 'danger')
+        return redirect(url_for('equipment.equipment_overview') + '#tab-own')
+
+    machine = Machine.query.get_or_404(machine_id)
+    existing = ProjectMachine.query.filter_by(machine_id=machine_id).first()
+    old_project_id = existing.project_id if existing else None
+    old_project_name = existing.project.name if existing and existing.project else None
+
+    if new_project_id:
+        new_project = Project.query.get_or_404(new_project_id)
+        if existing:
+            if existing.project_id == new_project_id:
+                flash('Already assigned to that project.', 'warning')
+                return redirect(url_for('equipment.equipment_overview') + '#tab-own')
+            existing.project_id = new_project_id
+        else:
+            db.session.add(ProjectMachine(project_id=new_project_id, machine_id=machine_id))
+
+        # Log history
+        db.session.add(EquipmentAssignmentHistory(
+            machine_id=machine_id,
+            from_project_id=old_project_id,
+            to_project_id=new_project_id,
+            moved_by=current_user.display_name or current_user.username,
+        ))
+        db.session.commit()
+        msg = f'"{machine.name}" assigned to {new_project.name}'
+        if old_project_name:
+            msg += f' (moved from {old_project_name})'
+        flash(msg, 'success')
+    else:
+        # Unassign
+        if existing:
+            db.session.add(EquipmentAssignmentHistory(
+                machine_id=machine_id,
+                from_project_id=old_project_id,
+                to_project_id=None,
+                moved_by=current_user.display_name or current_user.username,
+            ))
+            db.session.delete(existing)
+            db.session.commit()
+            flash(f'"{machine.name}" unassigned from {old_project_name}.', 'info')
+
+    return redirect(url_for('equipment.equipment_overview') + '#tab-own')
+
+
+@equipment_bp.route('/equipment/<int:machine_id>/history')
+@require_role('admin', 'supervisor', 'site')
+def equipment_history(machine_id):
+    """Return assignment history for a machine as JSON."""
+    from flask import jsonify
+    machine = Machine.query.get_or_404(machine_id)
+    history = (EquipmentAssignmentHistory.query
+               .filter_by(machine_id=machine_id)
+               .order_by(EquipmentAssignmentHistory.moved_at.desc())
+               .all())
+    return jsonify({
+        'machine': {'id': machine.id, 'name': machine.name, 'plant_id': machine.plant_id},
+        'history': [{
+            'from': h.from_project.name if h.from_project else '— Unassigned —',
+            'to': h.to_project.name if h.to_project else '— Unassigned —',
+            'date': h.moved_at.strftime('%d/%m/%Y %H:%M') if h.moved_at else '—',
+            'by': h.moved_by or '—',
+        } for h in history],
+    })
+
+
 @equipment_bp.route('/equipment')
 @require_role('admin', 'supervisor', 'site')
 def equipment_overview():
@@ -122,6 +199,12 @@ def equipment_overview():
                             MachineBreakdown.hired_machine_id.isnot(None),
                             MachineBreakdown.repair_status != 'completed'
                         ).all()}
+
+    # Direct project assignments (for the assign dropdown)
+    all_pm = ProjectMachine.query.all()
+    machine_assigned_project = {}
+    for pm in all_pm:
+        machine_assigned_project[pm.machine_id] = pm.project
 
     all_assignments = (ProjectEquipmentAssignment.query
                        .join(ProjectEquipmentRequirement)
@@ -154,6 +237,7 @@ def equipment_overview():
                            own_machines=own_machines,
                            hired_machines=hired_machines,
                            groups=groups,
+                           machine_assigned_project=machine_assigned_project,
                            projects=projects,
                            own_breakdowns=own_breakdowns,
                            hired_breakdowns=hired_breakdowns,
