@@ -109,8 +109,8 @@
                       {% if entry and entry.production_lines %}
                         {% for pl in entry.production_lines %}
                         <tr class="prod-line">
-                          <td><input type="text" name="line_lot[]" class="form-control form-control-sm" value="{{ pl.lot_number or '' }}" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
-                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" value="{{ pl.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
+                          <td class="lot-col"><input type="text" name="line_lot[]" class="form-control form-control-sm" value="{{ pl.lot_number or '' }}" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
+                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" onchange="fetchLineProgress(this.closest('tr'))" value="{{ pl.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
                           <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" value="{{ pl.install_hours or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ pl.install_sqm or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
@@ -118,16 +118,16 @@
                         {% endfor %}
                       {% elif entry and (entry.lot_number or entry.material or entry.install_sqm) %}
                         <tr class="prod-line">
-                          <td><input type="text" name="line_lot[]" class="form-control form-control-sm" value="{{ entry.lot_number or '' }}" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
-                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" value="{{ entry.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
+                          <td class="lot-col"><input type="text" name="line_lot[]" class="form-control form-control-sm" value="{{ entry.lot_number or '' }}" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
+                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" onchange="fetchLineProgress(this.closest('tr'))" value="{{ entry.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
                           <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" value="{{ entry.install_hours or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ entry.install_sqm or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
                         </tr>
                       {% else %}
                         <tr class="prod-line">
-                          <td><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
-                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
+                          <td class="lot-col"><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off"></td>
+                          <td><input type="text" name="line_material[]" class="form-control form-control-sm" onchange="fetchLineProgress(this.closest('tr'))" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
                           <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
@@ -604,8 +604,8 @@
     row.className = 'prod-line';
     row.dataset.lineId = lineId;
     row.innerHTML = `
-      <td><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off" onchange="fetchLineProgress(this.closest('tr'))"></td>
-      <td><input type="text" name="line_material[]" class="form-control form-control-sm" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off" onchange="fetchLineProgress(this.closest('tr'))"></td>
+      <td class="lot-col"><input type="text" name="line_lot[]" class="form-control form-control-sm" placeholder="e.g. LOT 1" list="lotOptions" autocomplete="off" onchange="fetchLineProgress(this.closest('tr'))"></td>
+      <td><input type="text" name="line_material[]" class="form-control form-control-sm" onchange="fetchLineProgress(this.closest('tr'))" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
       <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
       <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
       <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeProductionLine(this)"><i class="bi bi-x-lg"></i></button></td>
@@ -622,7 +622,13 @@
 
     tbody.appendChild(row);
     tbody.appendChild(progRow);
-    row.querySelector('input').focus();
+    // Apply lot visibility to the new row
+    updateLotVisibility();
+    // Focus the first visible input
+    const firstInput = _trackByLot
+      ? row.querySelector('[name="line_lot[]"]')
+      : row.querySelector('[name="line_material[]"]');
+    if (firstInput) firstInput.focus();
   }
 
   function removeProductionLine(btn) {
@@ -636,20 +642,22 @@
 
   function fetchLineProgress(row) {
     const projectId = document.getElementById('projectSelect').value;
-    const lot = row.querySelector('[name="line_lot[]"]').value.trim();
-    const material = row.querySelector('[name="line_material[]"]').value.trim();
+    const lot = (row.querySelector('[name="line_lot[]"]')?.value || '').trim();
+    const material = (row.querySelector('[name="line_material[]"]')?.value || '').trim();
     const lineId = row.dataset.lineId;
     const progRow = document.querySelector(`tr.prod-progress[data-line-id="${lineId}"]`);
 
-    if (!projectId || !lot || !material || !progRow) {
+    // When tracking by lot: need both lot + material
+    // When NOT tracking by lot: need just material
+    const needLot = _trackByLot;
+    if (!projectId || !material || (needLot && !lot) || !progRow) {
       if (progRow) progRow.style.display = 'none';
       return;
     }
 
-    const params = new URLSearchParams({
-      project_id: projectId, lot, material,
-      ...(ENTRY_ID ? { exclude_id: ENTRY_ID } : {}),
-    });
+    const params = new URLSearchParams({ project_id: projectId, material });
+    if (lot) params.set('lot', lot);
+    if (ENTRY_ID) params.set('exclude_id', ENTRY_ID);
 
     fetch('/api/progress?' + params)
       .then(r => r.json())
@@ -790,18 +798,22 @@
   updateMachinesStoodDownVisibility();
 
   // ── Track by lot toggle ─────────────────────────────────────────────────────
+  // Global flag — read by addProductionLine and fetchLineProgress
+  let _trackByLot = true;
+
   function updateLotVisibility() {
     const sel = document.getElementById('projectSelect');
     const opt = sel.options[sel.selectedIndex];
-    const trackLot = !opt || opt.dataset.trackLot !== 'false';
-    // Toggle lot column header
-    document.querySelectorAll('.lot-col').forEach(el => el.style.display = trackLot ? '' : 'none');
-    // Toggle lot inputs in all production line rows
-    document.querySelectorAll('[name="line_lot[]"]').forEach(input => {
-      input.closest('td').style.display = trackLot ? '' : 'none';
+    _trackByLot = !opt || !opt.value || opt.dataset.trackLot !== 'false';
+    // Toggle ALL lot-col elements (th headers + td cells in every row)
+    document.querySelectorAll('.lot-col').forEach(el => {
+      el.style.display = _trackByLot ? '' : 'none';
     });
   }
-  document.getElementById('projectSelect').addEventListener('change', updateLotVisibility);
+  document.getElementById('projectSelect').addEventListener('change', () => {
+    updateLotVisibility();
+    scheduleProgress(); // re-fetch progress for all lines
+  });
   updateLotVisibility();
 
   // Progress is now handled per production line via fetchLineProgress above
