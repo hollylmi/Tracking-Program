@@ -221,6 +221,80 @@ def compute_delay_summary(project_id):
     return result
 
 
+def _build_variation_billing(entry):
+    """Build billing lines from per-variation employee/machine selections."""
+    from models import Employee, Machine
+
+    var_lines = []
+    all_emp_ids = set()
+    all_mach_ids = set()
+
+    for vl in (entry.variation_lines or []):
+        if not vl.hours or vl.hours <= 0:
+            continue
+        var_lines.append({
+            'variation_number': vl.variation_number or '—',
+            'description': vl.description or '',
+            'hours': vl.hours,
+        })
+        for eid in vl.billed_employee_ids:
+            all_emp_ids.add(eid)
+        for mid in vl.billed_machine_ids:
+            all_mach_ids.add(mid)
+
+    total_var_hours = sum(v['hours'] for v in var_lines)
+
+    # If no specific billing selections, fall back to entry's full crew
+    if not all_emp_ids and not all_mach_ids:
+        all_emp_ids = {e.id for e in entry.employees}
+        all_mach_ids = {m.id for m in entry.machines}
+
+    # Build employee cost lines
+    emp_lines = []
+    if all_emp_ids:
+        role_counts = {}
+        for emp in Employee.query.filter(Employee.id.in_(all_emp_ids)).all():
+            if emp.delay_rate:
+                label = emp.role or emp.name
+                rate = emp.delay_rate
+                key = (label, rate)
+                role_counts[key] = role_counts.get(key, 0) + 1
+        for (label, rate), count in sorted(role_counts.items()):
+            cost = round(total_var_hours * rate * count, 2)
+            people_str = f"{count} {'person' if count == 1 else 'people'}"
+            emp_lines.append({
+                'name': f"{label} ({people_str})",
+                'rate': rate, 'count': count,
+                'hours': total_var_hours, 'cost': cost,
+            })
+
+    # Build machine cost lines (grouped by MachineGroup)
+    machine_lines = []
+    if all_mach_ids:
+        seen_groups = {}
+        for m in Machine.query.filter(Machine.id.in_(all_mach_ids)).all():
+            if m.group and m.group.delay_rate:
+                if m.group.id not in seen_groups:
+                    cost = round(total_var_hours * m.group.delay_rate, 2)
+                    machine_lines.append({
+                        'name': m.group.name,
+                        'rate': m.group.delay_rate,
+                        'hours': total_var_hours, 'cost': cost,
+                        'is_group': True,
+                    })
+                    seen_groups[m.group.id] = True
+            elif m.delay_rate:
+                cost = round(total_var_hours * m.delay_rate, 2)
+                machine_lines.append({
+                    'name': f"{m.name}{' (' + m.plant_id + ')' if m.plant_id else ''}",
+                    'rate': m.delay_rate,
+                    'hours': total_var_hours, 'cost': cost,
+                    'is_group': False,
+                })
+
+    return var_lines, emp_lines, machine_lines
+
+
 def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
     """Return per-entry delay breakdown grouped by role, with billable split.
     Includes weather delays, equipment costs (grouped by MachineGroup), and
@@ -302,30 +376,38 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
                     'is_group': False,
                 })
 
-        # Variation lines for this entry (if any)
-        var_lines = []
-        for vl in (entry.variation_lines or []):
-            if vl.hours and vl.hours > 0:
-                var_lines.append({
-                    'variation_number': vl.variation_number or '—',
-                    'description': vl.description or '',
-                    'hours': vl.hours,
-                })
+        # Variation lines for this entry (if any) — with their own billing
+        if entry.variation_lines:
+            var_lines_data, var_emp_lines, var_machine_lines = _build_variation_billing(entry)
+            var_lines = var_lines_data
+            # Add variation-specific costs to the entry total
+            var_cost = sum(r['cost'] for r in var_emp_lines) + sum(r['cost'] for r in var_machine_lines)
+        else:
+            var_lines = []
+            var_emp_lines = []
+            var_machine_lines = []
+            var_cost = 0
 
         is_billable = entry.delay_billable if entry.delay_billable is not None else True
-        entry_cost = sum(r['cost'] for r in emp_lines) + sum(r['cost'] for r in machine_lines)
+        delay_cost = sum(r['cost'] for r in emp_lines) + sum(r['cost'] for r in machine_lines)
+        entry_cost = delay_cost + var_cost
 
         if is_billable:
             total_cost += entry_cost
             total_hours_billable += entry.delay_hours
         else:
             total_hours_non_billable += entry.delay_hours
+        # Variations are always billable
+        total_variation_cost += var_cost
+        total_variation_hours += sum(v['hours'] for v in var_lines)
 
         rows.append({
             'entry': entry,
             'emp_lines': emp_lines,
             'machine_lines': machine_lines,
             'var_lines': var_lines,
+            'var_emp_lines': var_emp_lines,
+            'var_machine_lines': var_machine_lines,
             'entry_cost': entry_cost,
             'billable': is_billable,
             'type': 'delay',
@@ -342,42 +424,15 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
             if var_hours <= 0:
                 continue
 
-            var_lines = [{
-                'variation_number': vl.variation_number or '—',
-                'description': vl.description or '',
-                'hours': vl.hours,
-            } for vl in entry.variation_lines if (vl.hours or 0) > 0]
+            var_lines, emp_lines, machine_lines = _build_variation_billing(entry)
 
-            # Variation entries — equipment costs based on machines on the entry
-            machine_lines = []
-            seen_groups = {}
-            for m in entry.machines:
-                if m.group and m.group.delay_rate:
-                    if m.group.id not in seen_groups:
-                        cost = round(var_hours * m.group.delay_rate, 2)
-                        machine_lines.append({
-                            'name': m.group.name,
-                            'rate': m.group.delay_rate,
-                            'hours': var_hours, 'cost': cost,
-                            'is_group': True,
-                        })
-                        seen_groups[m.group.id] = True
-                elif m.delay_rate:
-                    cost = round(var_hours * m.delay_rate, 2)
-                    machine_lines.append({
-                        'name': f"{m.name}{' (' + m.plant_id + ')' if m.plant_id else ''}",
-                        'rate': m.delay_rate,
-                        'hours': var_hours, 'cost': cost,
-                        'is_group': False,
-                    })
-
-            entry_cost = sum(r['cost'] for r in machine_lines)
+            entry_cost = sum(r['cost'] for r in emp_lines) + sum(r['cost'] for r in machine_lines)
             total_variation_cost += entry_cost
             total_variation_hours += var_hours
 
             rows.append({
                 'entry': entry,
-                'emp_lines': [],
+                'emp_lines': emp_lines,
                 'machine_lines': machine_lines,
                 'var_lines': var_lines,
                 'entry_cost': entry_cost,

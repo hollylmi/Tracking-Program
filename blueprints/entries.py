@@ -162,14 +162,19 @@ def new_entry():
         var_numbers = request.form.getlist('var_number[]')
         var_descs = request.form.getlist('var_desc[]')
         var_hours_list = request.form.getlist('var_hours[]')
+        var_emp_ids_list = request.form.getlist('var_emp_ids[]')
+        var_mach_ids_list = request.form.getlist('var_mach_ids[]')
         for i in range(len(var_numbers)):
             vnum = (var_numbers[i].strip() if i < len(var_numbers) else '') or None
             vdesc = (var_descs[i].strip() if i < len(var_descs) else '') or None
             vhrs = float(var_hours_list[i] or 0) if i < len(var_hours_list) else 0
+            vemp = var_emp_ids_list[i] if i < len(var_emp_ids_list) else '[]'
+            vmach = var_mach_ids_list[i] if i < len(var_mach_ids_list) else '[]'
             if vnum or vdesc or vhrs:
                 db.session.add(EntryVariationLine(
                     entry_id=entry.id, variation_number=vnum,
-                    description=vdesc, hours=vhrs))
+                    description=vdesc, hours=vhrs,
+                    employee_ids_json=vemp, machine_ids_json=vmach))
 
         # Own delays
         entry.own_delay_hours = float(request.form.get('own_delay_hours') or 0)
@@ -290,14 +295,19 @@ def edit_entry(entry_id):
         var_numbers = request.form.getlist('var_number[]')
         var_descs = request.form.getlist('var_desc[]')
         var_hours_list = request.form.getlist('var_hours[]')
+        var_emp_ids_list = request.form.getlist('var_emp_ids[]')
+        var_mach_ids_list = request.form.getlist('var_mach_ids[]')
         for i in range(len(var_numbers)):
             vnum = (var_numbers[i].strip() if i < len(var_numbers) else '') or None
             vdesc = (var_descs[i].strip() if i < len(var_descs) else '') or None
             vhrs = float(var_hours_list[i] or 0) if i < len(var_hours_list) else 0
+            vemp = var_emp_ids_list[i] if i < len(var_emp_ids_list) else '[]'
+            vmach = var_mach_ids_list[i] if i < len(var_mach_ids_list) else '[]'
             if vnum or vdesc or vhrs:
                 db.session.add(EntryVariationLine(
                     entry_id=entry.id, variation_number=vnum,
-                    description=vdesc, hours=vhrs))
+                    description=vdesc, hours=vhrs,
+                    employee_ids_json=vemp, machine_ids_json=vmach))
 
         # Own delays
         entry.own_delay_hours = float(request.form.get('own_delay_hours') or 0)

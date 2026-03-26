@@ -124,7 +124,7 @@
       {% if row.var_lines %}
       <div class="px-3 pt-2">
         <div class="fw-semibold small text-warning mb-1"><i class="bi bi-clipboard-check me-1"></i>Client Variations</div>
-        <table class="table table-sm table-borderless mb-0">
+        <table class="table table-sm table-borderless mb-2">
           <thead><tr class="small text-muted">
             <th>Variation #</th><th>Description</th><th class="text-end">Hours</th>
           </tr></thead>
@@ -138,6 +138,32 @@
           {% endfor %}
           </tbody>
         </table>
+        {% if row.var_emp_lines or row.var_machine_lines %}
+        <div class="small text-muted fw-semibold mb-1">Variation Billing</div>
+        <table class="table table-sm table-borderless mb-0">
+          <thead class="table-light"><tr class="small text-muted">
+            <th>Role / Equipment</th><th class="text-end">Rate/hr</th><th class="text-end">Hours</th><th class="text-end">Cost</th>
+          </tr></thead>
+          <tbody>
+          {% for line in row.var_emp_lines %}
+          <tr>
+            <td class="ps-3"><i class="bi bi-person me-1 text-muted"></i>{{ line.name }}</td>
+            <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
+            <td class="text-end text-muted">{{ line.hours }}</td>
+            <td class="text-end fw-semibold">${{ '%.2f'|format(line.cost) }}</td>
+          </tr>
+          {% endfor %}
+          {% for line in row.var_machine_lines %}
+          <tr>
+            <td class="ps-3">{% if line.is_group %}<i class="bi bi-collection me-1 text-info"></i>{% else %}<i class="bi bi-tools me-1 text-muted"></i>{% endif %}{{ line.name }}</td>
+            <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
+            <td class="text-end text-muted">{{ line.hours }}</td>
+            <td class="text-end fw-semibold">${{ '%.2f'|format(line.cost) }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
       </div>
       {% endif %}
 

@@ -236,6 +236,11 @@ with app.app_context():
         "ALTER TABLE daily_entry ADD COLUMN own_delay_description TEXT",
         # Track by lot toggle
         "ALTER TABLE project ADD COLUMN track_by_lot BOOLEAN DEFAULT TRUE",
+        # Variation billing — per-variation employee/machine selection
+        "ALTER TABLE entry_variation_line ADD COLUMN employee_ids_json TEXT",
+        "ALTER TABLE entry_variation_line ADD COLUMN machine_ids_json TEXT",
+        # Hired machine delay rate
+        "ALTER TABLE hired_machine ADD COLUMN delay_rate FLOAT",
     ]:
         try:
             db.session.execute(db.text(stmt))

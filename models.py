@@ -232,6 +232,18 @@ class EntryVariationLine(db.Model):
     variation_number = db.Column(db.String(100))
     description = db.Column(db.Text)
     hours = db.Column(db.Float, default=0)
+    employee_ids_json = db.Column(db.Text)     # JSON array of employee IDs to bill
+    machine_ids_json = db.Column(db.Text)      # JSON array of machine IDs to bill
+
+    @property
+    def billed_employee_ids(self):
+        import json
+        return json.loads(self.employee_ids_json) if self.employee_ids_json else []
+
+    @property
+    def billed_machine_ids(self):
+        import json
+        return json.loads(self.machine_ids_json) if self.machine_ids_json else []
 
     def __repr__(self):
         return f'<EntryVariationLine V{self.variation_number} {self.hours}h>'
@@ -277,6 +289,7 @@ class HiredMachine(db.Model):
     return_date = db.Column(db.Date)
     cost_per_day = db.Column(db.Float)
     cost_per_week = db.Column(db.Float)
+    delay_rate = db.Column(db.Float)              # $/hr rate charged for delay billing
     count_saturdays = db.Column(db.Boolean, default=True)
     invoice_filename = db.Column(db.String(500))
     invoice_original_name = db.Column(db.String(500))
