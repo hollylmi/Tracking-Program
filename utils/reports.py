@@ -814,12 +814,14 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                     pdf.cell(cw_other, row_h, '', border='LR', fill=True,
                              new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-            # Bottom border for the row
-            pdf.set_draw_color(200, 200, 200)
+            # Bottom border for the row — solid line to separate days
+            pdf.set_draw_color(160, 160, 160)
+            pdf.set_line_width(0.3)
             pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
             pdf.set_text_color(0, 0, 0)
+            pdf.set_draw_color(200, 200, 200)
 
-        # ── Delay Summary (separate page) ─────────────────────────────
+        # ── Delay & Variation Register (separate page) ──────────────
         delay_entries_all = [e for e in period_entries
                              if (e.delay_lines or (e.delay_hours and e.delay_hours > 0)
                                  or e.variation_lines)]
@@ -827,97 +829,86 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
             pdf.add_page()
             section_header('DELAY & VARIATION REGISTER')
 
-            dcw = [28, 30, 18, page_w - 28 - 30 - 18]
-            pdf.set_fill_color(50, 55, 65)
-            pdf.set_text_color(255, 255, 255)
-            pdf.set_font('Helvetica', 'B', 7)
-            for hdr, w in zip(['Date', 'Type', 'Hours', 'Description'], dcw):
-                pdf.cell(w, 5, hdr, border=1, fill=True)
-            pdf.ln()
-            pdf.set_text_color(0, 0, 0)
+            def register_header():
+                pdf.set_fill_color(50, 55, 65)
+                pdf.set_text_color(255, 255, 255)
+                pdf.set_font('Helvetica', 'B', 7)
+                pdf.cell(25, 5, 'Date', border=1, fill=True)
+                pdf.cell(28, 5, 'Type', border=1, fill=True)
+                pdf.cell(14, 5, 'Hours', border=1, fill=True, align='C')
+                pdf.cell(page_w - 25 - 28 - 14, 5, 'Description / Notes', border=1, fill=True)
+                pdf.ln()
+                pdf.set_text_color(0, 0, 0)
+
+            register_header()
+            dcw = [25, 28, 14, page_w - 25 - 28 - 14]
+            row_idx = 0
+
+            def render_register_row(date_str, type_label, type_color, hours, description):
+                nonlocal row_idx
+                # Estimate height needed
+                desc_text = safe(description or '-')
+                est_lines = max(1, len(desc_text) // 50 + 1)
+                needed = est_lines * 4 + 2
+                if pdf.get_y() + needed > pdf.h - pdf.b_margin - 5:
+                    pdf.add_page()
+                    section_header('DELAY & VARIATION REGISTER (continued)')
+                    register_header()
+
+                bg = (248, 249, 252) if row_idx % 2 == 0 else (255, 255, 255)
+                pdf.set_fill_color(*bg)
+                y0 = pdf.get_y()
+
+                # Date
+                pdf.set_font('Helvetica', 'B', 7)
+                pdf.set_text_color(30, 30, 30)
+                pdf.cell(dcw[0], 4, safe(date_str), border='LB', fill=True)
+                # Type
+                pdf.set_text_color(*type_color)
+                pdf.set_font('Helvetica', 'B', 7)
+                pdf.cell(dcw[1], 4, safe(type_label), border='LB', fill=True)
+                # Hours
+                pdf.set_text_color(30, 30, 30)
+                pdf.set_font('Helvetica', '', 7)
+                pdf.cell(dcw[2], 4, safe(f'{hours}h'), border='LB', fill=True, align='C')
+                # Description — use multi_cell to wrap
+                pdf.set_text_color(50, 50, 50)
+                pdf.set_font('Helvetica', '', 7)
+                x_desc = pdf.get_x()
+                pdf.multi_cell(dcw[3], 4, desc_text, border='LRB', fill=True,
+                               new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+                row_idx += 1
 
             for entry in delay_entries_all:
-                date_str = entry.entry_date.strftime('%a %d/%m/%Y')
+                date_str = entry.entry_date.strftime('%a %d/%m')
 
-                # Delay lines
                 if entry.delay_lines:
                     for dl in entry.delay_lines:
                         if (dl.hours or 0) <= 0:
                             continue
-                        if pdf.get_y() + 5 > pdf.h - pdf.b_margin:
-                            pdf.add_page()
-                        pdf.set_font('Helvetica', '', 7)
-                        pdf.set_text_color(30, 30, 30)
-                        pdf.cell(dcw[0], 4, safe(date_str), border='L')
-                        pdf.set_text_color(180, 50, 50)
-                        pdf.cell(dcw[1], 4, safe(dl.reason or 'Delay'), border='L')
-                        pdf.cell(dcw[2], 4, safe(f'{dl.hours}h'), border='L', align='R')
-                        pdf.set_text_color(80, 80, 80)
-                        desc = (dl.description or '')[:55]
-                        pdf.cell(dcw[3], 4, safe(desc), border='LR',
-                                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                        render_register_row(date_str, dl.reason or 'Delay',
+                                            (180, 50, 50), dl.hours,
+                                            dl.description or '')
                 elif entry.delay_hours and entry.delay_hours > 0:
-                    if pdf.get_y() + 5 > pdf.h - pdf.b_margin:
-                        pdf.add_page()
-                    pdf.set_font('Helvetica', '', 7)
-                    pdf.set_text_color(30, 30, 30)
-                    pdf.cell(dcw[0], 4, safe(date_str), border='L')
-                    pdf.set_text_color(180, 50, 50)
-                    pdf.cell(dcw[1], 4, safe(entry.delay_reason or 'Delay'), border='L')
-                    pdf.cell(dcw[2], 4, safe(f'{entry.delay_hours}h'), border='L', align='R')
-                    pdf.set_text_color(80, 80, 80)
-                    desc = (entry.delay_description or '')[:55]
-                    pdf.cell(dcw[3], 4, safe(desc), border='LR',
-                             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    render_register_row(date_str, entry.delay_reason or 'Delay',
+                                        (180, 50, 50), entry.delay_hours,
+                                        entry.delay_description or '')
 
-                # Variation lines
                 if entry.variation_lines:
                     for vl in entry.variation_lines:
                         if (vl.hours or 0) <= 0:
                             continue
-                        if pdf.get_y() + 5 > pdf.h - pdf.b_margin:
-                            pdf.add_page()
-                        pdf.set_font('Helvetica', '', 7)
-                        pdf.set_text_color(30, 30, 30)
-                        pdf.cell(dcw[0], 4, safe(date_str), border='L')
-                        pdf.set_text_color(160, 100, 0)
                         vnum = f'V{vl.variation_number}' if vl.variation_number else 'Variation'
-                        pdf.cell(dcw[1], 4, safe(vnum), border='L')
-                        pdf.cell(dcw[2], 4, safe(f'{vl.hours}h'), border='L', align='R')
-                        pdf.set_text_color(80, 80, 80)
-                        desc = (vl.description or '')[:55]
-                        pdf.cell(dcw[3], 4, safe(desc), border='LR',
-                                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-                pdf.set_draw_color(220, 220, 220)
-                pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+                        render_register_row(date_str, vnum,
+                                            (160, 100, 0), vl.hours,
+                                            vl.description or '')
 
             pdf.set_text_color(0, 0, 0)
 
     # ════════════════════════════════════════════════════════════════════
     # Delay Details in Period
     # ════════════════════════════════════════════════════════════════════
-    if delay_entries:
-        if not period_entries:
-            pdf.add_page()
-        pdf.ln(2)
-        section_header('DELAY DETAILS IN PERIOD')
-
-        for entry in delay_entries:
-            date_str = entry.entry_date.strftime('%d/%m/%Y')
-            pdf.set_fill_color(255, 243, 226)
-            pdf.set_font('Helvetica', 'B', 8)
-            pdf.cell(0, 5,
-                     safe(f'{date_str}  --  {entry.delay_hours}h  {entry.delay_reason or ""}'),
-                     new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
-            if entry.delay_description:
-                pdf.set_font('Helvetica', '', 8)
-                pdf.set_text_color(80, 40, 0)
-                pdf.multi_cell(0, 4, safe(entry.delay_description),
-                               new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_text_color(0, 0, 0)
-            pdf.ln(1)
-
     # ════════════════════════════════════════════════════════════════════
     # All-time Delay Summary
     # ════════════════════════════════════════════════════════════════════
@@ -943,10 +934,43 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
             pdf.ln()
         pdf.ln(4)
 
-    # Footer
+    # ════════════════════════════════════════════════════════════════════
+    # Signature Block
+    # ════════════════════════════════════════════════════════════════════
+    if pdf.get_y() + 40 > pdf.h - pdf.b_margin:
+        pdf.add_page()
+    pdf.ln(6)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.set_line_width(0.2)
+
+    pdf.set_font('Helvetica', 'B', 8)
+    pdf.set_text_color(80, 80, 80)
+    pdf.cell(0, 5, 'AUTHORISATION', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.ln(3)
+
     pdf.set_font('Helvetica', '', 8)
-    pdf.set_text_color(120, 120, 120)
-    pdf.cell(0, 5, f'Generated: {today.strftime("%d/%m/%Y")}',
+    pdf.set_text_color(100, 100, 100)
+    half_sig = page_w / 2 - 5
+    pdf.cell(half_sig, 5, 'Prepared by:')
+    pdf.cell(10, 5, '')
+    pdf.cell(half_sig, 5, 'Approved by:', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(8)
+    pdf.cell(half_sig, 5, '________________________________')
+    pdf.cell(10, 5, '')
+    pdf.cell(half_sig, 5, '________________________________', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(half_sig, 4, 'Name / Signature')
+    pdf.cell(10, 4, '')
+    pdf.cell(half_sig, 4, 'Name / Signature', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(5)
+    pdf.cell(half_sig, 5, 'Date: ____________________')
+    pdf.cell(10, 5, '')
+    pdf.cell(half_sig, 5, 'Date: ____________________', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    pdf.ln(6)
+    pdf.set_font('Helvetica', '', 6)
+    pdf.set_text_color(160, 160, 160)
+    pdf.cell(0, 3, safe(f'Generated {today.strftime("%d/%m/%Y")} | {company}'),
              new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
 
     return bytes(pdf.output())
