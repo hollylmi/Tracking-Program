@@ -699,93 +699,102 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
                      new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             pdf.set_text_color(0, 0, 0)
 
+        lh = 3.5  # line height
+        half = page_w / 2
+
         for entry in period_entries:
-            date_str = entry.entry_date.strftime('%A, %d %B %Y')
+            date_str = entry.entry_date.strftime('%a %d/%m/%Y')
             loc_str = entry.location or ''
 
-            pdf.set_fill_color(228, 238, 255)
-            pdf.set_font('Helvetica', 'B', 9)
-            hdr_parts = [safe(date_str)]
+            # Date header row
+            pdf.set_fill_color(235, 240, 250)
+            pdf.set_font('Helvetica', 'B', 7)
+            hdr = date_str
             if loc_str:
-                hdr_parts.append(safe(loc_str))
-            pdf.cell(0, 6, '  |  '.join(hdr_parts), new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+                hdr += f'  |  {loc_str}'
+            pdf.cell(0, 4, safe(hdr), new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
 
-            pdf.set_font('Helvetica', '', 8)
-            pdf.set_text_color(0, 0, 0)
-
-            # Production — material + sqm only (no hours)
+            # Build production text
             prod_lines = entry.production_lines if entry.production_lines else [
                 type('PL', (), {'lot_number': entry.lot_number, 'material': entry.material,
                                 'install_sqm': entry.install_sqm, 'install_hours': None})()
             ] if (entry.lot_number or entry.material) else []
 
-            if prod_lines:
-                pdf.set_font('Helvetica', 'B', 8)
-                pdf.cell(0, 5, 'Production:', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_font('Helvetica', '', 8)
-                for pl in prod_lines:
-                    parts = []
-                    if pl.lot_number:
-                        parts.append(safe(f'Lot {pl.lot_number}'))
-                    if pl.material:
-                        parts.append(safe(pl.material))
-                    if pl.install_sqm:
-                        parts.append(safe(f'{pl.install_sqm} m\u00b2'))
-                    if parts:
-                        pdf.cell(0, 4, safe('  *  ') + '  -  '.join(parts),
-                                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                # Total sqm line
-                pdf.set_font('Helvetica', 'B', 8)
-                pdf.cell(0, 5, safe(f'Total: {entry.total_sqm} m\u00b2'),
-                         new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_font('Helvetica', '', 8)
+            prod_parts = []
+            for pl in prod_lines:
+                p = []
+                if pl.lot_number:
+                    p.append(f'Lot {pl.lot_number}')
+                if pl.material:
+                    p.append(pl.material)
+                if pl.install_sqm:
+                    p.append(f'{pl.install_sqm} m\u00b2')
+                if p:
+                    prod_parts.append(' - '.join(p))
+            if prod_parts:
+                prod_parts.append(f'Total: {entry.total_sqm} m\u00b2')
+
+            # Build delay/variation text
+            other_parts = []
+            # Delays
+            delay_items = []
+            if entry.delay_lines:
+                for dl in entry.delay_lines:
+                    if (dl.hours or 0) > 0:
+                        desc = f'{dl.description[:40]}' if dl.description else ''
+                        delay_items.append(f'{dl.reason} {dl.hours}h {desc}'.strip())
+            elif entry.delay_hours and entry.delay_hours > 0:
+                desc = f'{entry.delay_description[:40]}' if entry.delay_description else ''
+                delay_items.append(f'{entry.delay_reason or "Delay"} {entry.delay_hours}h {desc}'.strip())
+            for d in delay_items:
+                other_parts.append(('D', d))
 
             # Variations
             if entry.variation_lines:
-                pdf.set_font('Helvetica', 'B', 8)
-                pdf.set_text_color(160, 100, 0)
-                pdf.cell(0, 5, 'Variations:', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_font('Helvetica', '', 8)
                 for vl in entry.variation_lines:
                     if (vl.hours or 0) > 0:
-                        vnum = f'V{vl.variation_number}' if vl.variation_number else 'Variation'
-                        pdf.cell(0, 4, safe(f'  *  {vnum}: {vl.description or ""} - {vl.hours}h'),
-                                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_text_color(0, 0, 0)
-
-            # Delays
-            if entry.delay_lines:
-                pdf.set_font('Helvetica', 'B', 8)
-                pdf.set_text_color(180, 50, 50)
-                pdf.cell(0, 5, 'Delays:', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_font('Helvetica', '', 8)
-                for dl in entry.delay_lines:
-                    if (dl.hours or 0) > 0:
-                        pdf.cell(0, 4, safe(f'  *  {dl.reason}: {dl.description or ""} - {dl.hours}h'),
-                                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_text_color(0, 0, 0)
-            elif entry.delay_hours and entry.delay_hours > 0:
-                pdf.set_text_color(180, 50, 50)
-                pdf.cell(0, 5,
-                         safe(f'Delay: {entry.delay_hours}h - {entry.delay_reason or "N/A"}'),
-                         new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                if entry.delay_description:
-                    pdf.set_font('Helvetica', 'I', 8)
-                    pdf.multi_cell(0, 4, safe(f'  {entry.delay_description}'),
-                                   new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                    pdf.set_font('Helvetica', '', 8)
-                pdf.set_text_color(0, 0, 0)
+                        vnum = f'V{vl.variation_number}' if vl.variation_number else 'Var'
+                        desc = f'{vl.description[:35]}' if vl.description else ''
+                        other_parts.append(('V', f'{vnum} {vl.hours}h {desc}'.strip()))
 
             if entry.machines_stood_down:
-                pdf.set_text_color(0, 110, 130)
-                pdf.cell(0, 5, 'Hired machines stood down',
-                         new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                pdf.set_text_color(0, 0, 0)
+                other_parts.append(('S', 'Machines stood down'))
 
-            # notes + other_work removed from report
+            # Render two columns side by side
+            row_y = pdf.get_y()
+            max_lines = max(len(prod_parts), len(other_parts), 1)
+            pdf.set_font('Helvetica', '', 7)
+
+            for i in range(max_lines):
+                # Left: production
+                pdf.set_x(pdf.l_margin)
+                pdf.set_text_color(30, 30, 30)
+                if i < len(prod_parts):
+                    txt = prod_parts[i]
+                    if i == len(prod_parts) - 1 and txt.startswith('Total'):
+                        pdf.set_font('Helvetica', 'B', 7)
+                    else:
+                        pdf.set_font('Helvetica', '', 7)
+                    pdf.cell(half, lh, safe(txt))
+                else:
+                    pdf.cell(half, lh, '')
+
+                # Right: delays/variations
+                if i < len(other_parts):
+                    tag, txt = other_parts[i]
+                    if tag == 'D':
+                        pdf.set_text_color(180, 50, 50)
+                    elif tag == 'V':
+                        pdf.set_text_color(160, 100, 0)
+                    else:
+                        pdf.set_text_color(0, 110, 130)
+                    pdf.set_font('Helvetica', '', 7)
+                    pdf.cell(half, lh, safe(txt), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                else:
+                    pdf.cell(half, lh, '', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
             pdf.set_text_color(0, 0, 0)
-            pdf.ln(2)
+            pdf.set_font('Helvetica', '', 7)
 
     # ════════════════════════════════════════════════════════════════════
     # Delay Details in Period
