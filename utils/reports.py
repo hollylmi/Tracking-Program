@@ -601,42 +601,74 @@ body {{ margin: 0; padding: 12px; background: #fff; font-family: -apple-system, 
             pdf.set_font('Helvetica', '', 8)
             pdf.set_text_color(0, 0, 0)
 
-            # Production lines (or legacy single lot/material)
+            # Production — material + sqm only (no hours)
             prod_lines = entry.production_lines if entry.production_lines else [
-                type('PL', (), {'lot_number': entry.lot_number, 'material': entry.material, 'install_sqm': entry.install_sqm})()
+                type('PL', (), {'lot_number': entry.lot_number, 'material': entry.material,
+                                'install_sqm': entry.install_sqm, 'install_hours': None})()
             ] if (entry.lot_number or entry.material) else []
 
-            for pl in prod_lines:
-                work_parts = []
-                if pl.lot_number:
-                    work_parts.append(safe(f'Lot {pl.lot_number}'))
-                if pl.material:
-                    work_parts.append(safe(f'{pl.material}'))
-                if pl.install_sqm:
-                    work_parts.append(safe(f'{pl.install_sqm} m\u00b2'))
-                if work_parts:
-                    pdf.cell(0, 5, '   '.join(work_parts), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-            if entry.install_hours:
-                pdf.cell(0, 5, safe(f'Install: {entry.install_hours}h  |  Total: {entry.total_sqm} m\u00b2'),
+            if prod_lines:
+                pdf.set_font('Helvetica', 'B', 8)
+                pdf.cell(0, 5, 'Production:', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.set_font('Helvetica', '', 8)
+                for pl in prod_lines:
+                    parts = []
+                    if pl.lot_number:
+                        parts.append(safe(f'Lot {pl.lot_number}'))
+                    if pl.material:
+                        parts.append(safe(pl.material))
+                    if pl.install_sqm:
+                        parts.append(safe(f'{pl.install_sqm} m\u00b2'))
+                    if parts:
+                        pdf.cell(0, 4, safe('  \u2022  ') + '  —  '.join(parts),
+                                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                # Total sqm line
+                pdf.set_font('Helvetica', 'B', 8)
+                pdf.cell(0, 5, safe(f'Total: {entry.total_sqm} m\u00b2'),
                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.set_font('Helvetica', '', 8)
 
-            if entry.delay_hours and entry.delay_hours > 0:
-                delay_type = 'Client (Billable)' if entry.delay_billable else 'Own (Non-billable)'
-                pdf.set_text_color(160, 70, 0)
+            # Variations
+            if entry.variation_lines:
+                pdf.set_font('Helvetica', 'B', 8)
+                pdf.set_text_color(160, 100, 0)
+                pdf.cell(0, 5, 'Variations:', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.set_font('Helvetica', '', 8)
+                for vl in entry.variation_lines:
+                    if (vl.hours or 0) > 0:
+                        vnum = f'V{vl.variation_number}' if vl.variation_number else 'Variation'
+                        pdf.cell(0, 4, safe(f'  \u2022  {vnum}: {vl.description or ""} — {vl.hours}h'),
+                                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.set_text_color(0, 0, 0)
+
+            # Delays
+            if entry.delay_lines:
+                pdf.set_font('Helvetica', 'B', 8)
+                pdf.set_text_color(180, 50, 50)
+                pdf.cell(0, 5, 'Delays:', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.set_font('Helvetica', '', 8)
+                for dl in entry.delay_lines:
+                    if (dl.hours or 0) > 0:
+                        pdf.cell(0, 4, safe(f'  \u2022  {dl.reason}: {dl.description or ""} — {dl.hours}h'),
+                                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.set_text_color(0, 0, 0)
+            elif entry.delay_hours and entry.delay_hours > 0:
+                pdf.set_text_color(180, 50, 50)
                 pdf.cell(0, 5,
-                         safe(f'Delay: {entry.delay_hours}h -- {entry.delay_reason or "N/A"} ({delay_type})'),
+                         safe(f'Delay: {entry.delay_hours}h — {entry.delay_reason or "N/A"}'),
                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 if entry.delay_description:
                     pdf.set_font('Helvetica', 'I', 8)
                     pdf.multi_cell(0, 4, safe(f'  {entry.delay_description}'),
                                    new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                     pdf.set_font('Helvetica', '', 8)
+                pdf.set_text_color(0, 0, 0)
 
             if entry.machines_stood_down:
                 pdf.set_text_color(0, 110, 130)
-                pdf.cell(0, 5, 'Hired machines stood down (wet weather)',
+                pdf.cell(0, 5, 'Hired machines stood down',
                          new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                pdf.set_text_color(0, 0, 0)
 
             if entry.other_work_description:
                 pdf.set_text_color(50, 100, 50)
