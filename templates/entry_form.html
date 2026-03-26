@@ -706,6 +706,20 @@
     row.querySelector('input').focus();
   }
 
+  // ── Track by lot toggle ─────────────────────────────────────────────────────
+  let _trackByLot = true;
+
+  function updateLotVisibility() {
+    const projectId = document.getElementById('projectSelect').value;
+    const trackVal = PROJECT_TRACK_LOT[projectId];
+    _trackByLot = (trackVal !== false);
+    document.querySelectorAll('.lot-col').forEach(el => {
+      el.style.display = _trackByLot ? '' : 'none';
+    });
+  }
+  // Run immediately so _trackByLot is set before fetchLineProgress is called
+  updateLotVisibility();
+
   // Init: assign lineIds to existing rows and attach progress listeners
   document.querySelectorAll('.prod-line').forEach((row, i) => {
     const lineId = 'line_' + i;
@@ -803,26 +817,7 @@
   // Run on load to set initial state
   updateMachinesStoodDownVisibility();
 
-  // ── Track by lot toggle ─────────────────────────────────────────────────────
-  // Global flag — read by addProductionLine and fetchLineProgress
-  let _trackByLot = true;
-
-  function updateLotVisibility() {
-    const projectId = document.getElementById('projectSelect').value;
-    // Look up in the map — default to true if not found or null
-    const trackVal = PROJECT_TRACK_LOT[projectId];
-    _trackByLot = (trackVal !== false);
-    console.log('LOT TOGGLE: projectId=' + projectId + ' trackVal=' + trackVal + ' _trackByLot=' + _trackByLot + ' lotCols=' + document.querySelectorAll('.lot-col').length);
-    // Toggle ALL lot-col elements (th headers + td cells in every row)
-    document.querySelectorAll('.lot-col').forEach(el => {
-      el.style.display = _trackByLot ? '' : 'none';
-    });
-  }
-  document.getElementById('projectSelect').addEventListener('change', () => {
-    updateLotVisibility();
-    scheduleProgress(); // re-fetch progress for all lines
-  });
-  updateLotVisibility();
+  // (lot toggle code is above the production line init)
 
   // Progress is now handled per production line via fetchLineProgress above
   function scheduleProgress() {
@@ -887,6 +882,7 @@
 
   document.getElementById('projectSelect').addEventListener('change', () => {
     showAllMachines = false;
+    updateLotVisibility();
     filterMachinesByProject();
     fetchPlannedOptions();
     scheduleProgress();
