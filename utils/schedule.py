@@ -7,9 +7,29 @@ from models import (db, ProjectAssignment, EmployeeLeave, EmployeeSwing,
 
 
 def build_day_summary(hm, date_from, date_to):
-    """Return a list of dicts for each day in range, plus summary counts."""
+    """Return a list of dicts for each day in range, plus summary counts.
+    Public holidays and CFMEU dates for the machine's project are treated
+    as non-working days (no hire charge)."""
     sd_map = {sd.stand_down_date: sd.reason for sd in hm.stand_downs}
     count_saturdays = hm.count_saturdays if hm.count_saturdays is not None else True
+
+    # Build set of public holidays + CFMEU dates for the machine's project
+    project = hm.project
+    non_charge_dates = set()
+    non_charge_reasons = {}
+    if project:
+        for h in PublicHoliday.query.filter(
+                PublicHoliday.date >= date_from, PublicHoliday.date <= date_to).all():
+            if 'ALL' in h.states_list() or (project.state and project.state in h.states_list()):
+                non_charge_dates.add(h.date)
+                non_charge_reasons[h.date] = f'PH: {h.name}'
+        if project.is_cfmeu:
+            for c in CFMEUDate.query.filter(
+                    CFMEUDate.date >= date_from, CFMEUDate.date <= date_to).all():
+                if 'ALL' in c.states_list() or (project.state and project.state in c.states_list()):
+                    non_charge_dates.add(c.date)
+                    non_charge_reasons[c.date] = f'CFMEU: {c.name}'
+
     days = []
     current = date_from
     while current <= date_to:
@@ -19,31 +39,41 @@ def build_day_summary(hm, date_from, date_to):
 
         if is_sunday or (is_saturday and not count_saturdays):
             status = 'non_working'
+            reason = ''
         elif hm.delivery_date and current < hm.delivery_date:
             status = 'not_delivered'
+            reason = ''
         elif hm.return_date and current > hm.return_date:
             status = 'returned'
+            reason = ''
+        elif current in non_charge_dates:
+            status = 'non_working'
+            reason = non_charge_reasons.get(current, 'Public Holiday / RDO')
         elif current in sd_map:
             status = 'stood_down'
+            reason = sd_map[current]
         else:
             status = 'on_site'
+            reason = ''
 
         days.append({
             'date': current,
             'day_name': current.strftime('%A'),
             'status': status,
-            'reason': sd_map.get(current, ''),
+            'reason': reason or sd_map.get(current, ''),
         })
         current += timedelta(days=1)
 
     on_site    = sum(1 for d in days if d['status'] == 'on_site')
     stood_down = sum(1 for d in days if d['status'] == 'stood_down')
+    non_working = sum(1 for d in days if d['status'] == 'non_working')
     working_days = on_site + stood_down
     days_pw = 6 if count_saturdays else 5
     cost_per_day_derived = hm.cost_per_week / days_pw if hm.cost_per_week else None
     summary = {
         'on_site': on_site,
         'stood_down': stood_down,
+        'non_working': non_working,
         'working_days': working_days,
         'total_days': len(days),
         'cost_day': round(on_site * cost_per_day_derived, 2) if cost_per_day_derived else None,
