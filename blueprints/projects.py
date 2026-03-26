@@ -546,6 +546,33 @@ def own_equipment_add(project_id):
     return redirect(url_for('projects.project_dashboard', project_id=project_id))
 
 
+@projects_bp.route('/project/<int:project_id>/equipment-bulk', methods=['POST'])
+@require_role('admin', 'supervisor')
+def equipment_bulk_assign(project_id):
+    """Bulk update which machines are assigned to this project."""
+    Project.query.get_or_404(project_id)
+    selected_ids = set(int(x) for x in request.form.getlist('machine_ids') if x)
+
+    # Remove machines no longer selected (only ones currently on THIS project)
+    current = ProjectMachine.query.filter_by(project_id=project_id).all()
+    for pm in current:
+        if pm.machine_id not in selected_ids:
+            db.session.delete(pm)
+
+    # Add newly selected machines (move from other projects if needed)
+    for mid in selected_ids:
+        existing = ProjectMachine.query.filter_by(machine_id=mid).first()
+        if existing:
+            if existing.project_id != project_id:
+                existing.project_id = project_id  # move to this project
+        else:
+            db.session.add(ProjectMachine(project_id=project_id, machine_id=mid))
+
+    db.session.commit()
+    flash(f'Equipment updated — {len(selected_ids)} item{"s" if len(selected_ids) != 1 else ""} on project.', 'success')
+    return redirect(url_for('scheduling.scheduling_project', project_id=project_id))
+
+
 @projects_bp.route('/project/<int:project_id>/assign-group', methods=['POST'])
 @require_role('admin', 'supervisor')
 def assign_group_to_project(project_id):

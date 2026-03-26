@@ -260,9 +260,11 @@ def scheduling_project(project_id):
 
     all_projects = Project.query.filter_by(active=True).order_by(Project.name).all()
     machine_groups = MachineGroup.query.filter_by(active=True).order_by(MachineGroup.name).all()
+    all_machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
 
     # All machines directly assigned to this project (ProjectMachine)
     project_machines = ProjectMachine.query.filter_by(project_id=project_id).all()
+    assigned_machine_ids = {pm.machine_id for pm in project_machines}
     # IDs of machines that are in a requirement assignment (to exclude from "other" list)
     req_machine_ids = set()
     for er in equip_reqs:
@@ -296,6 +298,8 @@ def scheduling_project(project_id):
         emp_roles_data=emp_roles_data,
         all_projects=all_projects,
         machine_groups=machine_groups,
+        all_machines=all_machines,
+        assigned_machine_ids=assigned_machine_ids,
         project_nwd=project_nwd,
         equip_coverage=equip_coverage,
         other_machines=other_machines,
