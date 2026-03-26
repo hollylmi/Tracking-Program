@@ -812,6 +812,7 @@
     // Look up in the map — default to true if not found or null
     const trackVal = PROJECT_TRACK_LOT[projectId];
     _trackByLot = (trackVal !== false);
+    console.log('LOT TOGGLE: projectId=' + projectId + ' trackVal=' + trackVal + ' _trackByLot=' + _trackByLot + ' lotCols=' + document.querySelectorAll('.lot-col').length);
     // Toggle ALL lot-col elements (th headers + td cells in every row)
     document.querySelectorAll('.lot-col').forEach(el => {
       el.style.display = _trackByLot ? '' : 'none';
