@@ -64,6 +64,7 @@ class Project(db.Model):
     quoted_days = db.Column(db.Integer)       # Total quoted working days for the job
     state = db.Column(db.String(10))              # Australian state code e.g. 'QLD'
     is_cfmeu = db.Column(db.Boolean, default=False)
+    track_by_lot = db.Column(db.Boolean, default=True)  # False = track by material only (no lot field)
     site_address = db.Column(db.String(500))      # Physical site address
     site_contact = db.Column(db.String(200))      # On-site contact name / phone
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

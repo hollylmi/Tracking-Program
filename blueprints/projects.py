@@ -867,6 +867,7 @@ def project_settings_save(project_id):
     project.quoted_days = int(quoted_days) if quoted_days else None
     project.state = request.form.get('state', '').strip() or None
     project.is_cfmeu = bool(request.form.get('is_cfmeu'))
+    project.track_by_lot = bool(request.form.get('track_by_lot'))
     db.session.commit()
     flash('Project settings saved.', 'success')
     return redirect(url_for('projects.project_dashboard', project_id=project_id) + '#tab-settings')

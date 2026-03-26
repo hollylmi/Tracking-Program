@@ -662,8 +662,10 @@ export default function EntryEditScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
+                  {(activeProject?.track_by_lot !== false) && (
                   <SelectField label="Lot" value={line.lot} options={lots}
                     onChange={(v) => updateLine(index, 'lot', v)} placeholder="Select lot..." optional />
+                  )}
                   <SelectField label="Material" value={line.material}
                     options={line.lot && lotMaterials[line.lot] ? lotMaterials[line.lot] : materials}
                     onChange={(v) => updateLine(index, 'material', v)} placeholder="Select material..." optional />

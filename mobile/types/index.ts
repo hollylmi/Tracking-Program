@@ -35,6 +35,7 @@ export interface Project {
   hours_per_day: number | null
   site_address: string | null
   site_contact: string | null
+  track_by_lot: boolean
   progress?: ProjectProgress
   productivity?: Productivity
 }

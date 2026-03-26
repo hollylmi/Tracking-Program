@@ -35,6 +35,7 @@
                 <option value="">— Select a project —</option>
                 {% for project in projects %}
                 <option value="{{ project.id }}"
+                  data-track-lot="{{ 'true' if project.track_by_lot is not false else 'false' }}"
                   {% if entry and entry.project_id == project.id %}selected{% endif %}>
                   {{ project.name }}
                 </option>
@@ -97,7 +98,7 @@
                   <table class="table table-sm mb-0 align-middle" id="productionTable">
                     <thead class="table-light">
                       <tr>
-                        <th style="width:25%">Lot</th>
+                        <th style="width:25%" class="lot-col">Lot</th>
                         <th style="width:30%">Material</th>
                         <th style="width:15%">Hours</th>
                         <th style="width:20%">SQM</th>
@@ -787,6 +788,21 @@
 
   // Run on load to set initial state
   updateMachinesStoodDownVisibility();
+
+  // ── Track by lot toggle ─────────────────────────────────────────────────────
+  function updateLotVisibility() {
+    const sel = document.getElementById('projectSelect');
+    const opt = sel.options[sel.selectedIndex];
+    const trackLot = !opt || opt.dataset.trackLot !== 'false';
+    // Toggle lot column header
+    document.querySelectorAll('.lot-col').forEach(el => el.style.display = trackLot ? '' : 'none');
+    // Toggle lot inputs in all production line rows
+    document.querySelectorAll('[name="line_lot[]"]').forEach(input => {
+      input.closest('td').style.display = trackLot ? '' : 'none';
+    });
+  }
+  document.getElementById('projectSelect').addEventListener('change', updateLotVisibility);
+  updateLotVisibility();
 
   // Progress is now handled per production line via fetchLineProgress above
   function scheduleProgress() {

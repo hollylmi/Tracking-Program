@@ -227,6 +227,7 @@ def _project_base(project):
         'hours_per_day': project.hours_per_day,
         'site_address': project.site_address,
         'site_contact': project.site_contact,
+        'track_by_lot': project.track_by_lot if project.track_by_lot is not None else True,
     }
 
 

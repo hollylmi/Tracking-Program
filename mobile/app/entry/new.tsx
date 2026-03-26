@@ -983,6 +983,7 @@ export default function NewEntryScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
+                  {(activeProject?.track_by_lot !== false) && (
                   <SelectField
                     label="Lot"
                     value={line.lot}
@@ -992,6 +993,7 @@ export default function NewEntryScreen() {
                     optional
                     loading={refLoading}
                   />
+                  )}
                   <SelectField
                     label="Material"
                     value={line.material}

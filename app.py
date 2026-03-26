@@ -234,6 +234,8 @@ with app.app_context():
         # Own delays + variations
         "ALTER TABLE daily_entry ADD COLUMN own_delay_hours FLOAT DEFAULT 0",
         "ALTER TABLE daily_entry ADD COLUMN own_delay_description TEXT",
+        # Track by lot toggle
+        "ALTER TABLE project ADD COLUMN track_by_lot BOOLEAN DEFAULT TRUE",
     ]:
         try:
             db.session.execute(db.text(stmt))
