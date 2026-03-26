@@ -19,9 +19,47 @@
       <div class="small text-muted">Overall Score</div>
     </div>
     {% endif %}
-    <a href="{{ url_for('hire.hire_companies') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-arrow-left me-1"></i>All Companies
-    </a>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#editCompanyForm">
+        <i class="bi bi-pencil me-1"></i>Edit
+      </button>
+      <form method="POST" action="{{ url_for('hire.hire_company_delete', company_id=company.id) }}" class="d-inline"
+            onsubmit="return confirm('Delete {{ company.name }} and all reviews?')">
+        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Delete</button>
+      </form>
+      <a href="{{ url_for('hire.hire_companies') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Company (collapsible) -->
+<div class="collapse mb-3" id="editCompanyForm">
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('hire.hire_company_edit', company_id=company.id) }}" class="row g-2 align-items-end">
+        <div class="col-sm-3">
+          <label class="form-label small fw-semibold mb-1">Name</label>
+          <input type="text" name="name" class="form-control form-control-sm" value="{{ company.name }}">
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-1">Phone</label>
+          <input type="text" name="phone" class="form-control form-control-sm" value="{{ company.phone or '' }}">
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small fw-semibold mb-1">Email</label>
+          <input type="email" name="email" class="form-control form-control-sm" value="{{ company.email or '' }}">
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-1">Notes</label>
+          <input type="text" name="notes" class="form-control form-control-sm" value="{{ company.notes or '' }}">
+        </div>
+        <div class="col-sm-2">
+          <button type="submit" class="btn btn-primary btn-sm w-100">Save</button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -100,6 +138,8 @@
                 {{ rpct }}%
               </span>
               {% endif %}
+              <button class="btn btn-sm btn-outline-secondary py-0 px-1" data-bs-toggle="collapse"
+                      data-bs-target="#editReview{{ r.id }}" title="Edit"><i class="bi bi-pencil"></i></button>
               <form method="POST" action="{{ url_for('hire.hire_review_delete', review_id=r.id) }}" class="d-inline"
                     onsubmit="return confirm('Delete this review?')">
                 <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1"><i class="bi bi-trash"></i></button>
@@ -121,6 +161,18 @@
           <div class="small text-muted mt-1 fst-italic">{{ r.comments }}</div>
           {% endif %}
           <div class="small text-muted mt-1">{{ r.created_at.strftime('%d/%m/%Y') if r.created_at else '' }}</div>
+          <!-- Inline edit form -->
+          <div class="collapse mt-2" id="editReview{{ r.id }}">
+            <form method="POST" action="{{ url_for('hire.hire_review_edit', review_id=r.id) }}" class="border rounded p-2 bg-light">
+              <div class="row g-1">
+                <div class="col-4"><input type="number" name="rating_delivery" class="form-control form-control-sm" min="1" max="10" value="{{ r.rating_delivery or '' }}" placeholder="Delivery /10"></div>
+                <div class="col-4"><input type="number" name="rating_communication" class="form-control form-control-sm" min="1" max="10" value="{{ r.rating_communication or '' }}" placeholder="Comms /10"></div>
+                <div class="col-4"><input type="number" name="rating_standdown" class="form-control form-control-sm" min="1" max="10" value="{{ r.rating_standdown or '' }}" placeholder="Weather /10"></div>
+                <div class="col-12 mt-1"><textarea name="comments" class="form-control form-control-sm" rows="2" placeholder="Comments...">{{ r.comments or '' }}</textarea></div>
+                <div class="col-12 mt-1"><button type="submit" class="btn btn-primary btn-sm">Update</button></div>
+              </div>
+            </form>
+          </div>
         </div>
         {% endfor %}
         {% else %}

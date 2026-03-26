@@ -28,7 +28,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instan
 @require_role('admin', 'supervisor', 'site')
 def hire_list():
     project_filter = request.args.get('project_id', '')
-    query = HiredMachine.query.order_by(HiredMachine.created_at.desc())
+    query = HiredMachine.query.filter_by(active=True).order_by(HiredMachine.created_at.desc())
     if current_user.role != 'admin':
         active_pid = get_active_project_id()
         if active_pid:
@@ -278,16 +278,27 @@ def hire_return(hm_id):
             db.session.add(company)
             db.session.flush()
 
+    # Auto-create a draft review linked to this machine
+    if company:
+        existing_review = HireReview.query.filter_by(
+            company_id=company.id, hired_machine_id=hm.id).first()
+        if not existing_review:
+            db.session.add(HireReview(
+                company_id=company.id,
+                hired_machine_id=hm.id,
+                machine_description=f"{hm.machine_name} ({hm.plant_id})" if hm.plant_id else hm.machine_name,
+                weekly_rate=hm.cost_per_week,
+            ))
+
     db.session.commit()
     flash(f'"{hm.machine_name}" marked as returned ({hm.return_date.strftime("%d/%m/%Y")}).', 'success')
 
-    # Redirect to the company page so user can leave a review
+    # Redirect to the company page so user can complete the review
     if company:
-        flash(f'Please leave a review for {company.name}.', 'info')
+        flash(f'A review has been created for {hm.machine_name} — please add your ratings.', 'info')
         return redirect(url_for('hire.hire_company_detail', company_id=company.id))
 
-    # Fall back to equipment page
-    return redirect(url_for('equipment.equipment_overview') + '#tab-hired')
+    return redirect(url_for('hire.hire_list'))
 
 
 @hire_bp.route('/hire/<int:hm_id>/reactivate', methods=['POST'])
@@ -362,6 +373,44 @@ def hire_review_add(company_id):
     db.session.commit()
     flash('Review added.', 'success')
     return redirect(url_for('hire.hire_company_detail', company_id=company.id))
+
+
+@hire_bp.route('/hire/companies/<int:company_id>/edit', methods=['POST'])
+@require_role('admin', 'supervisor')
+def hire_company_edit(company_id):
+    company = HireCompany.query.get_or_404(company_id)
+    company.name = request.form.get('name', '').strip() or company.name
+    company.phone = request.form.get('phone', '').strip() or None
+    company.email = request.form.get('email', '').strip() or None
+    company.notes = request.form.get('notes', '').strip() or None
+    db.session.commit()
+    flash(f'Company "{company.name}" updated.', 'success')
+    return redirect(url_for('hire.hire_company_detail', company_id=company.id))
+
+
+@hire_bp.route('/hire/companies/<int:company_id>/delete', methods=['POST'])
+@require_role('admin')
+def hire_company_delete(company_id):
+    company = HireCompany.query.get_or_404(company_id)
+    db.session.delete(company)
+    db.session.commit()
+    flash(f'Company "{company.name}" deleted.', 'success')
+    return redirect(url_for('hire.hire_companies'))
+
+
+@hire_bp.route('/hire/reviews/<int:review_id>/edit', methods=['POST'])
+@require_role('admin', 'supervisor')
+def hire_review_edit(review_id):
+    review = HireReview.query.get_or_404(review_id)
+    review.machine_description = request.form.get('machine_description', '').strip() or review.machine_description
+    review.weekly_rate = float(request.form.get('weekly_rate')) if request.form.get('weekly_rate') else review.weekly_rate
+    review.rating_delivery = int(request.form.get('rating_delivery')) if request.form.get('rating_delivery') else review.rating_delivery
+    review.rating_communication = int(request.form.get('rating_communication')) if request.form.get('rating_communication') else review.rating_communication
+    review.rating_standdown = int(request.form.get('rating_standdown')) if request.form.get('rating_standdown') else review.rating_standdown
+    review.comments = request.form.get('comments', '').strip() or review.comments
+    db.session.commit()
+    flash('Review updated.', 'success')
+    return redirect(url_for('hire.hire_company_detail', company_id=review.company_id))
 
 
 @hire_bp.route('/hire/reviews/<int:review_id>/delete', methods=['POST'])
