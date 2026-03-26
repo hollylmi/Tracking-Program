@@ -112,7 +112,23 @@
                           <td><input type="text" name="line_material[]" class="form-control form-control-sm" onchange="fetchLineProgress(this.closest('tr'))" value="{{ pl.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
                           <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" value="{{ pl.install_hours or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ pl.install_sqm or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
-                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
+                          <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 me-1" onclick="toggleProdCrew(this)" title="Assign crew"><i class="bi bi-people"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+                          </td>
+                        </tr>
+                        <tr class="prod-crew-row" style="display:none">
+                          <td colspan="5" class="py-1 px-2 bg-light border-bottom">
+                            <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="{{ pl.employee_ids_json or '[]' }}">
+                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                              <span class="small text-muted fw-semibold"><i class="bi bi-people me-1"></i>Crew:</span>
+                              <span class="prod-crew-chips small"></span>
+                              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" style="font-size:.7rem;" onclick="openProdCrewPicker(this)">
+                                <i class="bi bi-pencil"></i>
+                              </button>
+                              <span class="prod-crew-count text-muted small ms-auto"></span>
+                            </div>
+                          </td>
                         </tr>
                         {% endfor %}
                       {% elif entry and (entry.lot_number or entry.material or entry.install_sqm) %}
@@ -121,7 +137,23 @@
                           <td><input type="text" name="line_material[]" class="form-control form-control-sm" onchange="fetchLineProgress(this.closest('tr'))" value="{{ entry.material or '' }}" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
                           <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" value="{{ entry.install_hours or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ entry.install_sqm or '' }}" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
-                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
+                          <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 me-1" onclick="toggleProdCrew(this)" title="Assign crew"><i class="bi bi-people"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+                          </td>
+                        </tr>
+                        <tr class="prod-crew-row" style="display:none">
+                          <td colspan="5" class="py-1 px-2 bg-light border-bottom">
+                            <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="[]">
+                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                              <span class="small text-muted fw-semibold"><i class="bi bi-people me-1"></i>Crew:</span>
+                              <span class="prod-crew-chips small"></span>
+                              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" style="font-size:.7rem;" onclick="openProdCrewPicker(this)">
+                                <i class="bi bi-pencil"></i>
+                              </button>
+                              <span class="prod-crew-count text-muted small ms-auto"></span>
+                            </div>
+                          </td>
                         </tr>
                       {% else %}
                         <tr class="prod-line">
@@ -129,7 +161,23 @@
                           <td><input type="text" name="line_material[]" class="form-control form-control-sm" onchange="fetchLineProgress(this.closest('tr'))" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
                           <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
                           <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
-                          <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals()"><i class="bi bi-x-lg"></i></button></td>
+                          <td class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 me-1" onclick="toggleProdCrew(this)" title="Assign crew"><i class="bi bi-people"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateTotals(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+                          </td>
+                        </tr>
+                        <tr class="prod-crew-row" style="display:none">
+                          <td colspan="5" class="py-1 px-2 bg-light border-bottom">
+                            <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="[]">
+                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                              <span class="small text-muted fw-semibold"><i class="bi bi-people me-1"></i>Crew:</span>
+                              <span class="prod-crew-chips small"></span>
+                              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" style="font-size:.7rem;" onclick="openProdCrewPicker(this)">
+                                <i class="bi bi-pencil"></i>
+                              </button>
+                              <span class="prod-crew-count text-muted small ms-auto"></span>
+                            </div>
+                          </td>
                         </tr>
                       {% endif %}
                     </tbody>
@@ -351,6 +399,31 @@
 
             <!-- Old delay section removed — now integrated into Site Delays card above -->
 
+            <!-- Person-Hours Summary Bar -->
+            <div class="col-12" id="personHoursSummary">
+              <div class="card border shadow-sm">
+                <div class="card-body py-2 px-3">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="fw-semibold small"><i class="bi bi-clock-history me-1 text-primary"></i>Person-Hours Summary</span>
+                    <span class="small fw-bold" id="phUtilPct">—</span>
+                  </div>
+                  <div class="progress mb-2" style="height:16px">
+                    <div class="progress-bar bg-success" id="phBarProd" style="width:0%" title="Production"></div>
+                    <div class="progress-bar bg-warning" id="phBarVar" style="width:0%" title="Variations"></div>
+                    <div class="progress-bar bg-info" id="phBarOther" style="width:0%" title="Other Activities"></div>
+                    <div class="progress-bar bg-light border" id="phBarGap" style="width:0%" title="Unaccounted"></div>
+                  </div>
+                  <div class="d-flex gap-3 small flex-wrap">
+                    <span><span class="badge bg-success">&nbsp;</span> Production: <strong id="phProd">0</strong> p-hrs</span>
+                    <span><span class="badge bg-warning">&nbsp;</span> Variations: <strong id="phVar">0</strong> p-hrs</span>
+                    <span><span class="badge bg-info">&nbsp;</span> Other: <strong id="phOther">0</strong> p-hrs</span>
+                    <span class="text-muted">Available: <strong id="phAvail">0</strong> p-hrs</span>
+                    <span class="text-muted">Unaccounted: <strong id="phGap">0</strong> p-hrs</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Notes -->
             <div class="col-12">
               <label class="form-label fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
@@ -368,14 +441,50 @@
             </div>
             {% endif %}
 
-            <!-- Other Work (Non-deployment) -->
+            <!-- Other Activities (Non-deployment) -->
             <div class="col-12">
-              <label class="form-label fw-semibold">
-                Other Work Done <span class="text-muted fw-normal">(non-deployment, optional)</span>
-              </label>
-              <textarea name="other_work_description" class="form-control" rows="2"
-                        placeholder="e.g. Machine maintenance, site cleanup, cable laying — work done when not doing installation...">{{ entry.other_work_description if entry and entry.other_work_description else '' }}</textarea>
-              <div class="form-text">Record any work done that day that wasn't deployment — useful for wet weather or delay days.</div>
+              <div class="card border shadow-sm">
+                <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold small"><i class="bi bi-clipboard2-pulse me-1 text-info"></i>Other Activities (Non-deployment)</span>
+                  <button type="button" class="btn btn-sm btn-outline-info py-0" onclick="addOtherActivityLine()">
+                    <i class="bi bi-plus me-1"></i>Add Activity
+                  </button>
+                </div>
+                <div class="card-body p-2" id="otherActivityLines">
+                  {% if entry and entry.other_activity_lines %}
+                    {% for ol in entry.other_activity_lines %}
+                    <div class="other-card border rounded p-2 mb-2 bg-light">
+                      <div class="d-flex gap-2 align-items-start mb-1">
+                        <div class="flex-grow-1">
+                          <input type="text" name="other_desc[]" class="form-control form-control-sm" value="{{ ol.description or '' }}" placeholder="e.g. Inductions, chasing materials, site prep">
+                        </div>
+                        <div style="flex:0 0 80px">
+                          <input type="number" name="other_hours[]" class="form-control form-control-sm other-line-hours" min="0" step="0.25" value="{{ ol.hours or '' }}" placeholder="Hours" oninput="updatePersonHoursSummary()">
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.other-card').remove(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+                      </div>
+                      <input type="hidden" name="other_emp_ids[]" class="other-emp-hidden" value="{{ ol.employee_ids_json or '[]' }}">
+                      <div>
+                        <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew</div>
+                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-white">
+                          {% for emp in employees %}
+                          <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+                            <input type="checkbox" class="form-check-input mt-0 other-emp-cb"
+                                   value="{{ emp.id }}" {{ 'checked' if ol.crew_employee_ids and emp.id in ol.crew_employee_ids }}
+                                   onchange="syncOtherCrewCheckboxes(this); updatePersonHoursSummary()">
+                            {{ emp.name }}{% if emp.role %} <small class="text-muted">— {{ emp.role }}</small>{% endif %}
+                          </label>
+                          {% endfor %}
+                        </div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
+                <div class="card-footer bg-white py-1">
+                  <div class="form-text" style="font-size:.7rem;">Inductions, material runs, equipment maintenance, site prep — anything not deployment, variation, or delay.</div>
+                </div>
+              </div>
             </div>
 
           </div>
@@ -636,6 +745,13 @@
     {% endfor %}
   };
 
+  // Project hours per day — for person-hours calculation
+  const PROJECT_HOURS_PER_DAY = {
+    {% for project in projects %}
+    '{{ project.id }}': {{ project.hours_per_day or 8 }},
+    {% endfor %}
+  };
+
   // ── Production lines ──────────────────────────────────────────────────────
   let lineCounter = document.querySelectorAll('.prod-line').length;
 
@@ -653,8 +769,25 @@
       <td><input type="text" name="line_material[]" class="form-control form-control-sm" onchange="fetchLineProgress(this.closest('tr'))" placeholder="e.g. HDPE" list="materialOptions" autocomplete="off"></td>
       <td><input type="number" name="line_hours[]" class="form-control form-control-sm line-hours" min="0" step="0.25" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
       <td><input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="0.0" onchange="updateTotals()" oninput="updateTotals()"></td>
-      <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeProductionLine(this)"><i class="bi bi-x-lg"></i></button></td>
+      <td class="text-center">
+        <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 me-1" onclick="toggleProdCrew(this)" title="Assign crew"><i class="bi bi-people"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeProductionLine(this)"><i class="bi bi-x-lg"></i></button>
+      </td>
     `;
+    // Crew row
+    const crewRow = document.createElement('tr');
+    crewRow.className = 'prod-crew-row';
+    crewRow.style.display = 'none';
+    crewRow.innerHTML = `<td colspan="5" class="py-1 px-2 bg-light border-bottom">
+      <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="[]">
+      <div class="d-flex align-items-center gap-1 flex-wrap">
+        <span class="small text-muted fw-semibold"><i class="bi bi-people me-1"></i>Crew:</span>
+        <span class="prod-crew-chips small"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" style="font-size:.7rem;" onclick="openProdCrewPicker(this)"><i class="bi bi-pencil"></i></button>
+        <span class="prod-crew-count text-muted small ms-auto"></span>
+      </div>
+    </td>`;
+
     // Progress row
     const progRow = document.createElement('tr');
     progRow.className = 'prod-progress';
@@ -666,6 +799,7 @@
     </div></td>`;
 
     tbody.appendChild(row);
+    tbody.appendChild(crewRow);
     tbody.appendChild(progRow);
     // Apply lot visibility to the new row
     updateLotVisibility();
@@ -679,10 +813,14 @@
   function removeProductionLine(btn) {
     const row = btn.closest('tr');
     const lineId = row.dataset.lineId;
+    // Remove the crew row (next sibling) and progress row
+    const crewRow = row.nextElementSibling;
+    if (crewRow && crewRow.classList.contains('prod-crew-row')) crewRow.remove();
     const progRow = document.querySelector(`tr.prod-progress[data-line-id="${lineId}"]`);
     if (progRow) progRow.remove();
     row.remove();
     updateTotalSqm();
+    updatePersonHoursSummary();
   }
 
   function fetchLineProgress(row) {
@@ -726,6 +864,7 @@
     document.getElementById('totalHoursLabel').textContent = 'Hours: ' + totalHours.toLocaleString('en-AU', {maximumFractionDigits:1});
     document.getElementById('installSqmInput').value = totalSqm;
     document.getElementById('installHoursInput').value = totalHours;
+    updatePersonHoursSummary();
   }
   // Alias for backward compat with inline onchange handlers
   function updateTotalSqm() { updateTotals(); }
@@ -842,6 +981,7 @@
       }
     });
     card.querySelector('.var-mach-hidden').value = JSON.stringify(machIds);
+    updatePersonHoursSummary();
   }
 
   // ── Track by lot toggle ─────────────────────────────────────────────────────
@@ -863,7 +1003,11 @@
     const lineId = 'line_' + i;
     row.dataset.lineId = lineId;
 
-    // Create progress row after each existing line
+    // Find the existing crew row (already in HTML from server render)
+    const crewRow = row.nextElementSibling;
+    const hasCrewRow = crewRow && crewRow.classList.contains('prod-crew-row');
+
+    // Create progress row after crew row (or after prod row if no crew row)
     const progRow = document.createElement('tr');
     progRow.className = 'prod-progress';
     progRow.dataset.lineId = lineId;
@@ -872,17 +1016,15 @@
       <div class="progress flex-grow-1" style="height:10px"><div class="progress-bar bg-success" style="width:0%"></div></div>
       <span class="text-muted prog-label">—</span>
     </div></td>`;
-    row.after(progRow);
+    if (hasCrewRow) {
+      crewRow.after(progRow);
+    } else {
+      row.after(progRow);
+    }
 
     // Attach change listeners
     row.querySelector('[name="line_lot[]"]')?.addEventListener('change', () => fetchLineProgress(row));
     row.querySelector('[name="line_material[]"]')?.addEventListener('change', () => fetchLineProgress(row));
-
-    // Update remove button to use new function
-    const removeBtn = row.querySelector('.btn-outline-danger');
-    if (removeBtn) {
-      removeBtn.setAttribute('onclick', 'removeProductionLine(this)');
-    }
 
     // Fetch initial progress for pre-filled lines
     fetchLineProgress(row);
@@ -890,6 +1032,7 @@
   lineCounter = document.querySelectorAll('.prod-line').length;
 
   updateTotals();
+  updatePersonHoursSummary();
 
   function deletePhoto(url, thumbId) {
     if (!confirm('Delete this photo?')) return;
@@ -1058,6 +1201,7 @@
     const count = document.querySelectorAll('.employee-check:checked').length;
     document.getElementById('selectedEmployeeCount').textContent = count + ' selected';
     document.getElementById('numPeopleInput').value = count;
+    updatePersonHoursSummary();
   }
   document.querySelectorAll('.employee-check').forEach(cb => cb.addEventListener('change', updateEmployeeCount));
 
@@ -1116,6 +1260,231 @@
     document.querySelectorAll('.standdown-check').forEach(cb => cb.checked = false);
     updateStanddownCount();
   });
+
+  // ── Production line crew management ──────────────────────────────────────
+  // Employee data for crew pickers (reuse VAR_EMP_OPTIONS)
+  function toggleProdCrew(btn) {
+    const prodRow = btn.closest('tr');
+    const crewRow = prodRow.nextElementSibling;
+    if (crewRow && crewRow.classList.contains('prod-crew-row')) {
+      crewRow.style.display = crewRow.style.display === 'none' ? '' : 'none';
+    }
+  }
+
+  function openProdCrewPicker(btn) {
+    const crewRow = btn.closest('.prod-crew-row');
+    const hidden = crewRow.querySelector('.prod-emp-hidden');
+    let selectedIds = [];
+    try { selectedIds = JSON.parse(hidden.value); } catch(e) {}
+
+    // Build a small inline picker
+    let existing = crewRow.querySelector('.prod-crew-picker');
+    if (existing) { existing.remove(); return; }  // toggle off
+
+    const picker = document.createElement('div');
+    picker.className = 'prod-crew-picker border rounded bg-white mt-1';
+    picker.style.maxHeight = '120px';
+    picker.style.overflowY = 'auto';
+
+    // Get currently checked employees from the Crew Members panel
+    const checkedEmpIds = Array.from(document.querySelectorAll('.employee-check:checked')).map(cb => parseInt(cb.value));
+    const allEmps = VAR_EMP_OPTIONS;
+
+    // Show checked employees first, then others
+    const sortedEmps = [...allEmps].sort((a, b) => {
+      const aChecked = checkedEmpIds.includes(a.id);
+      const bChecked = checkedEmpIds.includes(b.id);
+      if (aChecked && !bChecked) return -1;
+      if (!aChecked && bChecked) return 1;
+      return 0;
+    });
+
+    sortedEmps.forEach(emp => {
+      const isOnSite = checkedEmpIds.includes(emp.id);
+      const label = document.createElement('label');
+      label.className = 'd-flex align-items-center gap-1 px-2 py-1 border-bottom';
+      label.style.cssText = 'cursor:pointer;font-size:.78rem;';
+      if (!isOnSite) label.style.opacity = '0.5';
+      label.innerHTML = `<input type="checkbox" class="form-check-input mt-0 prod-crew-cb" value="${emp.id}"
+        ${selectedIds.includes(emp.id) ? 'checked' : ''}
+        onchange="syncProdCrew(this)"> ${emp.label}`;
+      picker.appendChild(label);
+    });
+
+    // Select all on-site button
+    const btnRow = document.createElement('div');
+    btnRow.className = 'px-2 py-1 bg-light d-flex gap-1';
+    btnRow.innerHTML = `<button type="button" class="btn btn-sm btn-outline-secondary py-0" style="font-size:.7rem;" onclick="selectAllSiteCrew(this)">All on-site</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary py-0" style="font-size:.7rem;" onclick="clearProdCrew(this)">Clear</button>
+      <button type="button" class="btn btn-sm btn-outline-primary py-0 ms-auto" style="font-size:.7rem;" onclick="this.closest('.prod-crew-picker').remove()">Done</button>`;
+    picker.appendChild(btnRow);
+
+    crewRow.querySelector('td').appendChild(picker);
+  }
+
+  function selectAllSiteCrew(btn) {
+    const picker = btn.closest('.prod-crew-picker');
+    const checkedEmpIds = Array.from(document.querySelectorAll('.employee-check:checked')).map(cb => parseInt(cb.value));
+    picker.querySelectorAll('.prod-crew-cb').forEach(cb => {
+      cb.checked = checkedEmpIds.includes(parseInt(cb.value));
+    });
+    syncProdCrew(picker.querySelector('.prod-crew-cb'));
+  }
+
+  function clearProdCrew(btn) {
+    const picker = btn.closest('.prod-crew-picker');
+    picker.querySelectorAll('.prod-crew-cb').forEach(cb => cb.checked = false);
+    syncProdCrew(picker.querySelector('.prod-crew-cb'));
+  }
+
+  function syncProdCrew(cb) {
+    const crewRow = cb.closest('.prod-crew-row');
+    const ids = Array.from(crewRow.querySelectorAll('.prod-crew-cb:checked')).map(c => parseInt(c.value));
+    crewRow.querySelector('.prod-emp-hidden').value = JSON.stringify(ids);
+    updateProdCrewChips(crewRow);
+    updatePersonHoursSummary();
+  }
+
+  function updateProdCrewChips(crewRow) {
+    const hidden = crewRow.querySelector('.prod-emp-hidden');
+    let ids = [];
+    try { ids = JSON.parse(hidden.value); } catch(e) {}
+    const chips = crewRow.querySelector('.prod-crew-chips');
+    const countEl = crewRow.querySelector('.prod-crew-count');
+
+    if (ids.length === 0) {
+      chips.innerHTML = '<span class="text-muted fst-italic">None assigned</span>';
+      countEl.textContent = '';
+      return;
+    }
+    const names = ids.map(id => {
+      const emp = VAR_EMP_OPTIONS.find(e => e.id === id);
+      return emp ? emp.label.split(' — ')[0] : '?';
+    });
+    chips.innerHTML = names.map(n => `<span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1">${n}</span>`).join('');
+    countEl.textContent = ids.length + ' crew';
+  }
+
+  // Init existing production crew rows
+  document.querySelectorAll('.prod-crew-row').forEach(crewRow => {
+    updateProdCrewChips(crewRow);
+    // Auto-show if crew is assigned
+    const hidden = crewRow.querySelector('.prod-emp-hidden');
+    let ids = [];
+    try { ids = JSON.parse(hidden.value); } catch(e) {}
+    if (ids.length > 0) crewRow.style.display = '';
+  });
+
+  // ── Other Activity lines ────────────────────────────────────────────────
+  function addOtherActivityLine() {
+    const container = document.getElementById('otherActivityLines');
+    const card = document.createElement('div');
+    card.className = 'other-card border rounded p-2 mb-2 bg-light';
+
+    const empHtml = VAR_EMP_OPTIONS.map(e =>
+      `<label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+        <input type="checkbox" class="form-check-input mt-0 other-emp-cb" value="${e.id}" onchange="syncOtherCrewCheckboxes(this); updatePersonHoursSummary()">
+        ${e.label}
+      </label>`
+    ).join('');
+
+    card.innerHTML = `
+      <div class="d-flex gap-2 align-items-start mb-1">
+        <div class="flex-grow-1">
+          <input type="text" name="other_desc[]" class="form-control form-control-sm" placeholder="e.g. Inductions, chasing materials, site prep">
+        </div>
+        <div style="flex:0 0 80px">
+          <input type="number" name="other_hours[]" class="form-control form-control-sm other-line-hours" min="0" step="0.25" placeholder="Hours" oninput="updatePersonHoursSummary()">
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.other-card').remove(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <input type="hidden" name="other_emp_ids[]" class="other-emp-hidden" value="[]">
+      <div>
+        <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew</div>
+        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-white">${empHtml}</div>
+      </div>
+    `;
+    container.appendChild(card);
+    card.querySelector('input[name="other_desc[]"]').focus();
+  }
+
+  function syncOtherCrewCheckboxes(cb) {
+    const card = cb.closest('.other-card');
+    const ids = Array.from(card.querySelectorAll('.other-emp-cb:checked')).map(c => parseInt(c.value));
+    card.querySelector('.other-emp-hidden').value = JSON.stringify(ids);
+  }
+
+  // ── Person-Hours Summary ────────────────────────────────────────────────
+  function updatePersonHoursSummary() {
+    // Production person-hours
+    let prodPH = 0;
+    document.querySelectorAll('.prod-line').forEach(row => {
+      const hrs = parseFloat(row.querySelector('.line-hours')?.value) || 0;
+      const crewRow = row.nextElementSibling;
+      let crewCount = 0;
+      if (crewRow && crewRow.classList.contains('prod-crew-row')) {
+        const hidden = crewRow.querySelector('.prod-emp-hidden');
+        try { crewCount = JSON.parse(hidden.value).length; } catch(e) {}
+      }
+      prodPH += hrs * crewCount;
+    });
+
+    // Variation person-hours
+    let varPH = 0;
+    document.querySelectorAll('.var-card').forEach(card => {
+      const hrs = parseFloat(card.querySelector('[name="var_hours[]"]')?.value) || 0;
+      const hidden = card.querySelector('.var-emp-hidden');
+      let crewCount = 0;
+      try { crewCount = JSON.parse(hidden.value).length; } catch(e) {}
+      varPH += hrs * crewCount;
+    });
+
+    // Other activity person-hours
+    let otherPH = 0;
+    document.querySelectorAll('.other-card').forEach(card => {
+      const hrs = parseFloat(card.querySelector('.other-line-hours')?.value) || 0;
+      const hidden = card.querySelector('.other-emp-hidden');
+      let crewCount = 0;
+      try { crewCount = JSON.parse(hidden.value).length; } catch(e) {}
+      otherPH += hrs * crewCount;
+    });
+
+    // Available person-hours
+    const crewCount = document.querySelectorAll('.employee-check:checked').length;
+    const projectId = document.getElementById('projectSelect').value;
+    // Get hours_per_day from project (default 8)
+    const hpd = PROJECT_HOURS_PER_DAY[projectId] || 8;
+    const availPH = crewCount * hpd;
+
+    const totalAccounted = prodPH + varPH + otherPH;
+    const gap = Math.max(0, availPH - totalAccounted);
+
+    // Update display
+    document.getElementById('phProd').textContent = prodPH.toFixed(1);
+    document.getElementById('phVar').textContent = varPH.toFixed(1);
+    document.getElementById('phOther').textContent = otherPH.toFixed(1);
+    document.getElementById('phAvail').textContent = availPH.toFixed(0);
+    document.getElementById('phGap').textContent = gap.toFixed(1);
+
+    // Utilisation %
+    const utilPct = availPH > 0 ? Math.round(totalAccounted / availPH * 100) : 0;
+    const utilEl = document.getElementById('phUtilPct');
+    utilEl.textContent = availPH > 0 ? utilPct + '% accounted' : '—';
+    utilEl.className = 'small fw-bold ' + (utilPct >= 90 ? 'text-success' : utilPct >= 70 ? 'text-warning' : 'text-danger');
+
+    // Progress bar segments
+    if (availPH > 0) {
+      document.getElementById('phBarProd').style.width = (prodPH / availPH * 100) + '%';
+      document.getElementById('phBarVar').style.width = (varPH / availPH * 100) + '%';
+      document.getElementById('phBarOther').style.width = (otherPH / availPH * 100) + '%';
+      document.getElementById('phBarGap').style.width = (gap / availPH * 100) + '%';
+    } else {
+      document.getElementById('phBarProd').style.width = '0%';
+      document.getElementById('phBarVar').style.width = '0%';
+      document.getElementById('phBarOther').style.width = '0%';
+      document.getElementById('phBarGap').style.width = '0%';
+    }
+  }
 
   // Photo preview
   document.getElementById('photoInput').addEventListener('change', function() {

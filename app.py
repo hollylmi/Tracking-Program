@@ -241,6 +241,8 @@ with app.app_context():
         "ALTER TABLE entry_variation_line ADD COLUMN machine_ids_json TEXT",
         # Hired machine delay rate
         "ALTER TABLE hired_machine ADD COLUMN delay_rate FLOAT",
+        # Person-hours: crew assignment on production lines
+        "ALTER TABLE entry_production_line ADD COLUMN employee_ids_json TEXT",
     ]:
         try:
             db.session.execute(db.text(stmt))

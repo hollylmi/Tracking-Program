@@ -10,7 +10,8 @@ from werkzeug.utils import secure_filename
 from datetime import date, datetime
 
 from models import (db, Project, Employee, Machine, MachineGroup, DailyEntry, EntryProductionLine,
-                    EntryDelayLine, EntryVariationLine, HiredMachine, StandDown, EntryPhoto, ProjectMachine, ProjectAssignment)
+                    EntryDelayLine, EntryVariationLine, EntryOtherActivityLine, HiredMachine, StandDown,
+                    EntryPhoto, ProjectMachine, ProjectAssignment)
 import storage
 from utils.files import allowed_photo
 
@@ -104,6 +105,7 @@ def new_entry():
         line_materials = request.form.getlist('line_material[]')
         line_hours = request.form.getlist('line_hours[]')
         line_sqms = request.form.getlist('line_sqm[]')
+        line_emp_ids_list = request.form.getlist('line_emp_ids[]')
         prod_lines = []
         total_sqm = 0
         total_hours = 0
@@ -114,8 +116,9 @@ def new_entry():
             mat = (line_materials[i].strip() if i < len(line_materials) else '') or None
             hrs = float(line_hours[i] or 0) if i < len(line_hours) else 0
             sqm = float(line_sqms[i] or 0) if i < len(line_sqms) else 0
+            lemp = line_emp_ids_list[i] if i < len(line_emp_ids_list) else '[]'
             if lot or mat or sqm or hrs:
-                prod_lines.append({'lot': lot, 'material': mat, 'hours': hrs, 'sqm': sqm})
+                prod_lines.append({'lot': lot, 'material': mat, 'hours': hrs, 'sqm': sqm, 'emp_ids': lemp})
                 total_sqm += sqm
                 total_hours += hrs
                 if first_lot is None and lot:
@@ -156,7 +159,20 @@ def new_entry():
             db.session.add(EntryProductionLine(
                 entry_id=entry.id, lot_number=pl['lot'],
                 material=pl['material'], install_hours=pl['hours'],
-                install_sqm=pl['sqm']))
+                install_sqm=pl['sqm'], employee_ids_json=pl['emp_ids']))
+
+        # Other activity lines
+        other_descs = request.form.getlist('other_desc[]')
+        other_hours_list = request.form.getlist('other_hours[]')
+        other_emp_ids_list = request.form.getlist('other_emp_ids[]')
+        for i in range(len(other_descs)):
+            odesc = (other_descs[i].strip() if i < len(other_descs) else '') or None
+            ohrs = float(other_hours_list[i] or 0) if i < len(other_hours_list) else 0
+            oemp = other_emp_ids_list[i] if i < len(other_emp_ids_list) else '[]'
+            if odesc or ohrs:
+                db.session.add(EntryOtherActivityLine(
+                    entry_id=entry.id, description=odesc,
+                    hours=ohrs, employee_ids_json=oemp))
 
         # Delay lines
         delay_reasons = request.form.getlist('delay_reason[]')
@@ -278,6 +294,7 @@ def edit_entry(entry_id):
         line_materials = request.form.getlist('line_material[]')
         line_hours = request.form.getlist('line_hours[]')
         line_sqms = request.form.getlist('line_sqm[]')
+        line_emp_ids_list = request.form.getlist('line_emp_ids[]')
 
         # Clear old production lines and rebuild
         EntryProductionLine.query.filter_by(entry_id=entry.id).delete()
@@ -290,10 +307,11 @@ def edit_entry(entry_id):
             mat = (line_materials[i].strip() if i < len(line_materials) else '') or None
             hrs = float(line_hours[i] or 0) if i < len(line_hours) else 0
             sqm = float(line_sqms[i] or 0) if i < len(line_sqms) else 0
+            lemp = line_emp_ids_list[i] if i < len(line_emp_ids_list) else '[]'
             if lot or mat or sqm or hrs:
                 db.session.add(EntryProductionLine(
                     entry_id=entry.id, lot_number=lot, material=mat,
-                    install_hours=hrs, install_sqm=sqm))
+                    install_hours=hrs, install_sqm=sqm, employee_ids_json=lemp))
                 total_sqm += sqm
                 total_hours += hrs
                 if first_lot is None and lot:
@@ -353,6 +371,20 @@ def edit_entry(entry_id):
                     entry_id=entry.id, variation_number=vnum,
                     description=vdesc, hours=vhrs,
                     employee_ids_json=vemp, machine_ids_json=vmach))
+
+        # Other activity lines
+        EntryOtherActivityLine.query.filter_by(entry_id=entry.id).delete()
+        other_descs = request.form.getlist('other_desc[]')
+        other_hours_list = request.form.getlist('other_hours[]')
+        other_emp_ids_list = request.form.getlist('other_emp_ids[]')
+        for i in range(len(other_descs)):
+            odesc = (other_descs[i].strip() if i < len(other_descs) else '') or None
+            ohrs = float(other_hours_list[i] or 0) if i < len(other_hours_list) else 0
+            oemp = other_emp_ids_list[i] if i < len(other_emp_ids_list) else '[]'
+            if odesc or ohrs:
+                db.session.add(EntryOtherActivityLine(
+                    entry_id=entry.id, description=odesc,
+                    hours=ohrs, employee_ids_json=oemp))
 
         # Own delays
         entry.own_delay_hours = float(request.form.get('own_delay_hours') or 0)

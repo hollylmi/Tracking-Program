@@ -200,6 +200,9 @@ class DailyEntry(db.Model):
     variation_lines = db.relationship('EntryVariationLine', backref='entry',
                                        cascade='all, delete-orphan', lazy=True,
                                        order_by='EntryVariationLine.id')
+    other_activity_lines = db.relationship('EntryOtherActivityLine', backref='entry',
+                                            cascade='all, delete-orphan', lazy=True,
+                                            order_by='EntryOtherActivityLine.id')
 
     @property
     def day_name(self):
@@ -230,6 +233,56 @@ class DailyEntry(db.Model):
     def total_variation_hours(self):
         """Total hours from variation lines."""
         return sum(vl.hours or 0 for vl in self.variation_lines) if self.variation_lines else 0
+
+    @property
+    def total_other_activity_hours(self):
+        """Total hours from other activity lines."""
+        return sum(ol.hours or 0 for ol in self.other_activity_lines) if self.other_activity_lines else 0
+
+    @property
+    def production_person_hours(self):
+        """Total person-hours across production lines."""
+        if self.production_lines:
+            return sum(pl.person_hours for pl in self.production_lines)
+        return 0
+
+    @property
+    def variation_person_hours(self):
+        """Total person-hours across variation lines."""
+        if self.variation_lines:
+            total = 0
+            for vl in self.variation_lines:
+                emp_ids = vl.billed_employee_ids
+                total += (vl.hours or 0) * len(emp_ids) if emp_ids else 0
+            return total
+        return 0
+
+    @property
+    def other_activity_person_hours(self):
+        """Total person-hours across other activity lines."""
+        if self.other_activity_lines:
+            return sum(ol.person_hours for ol in self.other_activity_lines)
+        return 0
+
+    @property
+    def total_person_hours_accounted(self):
+        """Sum of all person-hours across production, variation, and other activities."""
+        return self.production_person_hours + self.variation_person_hours + self.other_activity_person_hours
+
+    @property
+    def available_person_hours(self):
+        """Total available person-hours = crew count × hours_per_day from project."""
+        crew_count = len(self.employees) if self.employees else (self.num_people or 0)
+        hours_per_day = self.project.hours_per_day if self.project and self.project.hours_per_day else 8
+        return crew_count * hours_per_day
+
+    @property
+    def utilisation_pct(self):
+        """Percentage of available person-hours accounted for."""
+        avail = self.available_person_hours
+        if avail <= 0:
+            return 0
+        return round(self.total_person_hours_accounted / avail * 100, 1)
 
     def __repr__(self):
         return f'<DailyEntry {self.entry_date} - {self.project.name}>'
@@ -267,6 +320,14 @@ class EntryVariationLine(db.Model):
         import json
         return json.loads(self.machine_ids_json) if self.machine_ids_json else []
 
+    @property
+    def num_crew(self):
+        return len(self.billed_employee_ids)
+
+    @property
+    def person_hours(self):
+        return (self.hours or 0) * self.num_crew
+
     def __repr__(self):
         return f'<EntryVariationLine V{self.variation_number} {self.hours}h>'
 
@@ -279,9 +340,48 @@ class EntryProductionLine(db.Model):
     material = db.Column(db.String(200))
     install_hours = db.Column(db.Float, default=0)
     install_sqm = db.Column(db.Float, default=0)
+    employee_ids_json = db.Column(db.Text)     # JSON array of employee IDs assigned to this line
+
+    @property
+    def crew_employee_ids(self):
+        import json
+        return json.loads(self.employee_ids_json) if self.employee_ids_json else []
+
+    @property
+    def num_crew(self):
+        return len(self.crew_employee_ids)
+
+    @property
+    def person_hours(self):
+        return (self.install_hours or 0) * self.num_crew
 
     def __repr__(self):
         return f'<EntryProductionLine {self.lot_number} {self.material} {self.install_hours}h {self.install_sqm}m2>'
+
+
+class EntryOtherActivityLine(db.Model):
+    """Non-deployment activity within a daily entry (inductions, material runs, etc.)."""
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
+    description = db.Column(db.Text)
+    hours = db.Column(db.Float, default=0)
+    employee_ids_json = db.Column(db.Text)     # JSON array of employee IDs assigned
+
+    @property
+    def crew_employee_ids(self):
+        import json
+        return json.loads(self.employee_ids_json) if self.employee_ids_json else []
+
+    @property
+    def num_crew(self):
+        return len(self.crew_employee_ids)
+
+    @property
+    def person_hours(self):
+        return (self.hours or 0) * self.num_crew
+
+    def __repr__(self):
+        return f'<EntryOtherActivityLine {self.description} {self.hours}h>'
 
 
 class EntryPhoto(db.Model):
