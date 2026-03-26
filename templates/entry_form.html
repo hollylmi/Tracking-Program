@@ -171,24 +171,43 @@
                       <input type="hidden" name="var_mach_ids[]" class="var-mach-hidden" value="{{ vl.machine_ids_json or '[]' }}">
                       <div class="d-flex gap-2">
                         <div class="flex-grow-1">
-                          <label class="form-label small text-muted mb-1"><i class="bi bi-people me-1"></i>Bill People</label>
-                          <select class="form-select form-select-sm var-emp-select" multiple size="3" style="font-size:.78rem;"
-                                  onchange="syncVarSelect(this, 'var-emp-hidden')">
+                          <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Bill People</div>
+                          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white">
                             {% for emp in employees %}
-                            <option value="{{ emp.id }}" {% if vl.billed_employee_ids and emp.id in vl.billed_employee_ids %}selected{% endif %}>{{ emp.name }}{% if emp.role %} — {{ emp.role }}{% endif %}</option>
+                            <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+                              <input type="checkbox" class="form-check-input mt-0 var-emp-cb"
+                                     value="{{ emp.id }}" {{ 'checked' if vl.billed_employee_ids and emp.id in vl.billed_employee_ids }}
+                                     onchange="syncVarCheckboxes(this)">
+                              {{ emp.name }}{% if emp.role %} <small class="text-muted">— {{ emp.role }}</small>{% endif %}
+                            </label>
                             {% endfor %}
-                          </select>
-                          <div class="form-text" style="font-size:.65rem;">Ctrl/Cmd+click to select multiple</div>
+                          </div>
                         </div>
                         <div class="flex-grow-1">
-                          <label class="form-label small text-muted mb-1"><i class="bi bi-tools me-1"></i>Bill Equipment</label>
-                          <select class="form-select form-select-sm var-mach-select" multiple size="3" style="font-size:.78rem;"
-                                  onchange="syncVarSelect(this, 'var-mach-hidden')">
-                            {% for machine in machines %}
-                            <option value="{{ machine.id }}" {% if vl.billed_machine_ids and machine.id in vl.billed_machine_ids %}selected{% endif %}>{{ machine.name }}{% if machine.plant_id %} ({{ machine.plant_id }}){% endif %}</option>
+                          <div class="small text-muted fw-semibold mb-1"><i class="bi bi-tools me-1"></i>Bill Equipment</div>
+                          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white">
+                            {% for g in machine_groups %}
+                            {% set g_machines = g.machines | selectattr('active') | list %}
+                            {% if g_machines %}
+                            <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom bg-light" style="cursor:pointer;font-size:.78rem;">
+                              <input type="checkbox" class="form-check-input mt-0 var-mach-cb"
+                                     value="g_{{ g.id }}" {{ 'checked' if vl.billed_machine_ids and g_machines[0].id in vl.billed_machine_ids }}
+                                     onchange="syncVarCheckboxes(this)">
+                              <i class="bi bi-collection text-info" style="font-size:.65rem;"></i>
+                              <strong>{{ g.name }}</strong>
+                              {% if g.delay_rate %}<small class="text-muted">${{ '%.0f'|format(g.delay_rate) }}/hr</small>{% endif %}
+                            </label>
+                            {% endif %}
                             {% endfor %}
-                          </select>
-                          <div class="form-text" style="font-size:.65rem;">Ctrl/Cmd+click to select multiple</div>
+                            {% for machine in machines if not machine.group %}
+                            <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+                              <input type="checkbox" class="form-check-input mt-0 var-mach-cb"
+                                     value="{{ machine.id }}" {{ 'checked' if vl.billed_machine_ids and machine.id in vl.billed_machine_ids }}
+                                     onchange="syncVarCheckboxes(this)">
+                              {{ machine.name }}{% if machine.plant_id %} <small class="text-muted">({{ machine.plant_id }})</small>{% endif %}
+                            </label>
+                            {% endfor %}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -712,12 +731,15 @@
   function updateTotalSqm() { updateTotals(); }
 
   // ── Variation lines ───────────────────────────────────────────────────────
-  // Employee and machine options for variation billing selects
+  // Employee, machine, and group options for variation billing
   const VAR_EMP_OPTIONS = [
     {% for emp in employees %}{ id: {{ emp.id }}, label: '{{ emp.name|replace("'", "\\'") }}{% if emp.role %} — {{ emp.role }}{% endif %}' },{% endfor %}
   ];
-  const VAR_MACHINE_OPTIONS = [
-    {% for machine in machines %}{ id: {{ machine.id }}, label: '{{ machine.name|replace("'", "\\'") }}{% if machine.plant_id %} ({{ machine.plant_id }}){% endif %}' },{% endfor %}
+  const VAR_GROUPS = [
+    {% for g in machine_groups %}{% set gm = g.machines | selectattr('active') | list %}{% if gm %}{ id: {{ g.id }}, name: '{{ g.name|replace("'", "\\'") }}', rate: {{ g.delay_rate or 'null' }}, machine_ids: [{{ gm | map(attribute='id') | join(',') }}] },{% endif %}{% endfor %}
+  ];
+  const VAR_UNGROUPED_MACHINES = [
+    {% for machine in machines %}{% if not machine.group %}{ id: {{ machine.id }}, label: '{{ machine.name|replace("'", "\\'") }}{% if machine.plant_id %} ({{ machine.plant_id }}){% endif %}' },{% endif %}{% endfor %}
   ];
 
   function addVariationLine() {
@@ -725,8 +747,28 @@
     const card = document.createElement('div');
     card.className = 'var-card border rounded p-2 mb-2 bg-light';
 
-    const empOpts = VAR_EMP_OPTIONS.map(e => `<option value="${e.id}">${e.label}</option>`).join('');
-    const machOpts = VAR_MACHINE_OPTIONS.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
+    const empHtml = VAR_EMP_OPTIONS.map(e =>
+      `<label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+        <input type="checkbox" class="form-check-input mt-0 var-emp-cb" value="${e.id}" onchange="syncVarCheckboxes(this)">
+        ${e.label}
+      </label>`
+    ).join('');
+
+    let machHtml = '';
+    VAR_GROUPS.forEach(g => {
+      machHtml += `<label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom bg-light" style="cursor:pointer;font-size:.78rem;">
+        <input type="checkbox" class="form-check-input mt-0 var-mach-cb" value="g_${g.id}" onchange="syncVarCheckboxes(this)">
+        <i class="bi bi-collection text-info" style="font-size:.65rem;"></i>
+        <strong>${g.name}</strong>
+        ${g.rate ? '<small class="text-muted">$' + g.rate + '/hr</small>' : ''}
+      </label>`;
+    });
+    VAR_UNGROUPED_MACHINES.forEach(m => {
+      machHtml += `<label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+        <input type="checkbox" class="form-check-input mt-0 var-mach-cb" value="${m.id}" onchange="syncVarCheckboxes(this)">
+        ${m.label}
+      </label>`;
+    });
 
     card.innerHTML = `
       <div class="d-flex gap-2 align-items-start mb-2">
@@ -739,16 +781,12 @@
       <input type="hidden" name="var_mach_ids[]" class="var-mach-hidden" value="[]">
       <div class="d-flex gap-2">
         <div class="flex-grow-1">
-          <label class="form-label small text-muted mb-1"><i class="bi bi-people me-1"></i>Bill People</label>
-          <select class="form-select form-select-sm var-emp-select" multiple size="3" style="font-size:.78rem;"
-                  onchange="syncVarSelect(this, 'var-emp-hidden')">${empOpts}</select>
-          <div class="form-text" style="font-size:.65rem;">Ctrl/Cmd+click to select multiple</div>
+          <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Bill People</div>
+          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white">${empHtml}</div>
         </div>
         <div class="flex-grow-1">
-          <label class="form-label small text-muted mb-1"><i class="bi bi-tools me-1"></i>Bill Equipment</label>
-          <select class="form-select form-select-sm var-mach-select" multiple size="3" style="font-size:.78rem;"
-                  onchange="syncVarSelect(this, 'var-mach-hidden')">${machOpts}</select>
-          <div class="form-text" style="font-size:.65rem;">Ctrl/Cmd+click to select multiple</div>
+          <div class="small text-muted fw-semibold mb-1"><i class="bi bi-tools me-1"></i>Bill Equipment</div>
+          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white">${machHtml}</div>
         </div>
       </div>
     `;
@@ -756,12 +794,26 @@
     card.querySelector('input').focus();
   }
 
-  // ── Variation billing sync — serialize multi-select to hidden JSON input ────
-  function syncVarSelect(selectEl, hiddenClass) {
-    const card = selectEl.closest('.var-card');
-    const hidden = card.querySelector('.' + hiddenClass);
-    const selected = Array.from(selectEl.selectedOptions).map(o => parseInt(o.value));
-    hidden.value = JSON.stringify(selected);
+  // ── Variation billing sync — serialize checkboxes to hidden JSON input ────
+  function syncVarCheckboxes(cb) {
+    const card = cb.closest('.var-card');
+    // Sync employee checkboxes
+    const empIds = Array.from(card.querySelectorAll('.var-emp-cb:checked')).map(c => parseInt(c.value));
+    card.querySelector('.var-emp-hidden').value = JSON.stringify(empIds);
+    // Sync machine checkboxes — groups prefixed with g_, expand to member IDs
+    const machVals = Array.from(card.querySelectorAll('.var-mach-cb:checked')).map(c => c.value);
+    const machIds = [];
+    machVals.forEach(v => {
+      if (v.startsWith('g_')) {
+        const gid = parseInt(v.substring(2));
+        const group = VAR_GROUPS.find(g => g.id === gid);
+        if (group) group.machine_ids.forEach(mid => { if (!machIds.includes(mid)) machIds.push(mid); });
+      } else {
+        const mid = parseInt(v);
+        if (!machIds.includes(mid)) machIds.push(mid);
+      }
+    });
+    card.querySelector('.var-mach-hidden').value = JSON.stringify(machIds);
   }
 
   // ── Track by lot toggle ─────────────────────────────────────────────────────
