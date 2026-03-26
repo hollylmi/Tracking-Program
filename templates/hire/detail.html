@@ -83,6 +83,8 @@
                   <small class="text-muted">(weekly &divide; {{ days_pw }})</small>
                 {% else %}—{% endif %}
               </td></tr>
+          <tr><th class="text-muted fw-normal small">Delay Rate</th>
+              <td>{% if hm.delay_rate %}<span class="text-success fw-semibold">${{ '%.2f'|format(hm.delay_rate) }}/hr</span>{% else %}—{% endif %}</td></tr>
         </table>
       </div>
     </div>

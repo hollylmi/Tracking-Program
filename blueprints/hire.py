@@ -69,6 +69,7 @@ def hire_new():
             hire_company_email=request.form.get('hire_company_email', '').strip() or None,
             hire_company_phone=request.form.get('hire_company_phone', '').strip() or None,
             cost_per_week=float(request.form.get('cost_per_week')) if request.form.get('cost_per_week') else None,
+            delay_rate=float(request.form.get('delay_rate')) if request.form.get('delay_rate') else None,
             count_saturdays='count_saturdays' in request.form,
             notes=request.form.get('notes', '').strip() or None,
         )
@@ -126,6 +127,7 @@ def hire_edit(hm_id):
         hm.hire_company_phone = request.form.get('hire_company_phone', '').strip() or None
         hm.notes = request.form.get('notes', '').strip() or None
         hm.cost_per_week = float(request.form.get('cost_per_week')) if request.form.get('cost_per_week') else None
+        hm.delay_rate = float(request.form.get('delay_rate')) if request.form.get('delay_rate') else None
         hm.count_saturdays = 'count_saturdays' in request.form
         delivery_str = request.form.get('delivery_date', '').strip()
         hm.delivery_date = datetime.strptime(delivery_str, '%Y-%m-%d').date() if delivery_str else None

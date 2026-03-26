@@ -134,7 +134,7 @@
         </div>
         <div class="card-body">
           <div class="row g-3">
-            <div class="col-12">
+            <div class="col-sm-6">
               <label class="form-label fw-semibold">Weekly Hire Rate ($)</label>
               <div class="input-group">
                 <span class="input-group-text">$</span>
@@ -143,10 +143,18 @@
                        placeholder="0.00">
                 <span class="input-group-text">/week</span>
               </div>
-              <div class="form-text">
-                Daily cost = weekly rate &divide; 5 (or &divide; 6 if Saturdays counted).
-                Used for all cost calculations and reports.
+              <div class="form-text">Used for standdown cost calculations.</div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Delay Rate ($/hr)</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="delay_rate" class="form-control" min="0" step="0.01"
+                       value="{{ '%.2f'|format(hm.delay_rate) if hm and hm.delay_rate else '' }}"
+                       placeholder="0.00">
+                <span class="input-group-text">/hr</span>
               </div>
+              <div class="form-text">Rate charged to client per hour for delays and wet weather.</div>
             </div>
           </div>
         </div>
