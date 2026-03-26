@@ -17,7 +17,7 @@
 .gantt-stripe       { position: absolute; top: 0; height: 100%; pointer-events: none; z-index: 0; }
 .gantt-stripe-sun   { background: rgba(255,105,180,0.18); }
 .gantt-stripe-nwd   { background: rgba(100,180,255,0.28); }
-.gantt-stripe-wwd   { background: rgba(0,160,210,0.28); }  /* wet weather = teal blue */
+.gantt-stripe-wwd   { background: rgba(220,53,69,0.22); }   /* weather delay = red */
 .gantt-stripe-cld   { background: rgba(255,140,0,0.30); }  /* client delay = orange */
 /* Reference lines */
 .gantt-today-line   { position: absolute; top: 0; height: 100%; width: 2px;
@@ -285,36 +285,51 @@
       <!-- Delay Impact -->
       <div class="col-md-6">
         <div class="card border-0 shadow-sm h-100">
-          <div class="card-header bg-white py-2 fw-semibold small">
-            <i class="bi bi-exclamation-triangle me-1 text-warning"></i>Delay Impact on Deadline
+          <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Delay Impact on Deadline</span>
+            {% if progress.delay_events %}
+            <span class="badge bg-dark text-white">+{{ progress.weather_delay_impact + progress.variation_delay_impact }}d total</span>
+            {% endif %}
           </div>
-          <div class="card-body">
-            {% if progress.weather_delay_days or progress.variation_delay_days %}
-            <table class="table table-sm table-borderless mb-2">
-              <tbody>
-                {% if progress.weather_delay_days %}
-                <tr>
-                  <td><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Site Delays (weather, wind, client, etc.)</td>
-                  <td class="text-end fw-semibold">{{ progress.weather_delay_days }} day{{ 's' if progress.weather_delay_days != 1 }}</td>
-                  <td class="text-end"><span class="badge bg-warning text-dark">+{{ progress.weather_delay_impact }}d to deadline</span></td>
-                </tr>
-                {% endif %}
-                {% if progress.variation_delay_days %}
-                <tr>
-                  <td><i class="bi bi-clipboard-check me-1 text-warning"></i>Client Variations</td>
-                  <td class="text-end fw-semibold">{{ progress.variation_delay_days }} day{{ 's' if progress.variation_delay_days != 1 }}</td>
-                  <td class="text-end"><span class="badge bg-warning text-dark">+{{ progress.variation_delay_impact }}d to deadline</span></td>
-                </tr>
-                {% endif %}
-                <tr class="border-top">
-                  <td class="fw-semibold">Total external delays</td>
-                  <td class="text-end fw-semibold">{{ progress.weather_delay_days + progress.variation_delay_days }} days</td>
-                  <td class="text-end"><span class="badge bg-dark text-white">+{{ progress.weather_delay_impact + progress.variation_delay_impact }}d</span></td>
-                </tr>
-              </tbody>
-            </table>
-            <div class="small text-muted">
-              <i class="bi bi-info-circle me-1"></i>These delays are external — not a reflection of crew productivity. Internal delays are excluded.
+          <div class="card-body p-0">
+            {% if progress.delay_events %}
+            <div style="max-height:250px;overflow-y:auto;">
+              <table class="table table-sm table-hover mb-0" style="font-size:.82rem;">
+                <thead class="table-light" style="position:sticky;top:0;">
+                  <tr>
+                    <th>Date</th>
+                    <th>Reason</th>
+                    <th>Description</th>
+                    <th class="text-end">Hours</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for evt in progress.delay_events %}
+                  <tr>
+                    <td class="text-nowrap">{{ evt.date }} <small class="text-muted">{{ evt.day }}</small></td>
+                    <td>
+                      {% if evt.type == 'variation' %}
+                      <span class="badge bg-warning text-dark">{{ evt.reason }}</span>
+                      {% else %}
+                      <span class="badge bg-danger-subtle text-danger">{{ evt.reason }}</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ evt.description }}">{{ evt.description or '—' }}</td>
+                    <td class="text-end fw-semibold">{{ evt.hours }}h</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                  <tr class="fw-semibold">
+                    <td colspan="2">Total: {{ progress.delay_events | length }} events</td>
+                    <td class="text-end">{{ progress.weather_delay_days + progress.variation_delay_days }} days lost</td>
+                    <td class="text-end">+{{ progress.weather_delay_impact + progress.variation_delay_impact }}d to deadline</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div class="px-3 py-2 small text-muted border-top">
+              <i class="bi bi-info-circle me-1"></i>External delays only — internal delays excluded.
             </div>
             {% else %}
             <div class="text-center py-3 text-muted small">
@@ -334,13 +349,16 @@
       <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="mb-0 fw-semibold"><i class="bi bi-bar-chart-steps me-2 text-primary"></i>Schedule Gantt</h5>
         <div class="d-flex flex-wrap gap-3 small text-muted align-items-center">
-          <span><span style="display:inline-block;width:14px;height:10px;background:deeppink;opacity:0.4;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Planned</span>
+          <label style="cursor:pointer;" title="Toggle planned bars">
+            <input type="checkbox" id="togglePlanned" checked onchange="togglePlannedBars(this.checked)" class="form-check-input me-1" style="vertical-align:middle;">
+            <span style="display:inline-block;width:14px;height:10px;background:deeppink;opacity:0.4;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Planned
+          </label>
           <span><span style="display:inline-block;width:14px;height:10px;background:#00c060;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Actual</span>
           <span><span style="display:inline-block;width:14px;height:10px;background:gold;border:1px dashed #aaa;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Forecast</span>
           <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,105,180,0.4);vertical-align:middle;margin-right:3px;"></span>Weekend</span>
           <span><span style="display:inline-block;width:12px;height:10px;background:rgba(100,180,255,0.45);vertical-align:middle;margin-right:3px;"></span>Non-work</span>
-          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(0,160,210,0.45);vertical-align:middle;margin-right:3px;"></span>Wet Weather</span>
-          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,140,0,0.4);vertical-align:middle;margin-right:3px;"></span>Client Delay</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(220,53,69,0.35);vertical-align:middle;margin-right:3px;"></span>Weather</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,140,0,0.4);vertical-align:middle;margin-right:3px;"></span>Delay</span>
           <span><span style="display:inline-block;width:2px;height:12px;background:#dc3545;vertical-align:middle;margin-right:3px;"></span>Today</span>
           <span><span style="display:inline-block;width:2px;height:12px;background:#0d6efd;vertical-align:middle;margin-right:3px;"></span>Target</span>
         </div>
@@ -1531,6 +1549,13 @@
 
 {% block scripts %}
 <script>
+// Toggle planned bars visibility
+function togglePlannedBars(show) {
+  document.querySelectorAll('.gantt-planned').forEach(el => {
+    el.style.display = show ? '' : 'none';
+  });
+}
+
 // Restore active tab from URL hash
 (function() {
   var hash = window.location.hash;

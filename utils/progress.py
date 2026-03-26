@@ -89,6 +89,7 @@ def compute_project_progress(project_id):
     total_variation_days = 0
     weather_delay_impact = 0
     variation_delay_impact = 0
+    delay_events = []
 
     if project.start_date and total_planned_days > 0:
         # Build non-work date set
@@ -102,14 +103,34 @@ def compute_project_progress(project_id):
                     non_work.add(c.date)
         worked_sundays = {ws.date for ws in ProjectWorkedSunday.query.filter_by(project_id=project_id).all()}
 
-        # Count delay days — any entry with delay_hours > 0 and a reason is a site delay
+        # Count delay days and build event list
         site_delay_dates = set()
         variation_dates = set()
+        delay_events = []
         for e in all_entries:
             if (e.delay_hours or 0) > 0 and e.delay_reason:
                 site_delay_dates.add(e.entry_date)
+                delay_events.append({
+                    'date': e.entry_date.strftime('%d/%m/%Y'),
+                    'day': e.entry_date.strftime('%a'),
+                    'reason': e.delay_reason,
+                    'hours': e.delay_hours,
+                    'description': e.delay_description or '',
+                    'type': 'delay',
+                })
             if e.variation_lines and sum(vl.hours or 0 for vl in e.variation_lines) > 0:
                 variation_dates.add(e.entry_date)
+                var_hrs = sum(vl.hours or 0 for vl in e.variation_lines)
+                var_descs = [f"V{vl.variation_number}: {vl.description}" for vl in e.variation_lines if vl.variation_number or vl.description]
+                delay_events.append({
+                    'date': e.entry_date.strftime('%d/%m/%Y'),
+                    'day': e.entry_date.strftime('%a'),
+                    'reason': 'Client Variation',
+                    'hours': var_hrs,
+                    'description': '; '.join(var_descs),
+                    'type': 'variation',
+                })
+        delay_events.sort(key=lambda x: x['date'])
 
         total_weather_days = len(site_delay_dates)  # renamed but kept for compat
         total_variation_days = len(variation_dates)
@@ -149,6 +170,7 @@ def compute_project_progress(project_id):
         'weather_delay_days': total_weather_days,     # kept for backward compat
         'weather_delay_impact': weather_delay_impact,
         'variation_delay_impact': variation_delay_impact,
+        'delay_events': delay_events,
     }
 
 
