@@ -1049,7 +1049,7 @@
             <div class="mb-3">
               <div class="form-check">
                 <input type="checkbox" name="track_by_lot" id="trackByLot" class="form-check-input"
-                       value="1" {{ 'checked' if project.track_by_lot is not false }}>
+                       value="1" {% if project.track_by_lot != false %}checked{% endif %}>
                 <label class="form-check-label" for="trackByLot">Track production by lot</label>
               </div>
               <div class="form-text">When off, daily entries only ask for material + hours + sqm (no lot field). Progress tracks by material only.</div>

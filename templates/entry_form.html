@@ -35,7 +35,6 @@
                 <option value="">— Select a project —</option>
                 {% for project in projects %}
                 <option value="{{ project.id }}"
-                  data-track-lot="{{ 'true' if project.track_by_lot is not false else 'false' }}"
                   {% if entry and entry.project_id == project.id %}selected{% endif %}>
                   {{ project.name }}
                 </option>
@@ -591,6 +590,13 @@
   const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const ENTRY_ID = {{ entry.id if entry else 'null' }};
 
+  // Project lot tracking map — built from server data
+  const PROJECT_TRACK_LOT = {
+    {% for project in projects %}
+    '{{ project.id }}': {{ project.track_by_lot | tojson }},
+    {% endfor %}
+  };
+
   // ── Production lines ──────────────────────────────────────────────────────
   let lineCounter = document.querySelectorAll('.prod-line').length;
 
@@ -615,7 +621,7 @@
     progRow.className = 'prod-progress';
     progRow.dataset.lineId = lineId;
     progRow.style.display = 'none';
-    progRow.innerHTML = `<td colspan="4" class="py-1 px-2"><div class="d-flex align-items-center gap-2 small">
+    progRow.innerHTML = `<td colspan="5" class="py-1 px-2"><div class="d-flex align-items-center gap-2 small">
       <div class="progress flex-grow-1" style="height:10px"><div class="progress-bar bg-success" style="width:0%"></div></div>
       <span class="text-muted prog-label">—</span>
     </div></td>`;
@@ -710,7 +716,7 @@
     progRow.className = 'prod-progress';
     progRow.dataset.lineId = lineId;
     progRow.style.display = 'none';
-    progRow.innerHTML = `<td colspan="4" class="py-1 px-2"><div class="d-flex align-items-center gap-2 small">
+    progRow.innerHTML = `<td colspan="5" class="py-1 px-2"><div class="d-flex align-items-center gap-2 small">
       <div class="progress flex-grow-1" style="height:10px"><div class="progress-bar bg-success" style="width:0%"></div></div>
       <span class="text-muted prog-label">—</span>
     </div></td>`;
@@ -802,9 +808,10 @@
   let _trackByLot = true;
 
   function updateLotVisibility() {
-    const sel = document.getElementById('projectSelect');
-    const opt = sel.options[sel.selectedIndex];
-    _trackByLot = !opt || !opt.value || opt.dataset.trackLot !== 'false';
+    const projectId = document.getElementById('projectSelect').value;
+    // Look up in the map — default to true if not found or null
+    const trackVal = PROJECT_TRACK_LOT[projectId];
+    _trackByLot = (trackVal !== false);
     // Toggle ALL lot-col elements (th headers + td cells in every row)
     document.querySelectorAll('.lot-col').forEach(el => {
       el.style.display = _trackByLot ? '' : 'none';
