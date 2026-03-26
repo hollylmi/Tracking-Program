@@ -102,28 +102,28 @@ def compute_project_progress(project_id):
                     non_work.add(c.date)
         worked_sundays = {ws.date for ws in ProjectWorkedSunday.query.filter_by(project_id=project_id).all()}
 
-        # Count weather delay days and variation delay days
-        weather_dates = set()
+        # Count delay days — any entry with delay_hours > 0 and a reason is a site delay
+        site_delay_dates = set()
         variation_dates = set()
         for e in all_entries:
-            if (e.delay_hours or 0) > 0 and e.delay_reason and 'weather' in (e.delay_reason or '').lower():
-                weather_dates.add(e.entry_date)
+            if (e.delay_hours or 0) > 0 and e.delay_reason:
+                site_delay_dates.add(e.entry_date)
             if e.variation_lines and sum(vl.hours or 0 for vl in e.variation_lines) > 0:
                 variation_dates.add(e.entry_date)
 
-        total_weather_days = len(weather_dates)
+        total_weather_days = len(site_delay_dates)  # renamed but kept for compat
         total_variation_days = len(variation_dates)
+        all_delay_dates = site_delay_dates | variation_dates
 
-        # Count working days from start to today (excluding Sundays, non-work, weather, variations)
+        # Count working days from start to today (excluding Sundays, non-work, ALL site delays)
         working_days_elapsed = 0
         d = project.start_date
         end = min(today, project.start_date + _td(days=total_planned_days * 2))  # safety cap
         while d <= end:
             is_sunday = d.weekday() == 6 and d not in worked_sundays
             is_nonwork = d in non_work
-            is_weather = d in weather_dates
-            is_variation = d in variation_dates
-            if not is_sunday and not is_nonwork and not is_weather and not is_variation:
+            is_delay = d in all_delay_dates
+            if not is_sunday and not is_nonwork and not is_delay:
                 working_days_elapsed += 1
             d += _td(days=1)
 
@@ -144,8 +144,9 @@ def compute_project_progress(project_id):
         'planned_crew': project.planned_crew,
         'current_crew': current_crew,
         'total_planned_days': total_planned_days,
-        'weather_delay_days': total_weather_days,
+        'site_delay_days': total_weather_days,        # all site delays (weather, wind, client, etc.)
         'variation_delay_days': total_variation_days,
+        'weather_delay_days': total_weather_days,     # kept for backward compat
         'weather_delay_impact': weather_delay_impact,
         'variation_delay_impact': variation_delay_impact,
     }
