@@ -63,7 +63,18 @@
             </div>
             {% endif %}
           </div>
-          <div class="mt-2 small text-muted">
+          {% set rates = company_rates.get(c.id, []) %}
+          {% if rates %}
+          <div class="mt-2">
+            {% for r in rates %}
+            <div class="d-flex justify-content-between small">
+              <span class="text-muted">{{ r.type }} <small>(x{{ r.count }})</small></span>
+              <span class="fw-semibold">${{ '%.0f'|format(r.avg_weekly) }}/wk</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <div class="mt-1 small text-muted">
             {{ c.reviews | length }} review{{ 's' if c.reviews | length != 1 else '' }}
           </div>
         </div>

@@ -320,7 +320,28 @@ def hire_reactivate(hm_id):
 @require_role('admin', 'supervisor')
 def hire_companies():
     companies = HireCompany.query.order_by(HireCompany.name).all()
-    return render_template('hire/companies.html', companies=companies)
+
+    # Build average rates by machine type per company
+    company_rates = {}
+    for c in companies:
+        machines = HiredMachine.query.filter_by(hire_company=c.name).all()
+        type_data = {}
+        for hm in machines:
+            mtype = hm.machine_type or hm.machine_name or 'Other'
+            if mtype not in type_data:
+                type_data[mtype] = {'total_rate': 0, 'count': 0}
+            if hm.cost_per_week:
+                type_data[mtype]['total_rate'] += hm.cost_per_week
+                type_data[mtype]['count'] += 1
+        avg_rates = []
+        for mtype, data in sorted(type_data.items()):
+            if data['count'] > 0:
+                avg = round(data['total_rate'] / data['count'], 0)
+                avg_rates.append({'type': mtype, 'avg_weekly': avg, 'count': data['count']})
+        company_rates[c.id] = avg_rates
+
+    return render_template('hire/companies.html', companies=companies,
+                           company_rates=company_rates)
 
 
 @hire_bp.route('/hire/companies/add', methods=['POST'])
