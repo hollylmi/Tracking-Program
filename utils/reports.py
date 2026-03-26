@@ -331,11 +331,18 @@ def generate_project_report_pdf(project, progress, delay_summary, cost_estimate,
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     # Header with logo
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'logo.png')
+    # Look for logo in common formats
+    _static = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
+    logo_path = None
+    for ext in ('png', 'jpg', 'jpeg', 'gif'):
+        _p = os.path.join(_static, f'logo.{ext}')
+        if os.path.exists(_p):
+            logo_path = _p
+            break
     header_y = pdf.get_y()
     page_w = pdf.w - pdf.l_margin - pdf.r_margin
 
-    if os.path.exists(logo_path):
+    if logo_path:
         pdf.image(logo_path, x=pdf.l_margin, y=header_y, h=18, keep_aspect_ratio=True)
         # Company + project name to the right of the logo
         pdf.set_xy(pdf.l_margin + 45, header_y)
