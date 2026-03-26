@@ -103,12 +103,24 @@ def compute_project_progress(project_id):
                     non_work.add(c.date)
         worked_sundays = {ws.date for ws in ProjectWorkedSunday.query.filter_by(project_id=project_id).all()}
 
-        # Count delay days and build event list
+        # Count delay days and build event list — use delay_lines if available
         site_delay_dates = set()
         variation_dates = set()
         delay_events = []
         for e in all_entries:
-            if (e.delay_hours or 0) > 0 and e.delay_reason:
+            if e.delay_lines:
+                for dl in e.delay_lines:
+                    if (dl.hours or 0) > 0 and dl.reason:
+                        site_delay_dates.add(e.entry_date)
+                        delay_events.append({
+                            'date': e.entry_date.strftime('%d/%m/%Y'),
+                            'day': e.entry_date.strftime('%a'),
+                            'reason': dl.reason,
+                            'hours': dl.hours,
+                            'description': dl.description or '',
+                            'type': 'delay',
+                        })
+            elif (e.delay_hours or 0) > 0 and e.delay_reason:
                 site_delay_dates.add(e.entry_date)
                 delay_events.append({
                     'date': e.entry_date.strftime('%d/%m/%Y'),

@@ -239,88 +239,85 @@
               </div>
             </div>
 
-            <!-- Site Delays (billable to client) -->
+            <!-- Site Delays (multiple lines) -->
             <div class="col-12">
               <div class="card border shadow-sm">
                 <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
-                  <span class="fw-semibold small"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Site Delays (Billable)</span>
+                  <span class="fw-semibold small"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Site Delays</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small" id="totalDelayLabel"></span>
+                    <button type="button" class="btn btn-sm btn-outline-warning py-0" onclick="addDelayLine()">
+                      <i class="bi bi-plus me-1"></i>Add Delay
+                    </button>
+                  </div>
                 </div>
-                <div class="card-body py-2">
-                  <div class="row g-2 mb-2">
-                    <div class="col-sm-4">
-                      <label class="form-label small fw-semibold mb-1">Reason</label>
-                      {% set _dr = entry.delay_reason if entry and entry.delay_reason else '' %}
-                      <select name="delay_reason" class="form-select form-select-sm" id="delayReasonSelect"
-                              onchange="updateDelayUI()">
-                        <option value="">— No delay —</option>
-                        <option value="Wet Weather" {{ 'selected' if _dr == 'Wet Weather' }}>Wet Weather (Rain)</option>
-                        <option value="Wind" {{ 'selected' if _dr == 'Wind' }}>High Wind</option>
-                        <option value="Extreme Heat" {{ 'selected' if _dr == 'Extreme Heat' }}>Extreme Heat</option>
-                        <option value="Client Delay" {{ 'selected' if _dr == 'Client Delay' }}>Client Delay</option>
-                        <option value="Access Issue" {{ 'selected' if _dr == 'Access Issue' }}>Access Issue</option>
-                        <option value="Equipment Failure" {{ 'selected' if _dr == 'Equipment Failure' }}>Equipment Failure</option>
-                        <option value="Safety Stop" {{ 'selected' if _dr == 'Safety Stop' }}>Safety Stop</option>
-                        <option value="Other" {{ 'selected' if _dr and _dr not in ('Wet Weather','Wind','Extreme Heat','Client Delay','Access Issue','Equipment Failure','Safety Stop') }}>Other</option>
-                      </select>
+                <div class="card-body p-0" id="delayLines">
+                  {% if entry and entry.delay_lines %}
+                    {% for dl in entry.delay_lines %}
+                    <div class="delay-card border-bottom p-2">
+                      <div class="d-flex gap-2 align-items-start">
+                        <div style="flex:0 0 140px">
+                          <select name="delay_reason[]" class="form-select form-select-sm" style="font-size:.78rem;">
+                            <option value="Wet Weather" {{ 'selected' if dl.reason == 'Wet Weather' }}>Wet Weather</option>
+                            <option value="Wind" {{ 'selected' if dl.reason == 'Wind' }}>High Wind</option>
+                            <option value="Extreme Heat" {{ 'selected' if dl.reason == 'Extreme Heat' }}>Extreme Heat</option>
+                            <option value="Client Delay" {{ 'selected' if dl.reason == 'Client Delay' }}>Client Delay</option>
+                            <option value="Access Issue" {{ 'selected' if dl.reason == 'Access Issue' }}>Access Issue</option>
+                            <option value="Equipment Failure" {{ 'selected' if dl.reason == 'Equipment Failure' }}>Equipment Failure</option>
+                            <option value="Safety Stop" {{ 'selected' if dl.reason == 'Safety Stop' }}>Safety Stop</option>
+                            <option value="Other" {{ 'selected' if dl.reason and dl.reason not in ('Wet Weather','Wind','Extreme Heat','Client Delay','Access Issue','Equipment Failure','Safety Stop') }}>Other</option>
+                          </select>
+                        </div>
+                        <div style="flex:0 0 70px">
+                          <input type="number" name="delay_hours_line[]" class="form-control form-control-sm delay-line-hours" min="0" step="0.25" value="{{ dl.hours or '' }}" placeholder="Hrs" oninput="updateDelayTotal()">
+                        </div>
+                        <div class="flex-grow-1">
+                          <input type="text" name="delay_desc[]" class="form-control form-control-sm" value="{{ dl.description or '' }}" placeholder="Description...">
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.delay-card').remove(); updateDelayTotal()"><i class="bi bi-x-lg"></i></button>
+                      </div>
                     </div>
-                    <div class="col-sm-2">
-                      <label class="form-label small fw-semibold mb-1">Hours</label>
-                      <input type="number" name="delay_hours" class="form-control form-control-sm" min="0" step="0.25"
-                             id="delayHoursInput"
-                             value="{{ entry.delay_hours if entry and entry.delay_hours else '' }}"
-                             placeholder="0.0">
+                    {% endfor %}
+                  {% elif entry and entry.delay_hours and entry.delay_hours > 0 %}
+                    {# Legacy single delay — show as one line #}
+                    <div class="delay-card border-bottom p-2">
+                      <div class="d-flex gap-2 align-items-start">
+                        <div style="flex:0 0 140px">
+                          <select name="delay_reason[]" class="form-select form-select-sm" style="font-size:.78rem;">
+                            {% set _dr = entry.delay_reason or '' %}
+                            <option value="Wet Weather" {{ 'selected' if _dr == 'Wet Weather' }}>Wet Weather</option>
+                            <option value="Wind" {{ 'selected' if _dr == 'Wind' }}>High Wind</option>
+                            <option value="Extreme Heat" {{ 'selected' if _dr == 'Extreme Heat' }}>Extreme Heat</option>
+                            <option value="Client Delay" {{ 'selected' if _dr == 'Client Delay' }}>Client Delay</option>
+                            <option value="Access Issue" {{ 'selected' if _dr == 'Access Issue' }}>Access Issue</option>
+                            <option value="Equipment Failure" {{ 'selected' if _dr == 'Equipment Failure' }}>Equipment Failure</option>
+                            <option value="Safety Stop" {{ 'selected' if _dr == 'Safety Stop' }}>Safety Stop</option>
+                            <option value="Other" {{ 'selected' if _dr and _dr not in ('Wet Weather','Wind','Extreme Heat','Client Delay','Access Issue','Equipment Failure','Safety Stop') }}>Other</option>
+                          </select>
+                        </div>
+                        <div style="flex:0 0 70px">
+                          <input type="number" name="delay_hours_line[]" class="form-control form-control-sm delay-line-hours" min="0" step="0.25" value="{{ entry.delay_hours }}" placeholder="Hrs" oninput="updateDelayTotal()">
+                        </div>
+                        <div class="flex-grow-1">
+                          <input type="text" name="delay_desc[]" class="form-control form-control-sm" value="{{ entry.delay_description or '' }}" placeholder="Description...">
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.delay-card').remove(); updateDelayTotal()"><i class="bi bi-x-lg"></i></button>
+                      </div>
                     </div>
-                    <div class="col-sm-6">
-                      <label class="form-label small fw-semibold mb-1">Description</label>
-                      <input type="text" name="delay_description" class="form-control form-control-sm"
-                             value="{{ entry.delay_description if entry and entry.delay_description else '' }}"
-                             placeholder="Details of the delay...">
-                    </div>
+                  {% endif %}
+                </div>
+                {# Hidden fields for legacy compat #}
+                <input type="hidden" name="delay_hours" id="delayHoursInput" value="{{ entry.delay_hours if entry else '0' }}">
+                <input type="hidden" name="delay_billable" value="true">
+                <div class="card-footer bg-white py-2">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="machines_stood_down"
+                           id="machinesStoodDownCheck" value="1"
+                           {% if entry and entry.machines_stood_down %}checked{% endif %}>
+                    <label class="form-check-label small" for="machinesStoodDownCheck">
+                      <i class="bi bi-pause-circle me-1"></i>Hired machines stood down (no hire charges today)
+                    </label>
                   </div>
-                  <!-- Equipment to bill for this delay -->
-                  <div id="delayEquipSection" style="{% if not entry or not entry.delay_hours %}display:none{% endif %}">
-                    <div class="small text-muted fw-semibold mb-1"><i class="bi bi-tools me-1"></i>Equipment to charge for delay</div>
-                    <div style="max-height:120px;overflow-y:auto;" class="border rounded bg-white mb-2">
-                      {% for g in machine_groups %}
-                      {% set gm = g.machines | selectattr('active') | list %}
-                      {% if gm and g.delay_rate %}
-                      <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom bg-light" style="cursor:pointer;font-size:.78rem;">
-                        <input type="checkbox" class="form-check-input mt-0" name="delay_machine_ids" value="g_{{ g.id }}"
-                               {{ 'checked' if entry and entry.machines and gm[0].id in (entry.machines | map(attribute='id') | list) }}>
-                        <i class="bi bi-collection text-info" style="font-size:.65rem;"></i>
-                        <strong>{{ g.name }}</strong>
-                        <small class="text-success ms-1">${{ '%.2f'|format(g.delay_rate) }}/hr</small>
-                      </label>
-                      {% endif %}
-                      {% endfor %}
-                      {% for m in machines if m.delay_rate and not m.group %}
-                      <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-                        <input type="checkbox" class="form-check-input mt-0" name="delay_machine_ids" value="{{ m.id }}"
-                               {{ 'checked' if entry and entry.machines and m.id in (entry.machines | map(attribute='id') | list) }}>
-                        {{ m.name }}{% if m.plant_id %} <small class="text-muted">({{ m.plant_id }})</small>{% endif %}
-                        <small class="text-success ms-1">${{ '%.2f'|format(m.delay_rate) }}/hr</small>
-                      </label>
-                      {% endfor %}
-                      {% for hm in hired_machines if hm.delay_rate %}
-                      <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-                        <input type="checkbox" class="form-check-input mt-0" name="delay_hired_ids" value="{{ hm.id }}">
-                        <i class="bi bi-building text-muted" style="font-size:.65rem;"></i>
-                        {{ hm.machine_name }}{% if hm.plant_id %} <small class="text-muted">({{ hm.plant_id }})</small>{% endif %}
-                        <small class="text-success ms-1">${{ '%.2f'|format(hm.delay_rate) }}/hr</small>
-                        <small class="text-muted ms-1">— {{ hm.hire_company or 'Hired' }}</small>
-                      </label>
-                      {% endfor %}
-                    </div>
-                    <div class="form-check mb-1">
-                      <input class="form-check-input" type="checkbox" name="machines_stood_down"
-                             id="machinesStoodDownCheck" value="1"
-                             {% if entry and entry.machines_stood_down %}checked{% endif %}>
-                      <label class="form-check-label small" for="machinesStoodDownCheck">
-                        <i class="bi bi-pause-circle me-1"></i>Hired machines stood down (no hire charges today)
-                      </label>
-                    </div>
-                  </div>
-                  <input type="hidden" name="delay_billable" value="true">
                 </div>
               </div>
             </div>
@@ -797,6 +794,34 @@
     card.querySelector('input').focus();
   }
 
+  // ── Delay lines ────────────────────────────────────────────────────────────
+  const DELAY_REASONS = ['Wet Weather','Wind','Extreme Heat','Client Delay','Access Issue','Equipment Failure','Safety Stop','Other'];
+
+  function addDelayLine() {
+    const container = document.getElementById('delayLines');
+    const card = document.createElement('div');
+    card.className = 'delay-card border-bottom p-2';
+    const opts = DELAY_REASONS.map(r => `<option value="${r}">${r}</option>`).join('');
+    card.innerHTML = `
+      <div class="d-flex gap-2 align-items-start">
+        <div style="flex:0 0 140px"><select name="delay_reason[]" class="form-select form-select-sm" style="font-size:.78rem;">${opts}</select></div>
+        <div style="flex:0 0 70px"><input type="number" name="delay_hours_line[]" class="form-control form-control-sm delay-line-hours" min="0" step="0.25" placeholder="Hrs" oninput="updateDelayTotal()"></div>
+        <div class="flex-grow-1"><input type="text" name="delay_desc[]" class="form-control form-control-sm" placeholder="Description..."></div>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.delay-card').remove(); updateDelayTotal()"><i class="bi bi-x-lg"></i></button>
+      </div>
+    `;
+    container.appendChild(card);
+    card.querySelector('select').focus();
+  }
+
+  function updateDelayTotal() {
+    let total = 0;
+    document.querySelectorAll('.delay-line-hours').forEach(input => { total += parseFloat(input.value) || 0; });
+    document.getElementById('totalDelayLabel').textContent = total > 0 ? total + 'h total' : '';
+    document.getElementById('delayHoursInput').value = total;
+  }
+  updateDelayTotal();
+
   // ── Variation billing sync — serialize checkboxes to hidden JSON input ────
   function syncVarCheckboxes(cb) {
     const card = cb.closest('.var-card');
@@ -894,30 +919,16 @@
   document.getElementById('entryDate').addEventListener('change', updateDayDisplay);
   updateDayDisplay();
 
-  // Show/hide delay equipment section based on reason + hours
-  const delayInput = document.getElementById('delayHoursInput');
-  const delayReasonSelect = document.getElementById('delayReasonSelect');
-  const delayEquipSection = document.getElementById('delayEquipSection');
+  // Standdown card visibility based on delay total
   const standdownCard = document.getElementById('standdownCard');
-
-  function updateDelayUI() {
-    const reason = delayReasonSelect ? delayReasonSelect.value : '';
-    const hrs = parseFloat(delayInput ? delayInput.value : 0) || 0;
-    const hasDelay = reason && hrs > 0;
-
-    if (delayEquipSection) delayEquipSection.style.display = hasDelay ? '' : 'none';
-    if (standdownCard) standdownCard.style.display = hasDelay ? '' : 'none';
-
-    // Auto-set delay hours to visible state
-    if (reason && !hrs && delayInput) {
-      // Don't auto-fill, just show the equipment section when reason is selected
-      if (delayEquipSection) delayEquipSection.style.display = reason ? '' : 'none';
-    }
+  function updateStanddownVisibility() {
+    const total = parseFloat(document.getElementById('delayHoursInput').value) || 0;
+    if (standdownCard) standdownCard.style.display = total > 0 ? '' : 'none';
   }
-
-  if (delayInput) delayInput.addEventListener('input', updateDelayUI);
-  if (delayReasonSelect) delayReasonSelect.addEventListener('change', updateDelayUI);
-  updateDelayUI();
+  // Watch for delay total changes
+  const _origUpdateDelay = updateDelayTotal;
+  updateDelayTotal = function() { _origUpdateDelay(); updateStanddownVisibility(); };
+  updateStanddownVisibility();
 
   // (lot toggle code is above the production line init)
 

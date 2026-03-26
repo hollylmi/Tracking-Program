@@ -120,18 +120,22 @@ def compute_gantt_data(project_id):
     WEATHER_REASONS = {'wet weather', 'wind', 'extreme heat'}
     _all_entries = DailyEntry.query.filter_by(project_id=project_id).all()
 
-    # Weather delay dates (rain, wind, heat — blue/teal shading)
-    weather_delay_dates = {
-        e.entry_date for e in _all_entries
-        if (e.delay_hours or 0) > 0 and e.delay_reason
-        and e.delay_reason.lower() in WEATHER_REASONS
-    }
-    # Other billable delay dates (client delay, access, equipment, safety, other — orange shading)
-    client_delay_dates = {
-        e.entry_date for e in _all_entries
-        if (e.delay_hours or 0) > 0 and e.delay_reason
-        and e.delay_reason.lower() not in WEATHER_REASONS
-    }
+    # Weather delay dates — check delay_lines first, fall back to legacy
+    weather_delay_dates = set()
+    client_delay_dates = set()
+    for e in _all_entries:
+        if e.delay_lines:
+            for dl in e.delay_lines:
+                if (dl.hours or 0) > 0 and dl.reason:
+                    if dl.reason.lower() in WEATHER_REASONS:
+                        weather_delay_dates.add(e.entry_date)
+                    else:
+                        client_delay_dates.add(e.entry_date)
+        elif (e.delay_hours or 0) > 0 and e.delay_reason:
+            if e.delay_reason.lower() in WEATHER_REASONS:
+                weather_delay_dates.add(e.entry_date)
+            else:
+                client_delay_dates.add(e.entry_date)
     # Variation dates (entries with variation lines)
     variation_dates = {
         e.entry_date for e in _all_entries

@@ -194,6 +194,9 @@ class DailyEntry(db.Model):
     production_lines = db.relationship('EntryProductionLine', backref='entry',
                                         cascade='all, delete-orphan', lazy=True,
                                         order_by='EntryProductionLine.id')
+    delay_lines = db.relationship('EntryDelayLine', backref='entry',
+                                    cascade='all, delete-orphan', lazy=True,
+                                    order_by='EntryDelayLine.id')
     variation_lines = db.relationship('EntryVariationLine', backref='entry',
                                        cascade='all, delete-orphan', lazy=True,
                                        order_by='EntryVariationLine.id')
@@ -217,12 +220,31 @@ class DailyEntry(db.Model):
         return self.install_hours or 0
 
     @property
+    def total_delay_hours_from_lines(self):
+        """Total delay hours from delay lines, falling back to legacy delay_hours."""
+        if self.delay_lines:
+            return sum(dl.hours or 0 for dl in self.delay_lines)
+        return self.delay_hours or 0
+
+    @property
     def total_variation_hours(self):
         """Total hours from variation lines."""
         return sum(vl.hours or 0 for vl in self.variation_lines) if self.variation_lines else 0
 
     def __repr__(self):
         return f'<DailyEntry {self.entry_date} - {self.project.name}>'
+
+
+class EntryDelayLine(db.Model):
+    """One delay event within a daily entry."""
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
+    reason = db.Column(db.String(100))       # Wet Weather, Wind, Client Delay, etc.
+    hours = db.Column(db.Float, default=0)
+    description = db.Column(db.Text)
+
+    def __repr__(self):
+        return f'<EntryDelayLine {self.reason} {self.hours}h>'
 
 
 class EntryVariationLine(db.Model):

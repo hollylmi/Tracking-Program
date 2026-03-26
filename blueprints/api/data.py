@@ -126,6 +126,10 @@ def _format_entry(entry, include_detail=False):
              'install_hours': pl.install_hours, 'install_sqm': pl.install_sqm}
             for pl in entry.production_lines
         ]
+        base['delay_lines'] = [
+            {'reason': dl.reason, 'hours': dl.hours, 'description': dl.description}
+            for dl in entry.delay_lines
+        ]
         base['variation_lines'] = [
             {'variation_number': vl.variation_number, 'description': vl.description, 'hours': vl.hours}
             for vl in entry.variation_lines

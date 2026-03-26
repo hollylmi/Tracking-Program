@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 from datetime import date, datetime
 
 from models import (db, Project, Employee, Machine, MachineGroup, DailyEntry, EntryProductionLine,
-                    EntryVariationLine, HiredMachine, StandDown, EntryPhoto, ProjectMachine, ProjectAssignment)
+                    EntryDelayLine, EntryVariationLine, HiredMachine, StandDown, EntryPhoto, ProjectMachine, ProjectAssignment)
 import storage
 from utils.files import allowed_photo
 
@@ -158,6 +158,30 @@ def new_entry():
                 material=pl['material'], install_hours=pl['hours'],
                 install_sqm=pl['sqm']))
 
+        # Delay lines
+        delay_reasons = request.form.getlist('delay_reason[]')
+        delay_hours_lines = request.form.getlist('delay_hours_line[]')
+        delay_descs = request.form.getlist('delay_desc[]')
+        total_delay = 0
+        first_reason = None
+        first_desc = None
+        for i in range(len(delay_reasons)):
+            reason = (delay_reasons[i].strip() if i < len(delay_reasons) else '') or None
+            hrs = float(delay_hours_lines[i] or 0) if i < len(delay_hours_lines) else 0
+            desc = (delay_descs[i].strip() if i < len(delay_descs) else '') or None
+            if reason and hrs > 0:
+                db.session.add(EntryDelayLine(
+                    entry_id=entry.id, reason=reason, hours=hrs, description=desc))
+                total_delay += hrs
+                if first_reason is None:
+                    first_reason = reason
+                if first_desc is None and desc:
+                    first_desc = desc
+        # Update legacy fields for backward compat
+        entry.delay_hours = total_delay
+        entry.delay_reason = first_reason
+        entry.delay_description = first_desc
+
         # Variation lines
         var_numbers = request.form.getlist('var_number[]')
         var_descs = request.form.getlist('var_desc[]')
@@ -281,11 +305,32 @@ def edit_entry(entry_id):
         entry.material = first_material
         entry.install_sqm = total_sqm
         entry.install_hours = total_hours
-        entry.delay_hours = float(request.form.get('delay_hours') or 0)
-        entry.delay_billable = request.form.get('delay_billable', 'true') == 'true'
-        entry.delay_reason = (request.form.get('delay_reason', '').strip() or None) if entry.delay_hours > 0 else None
-        entry.delay_description = request.form.get('delay_description', '').strip() or None
         entry.machines_stood_down = bool(request.form.get('machines_stood_down'))
+
+        # Delay lines
+        EntryDelayLine.query.filter_by(entry_id=entry.id).delete()
+        delay_reasons = request.form.getlist('delay_reason[]')
+        delay_hours_lines = request.form.getlist('delay_hours_line[]')
+        delay_descs = request.form.getlist('delay_desc[]')
+        total_delay = 0
+        first_reason = None
+        first_desc = None
+        for i in range(len(delay_reasons)):
+            reason = (delay_reasons[i].strip() if i < len(delay_reasons) else '') or None
+            hrs = float(delay_hours_lines[i] or 0) if i < len(delay_hours_lines) else 0
+            desc = (delay_descs[i].strip() if i < len(delay_descs) else '') or None
+            if reason and hrs > 0:
+                db.session.add(EntryDelayLine(
+                    entry_id=entry.id, reason=reason, hours=hrs, description=desc))
+                total_delay += hrs
+                if first_reason is None:
+                    first_reason = reason
+                if first_desc is None and desc:
+                    first_desc = desc
+        entry.delay_hours = total_delay
+        entry.delay_billable = request.form.get('delay_billable', 'true') == 'true'
+        entry.delay_reason = first_reason
+        entry.delay_description = first_desc
         entry.weather = request.form.get('weather', '').strip() or None
         entry.notes = request.form.get('notes', '').strip() or None
         entry.other_work_description = request.form.get('other_work_description', '').strip() or None

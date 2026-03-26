@@ -192,25 +192,35 @@
   <div class="col-lg-4">
 
     {# Delays #}
-    {% if entry.delay_hours and entry.delay_hours > 0 %}
+    {% if entry.delay_lines or (entry.delay_hours and entry.delay_hours > 0) %}
     <div class="card border-0 shadow-sm mb-4 border-start border-warning border-3">
       <div class="card-header bg-transparent fw-semibold text-uppercase small text-muted border-bottom">
-        <i class="bi bi-exclamation-triangle text-warning me-1"></i>Delays
+        <i class="bi bi-exclamation-triangle text-warning me-1"></i>Site Delays
+        <span class="badge bg-warning text-dark ms-2">{{ entry.total_delay_hours_from_lines }}h total</span>
       </div>
       <div class="card-body">
+        {% if entry.delay_lines %}
+        <table class="table table-sm table-borderless mb-2">
+          <tbody>
+          {% for dl in entry.delay_lines %}
+          <tr>
+            <td><span class="badge bg-danger-subtle text-danger">{{ dl.reason }}</span></td>
+            <td class="fw-semibold">{{ dl.hours }}h</td>
+            <td class="text-muted">{{ dl.description or '—' }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
         <div class="d-flex align-items-center gap-2 mb-2">
           <span class="badge bg-warning text-dark fs-6">{{ entry.delay_hours }}h delay</span>
-          {% if entry.delay_billable is not none %}
-          <span class="badge {% if entry.delay_billable %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-secondary{% endif %}">
-            {{ 'Billable' if entry.delay_billable else 'Non-billable' }}
-          </span>
-          {% endif %}
         </div>
         {% if entry.delay_reason %}
         <div class="fw-semibold mb-1">{{ entry.delay_reason }}</div>
         {% endif %}
         {% if entry.delay_description %}
         <div class="text-muted small fst-italic">{{ entry.delay_description }}</div>
+        {% endif %}
         {% endif %}
         {# Stood-down hired machines #}
         {% set standdowns = entry.stand_downs %}
