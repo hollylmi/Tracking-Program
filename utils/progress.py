@@ -1,3 +1,4 @@
+import json
 from models import DailyEntry, EntryProductionLine, PlannedData, Project
 from utils.helpers import _natural_key
 
@@ -35,16 +36,20 @@ def compute_project_progress(project_id):
 
     actual_by_task = {}
     total_install_hours = 0.0
+    total_person_hours = 0.0
     for e in entries:
         if e.production_lines:
             for pl in e.production_lines:
                 key = (pl.lot_number or '', pl.material or '') if by_lot else ('', pl.material or '')
                 actual_by_task[key] = actual_by_task.get(key, 0.0) + (pl.install_sqm or 0)
                 total_install_hours += (pl.install_hours or 0)
+                total_person_hours += pl.person_hours
         else:
             key = (e.lot_number or '', e.material or '') if by_lot else ('', e.material or '')
             actual_by_task[key] = actual_by_task.get(key, 0.0) + (e.install_sqm or 0)
             total_install_hours += (e.install_hours or 0)
+            # Legacy entries without crew data — fall back to hours
+            total_person_hours += (e.install_hours or 0)
 
     tasks = []
     total_planned = 0.0
@@ -70,7 +75,8 @@ def compute_project_progress(project_id):
         })
 
     overall_pct = round(total_actual / total_planned * 100, 1) if total_planned > 0 else 0
-    install_rate = round(total_actual / total_install_hours, 2) if total_install_hours > 0 else None
+    # Person-hours rate: m² per person-hour (normalised for crew size)
+    install_rate = round(total_actual / total_person_hours, 2) if total_person_hours > 0 else None
 
     all_entries = DailyEntry.query.filter_by(project_id=project_id).order_by(DailyEntry.entry_date.desc()).first()
     current_crew = all_entries.num_people if all_entries and all_entries.num_people else None
@@ -210,10 +216,10 @@ def compute_project_progress(project_id):
 
 
 def compute_material_productivity(project_id):
-    """Return m²/hour productivity by material: planned rate vs actual rate.
+    """Return m²/person-hour productivity by material: planned rate vs actual rate.
 
-    Planned rate = (planned_sqm / planned_days) / hours_per_day  → m²/hr
-    Actual rate  = actual_sqm / actual_install_hours              → m²/hr
+    Planned rate = (planned_sqm / planned_days) / (hours_per_day * planned_crew) → m²/person-hr
+    Actual rate  = actual_sqm / actual_person_hours                               → m²/person-hr
     """
     project = Project.query.get(project_id)
     if not project:
@@ -241,6 +247,7 @@ def compute_material_productivity(project_id):
     mat_actual = {}
     total_variation_hours = 0.0
     total_weather_hours = 0.0
+    planned_crew = project.planned_crew or 1
     for e in entries:
         # Track delay hours
         total_variation_hours += e.total_variation_hours
@@ -250,28 +257,34 @@ def compute_material_productivity(project_id):
             for pl in e.production_lines:
                 mat = pl.material or 'Unknown'
                 if mat not in mat_actual:
-                    mat_actual[mat] = {'sqm': 0.0, 'hours': 0.0, 'dates': set()}
+                    mat_actual[mat] = {'sqm': 0.0, 'hours': 0.0, 'person_hours': 0.0, 'dates': set()}
                 mat_actual[mat]['sqm'] += pl.install_sqm or 0
                 mat_actual[mat]['hours'] += pl.install_hours or 0
+                mat_actual[mat]['person_hours'] += pl.person_hours
                 if e.entry_date:
                     mat_actual[mat]['dates'].add(e.entry_date)
         else:
             mat = e.material or 'Unknown'
             if mat not in mat_actual:
-                mat_actual[mat] = {'sqm': 0.0, 'hours': 0.0, 'dates': set()}
+                mat_actual[mat] = {'sqm': 0.0, 'hours': 0.0, 'person_hours': 0.0, 'dates': set()}
             mat_actual[mat]['sqm'] += e.install_sqm or 0
             mat_actual[mat]['hours'] += e.install_hours or 0
+            # Legacy entries without crew data — fall back to hours
+            mat_actual[mat]['person_hours'] += e.install_hours or 0
             if e.entry_date:
                 mat_actual[mat]['dates'].add(e.entry_date)
 
-    # Overall totals
+    # Overall totals — rates in m²/person-hr
     total_planned_sqm = sum(v['sqm'] for v in mat_planned.values())
     all_planned_days = len({dn for v in mat_planned.values() for dn in v['day_numbers']})
-    overall_planned_rate = round(total_planned_sqm / (all_planned_days * hours_per_day), 1) if all_planned_days > 0 else None
+    # Planned rate: total sqm / (planned days × hours_per_day × planned_crew)
+    overall_planned_rate = round(total_planned_sqm / (all_planned_days * hours_per_day * planned_crew), 1) if all_planned_days > 0 and planned_crew > 0 else None
 
     total_actual_sqm = sum(v['sqm'] for v in mat_actual.values())
     total_actual_hours = sum(v['hours'] for v in mat_actual.values())
-    overall_actual_rate = round(total_actual_sqm / total_actual_hours, 1) if total_actual_hours > 0 else None
+    total_actual_person_hours = sum(v['person_hours'] for v in mat_actual.values())
+    # Actual rate: sqm / person-hours
+    overall_actual_rate = round(total_actual_sqm / total_actual_person_hours, 1) if total_actual_person_hours > 0 else None
 
     overall_pct = None
     if overall_planned_rate and overall_actual_rate:
@@ -283,6 +296,8 @@ def compute_material_productivity(project_id):
         'planned_days': all_planned_days,
         'actual_days': len({d for v in mat_actual.values() for d in v['dates']}),
         'actual_hours': round(total_actual_hours, 1),
+        'actual_person_hours': round(total_actual_person_hours, 1),
+        'planned_crew': planned_crew,
         'planned_rate': overall_planned_rate,
         'actual_rate': overall_actual_rate,
         'pct_of_target': overall_pct,
@@ -296,14 +311,14 @@ def compute_material_productivity(project_id):
         plan = mat_planned[mat]
         planned_sqm = plan['sqm']
         planned_days = len(plan['day_numbers'])
-        # Planned rate: sqm per day ÷ hours per day = m²/hr
-        planned_rate = round((planned_sqm / planned_days) / hours_per_day, 1) if planned_days > 0 else None
+        # Planned rate: sqm / (days × hours_per_day × planned_crew) = m²/person-hr
+        planned_rate = round(planned_sqm / (planned_days * hours_per_day * planned_crew), 1) if planned_days > 0 and planned_crew > 0 else None
 
-        act = mat_actual.get(mat, {'sqm': 0.0, 'hours': 0.0, 'dates': set()})
+        act = mat_actual.get(mat, {'sqm': 0.0, 'hours': 0.0, 'person_hours': 0.0, 'dates': set()})
         actual_sqm = act['sqm']
-        actual_hours = act['hours']
-        # Actual rate: sqm ÷ hours = m²/hr
-        actual_rate = round(actual_sqm / actual_hours, 1) if actual_hours > 0 else None
+        actual_person_hours = act['person_hours']
+        # Actual rate: sqm / person-hours = m²/person-hr
+        actual_rate = round(actual_sqm / actual_person_hours, 1) if actual_person_hours > 0 else None
 
         pct_of_target = None
         if planned_rate and actual_rate:
@@ -315,7 +330,8 @@ def compute_material_productivity(project_id):
             'actual_sqm': round(actual_sqm, 0),
             'planned_days': planned_days,
             'actual_days': len(act['dates']),
-            'actual_hours': round(actual_hours, 1),
+            'actual_hours': round(act['hours'], 1),
+            'actual_person_hours': round(actual_person_hours, 1),
             'planned_rate': planned_rate,
             'actual_rate': actual_rate,
             'pct_of_target': pct_of_target,
