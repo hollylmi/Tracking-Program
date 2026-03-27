@@ -37,12 +37,12 @@ def api_progress():
     if not project_id:
         return jsonify({'error': 'project_id required'}), 400
 
-    # Planned SQM for this lot+material
+    # Planned SQM for this lot+material (case-insensitive matching)
     planned_q = PlannedData.query.filter_by(project_id=int(project_id))
     if lot:
-        planned_q = planned_q.filter_by(lot=lot)
+        planned_q = planned_q.filter(db.func.upper(db.func.trim(PlannedData.lot)) == lot.strip().upper())
     if material:
-        planned_q = planned_q.filter_by(material=material)
+        planned_q = planned_q.filter(db.func.upper(db.func.trim(PlannedData.material)) == material.strip().upper())
     planned_sqm = sum(p.planned_sqm or 0 for p in planned_q.all())
 
     # Installed SQM so far — query production lines first, then legacy entries
@@ -51,9 +51,9 @@ def api_progress():
             .join(DailyEntry, EntryProductionLine.entry_id == DailyEntry.id)
             .filter(DailyEntry.project_id == int(project_id)))
     if lot:
-        pl_q = pl_q.filter(EntryProductionLine.lot_number == lot)
+        pl_q = pl_q.filter(db.func.upper(db.func.trim(EntryProductionLine.lot_number)) == lot.strip().upper())
     if material:
-        pl_q = pl_q.filter(EntryProductionLine.material == material)
+        pl_q = pl_q.filter(db.func.upper(db.func.trim(EntryProductionLine.material)) == material.strip().upper())
     if exclude_entry_id:
         try:
             pl_q = pl_q.filter(DailyEntry.id != int(exclude_entry_id))
@@ -69,9 +69,9 @@ def api_progress():
                     db.session.query(EntryProductionLine.entry_id).distinct()
                 )))
     if lot:
-        legacy_q = legacy_q.filter(DailyEntry.lot_number == lot)
+        legacy_q = legacy_q.filter(db.func.upper(db.func.trim(DailyEntry.lot_number)) == lot.strip().upper())
     if material:
-        legacy_q = legacy_q.filter(DailyEntry.material == material)
+        legacy_q = legacy_q.filter(db.func.upper(db.func.trim(DailyEntry.material)) == material.strip().upper())
     if exclude_entry_id:
         try:
             legacy_q = legacy_q.filter(DailyEntry.id != int(exclude_entry_id))
@@ -90,6 +90,64 @@ def api_progress():
         'remaining': round(remaining, 2),
         'pct_complete': pct,
         'has_planned': planned_sqm > 0,
+    })
+
+
+@projects_bp.route('/api/progress-debug')
+@require_role('admin')
+def api_progress_debug():
+    """Debug: show every entry contributing to a material's installed SQM."""
+    project_id = request.args.get('project_id', type=int)
+    material = request.args.get('material', '').strip()
+    if not project_id or not material:
+        return jsonify({'error': 'project_id and material required'}), 400
+
+    from models import EntryProductionLine
+    entries = DailyEntry.query.filter_by(project_id=project_id).order_by(DailyEntry.entry_date).all()
+    rows = []
+    total = 0
+    for e in entries:
+        if e.production_lines:
+            for pl in e.production_lines:
+                if (pl.material or '').strip().upper() == material.strip().upper():
+                    sqm = pl.install_sqm or 0
+                    total += sqm
+                    rows.append({
+                        'entry_id': e.id,
+                        'date': e.entry_date.strftime('%Y-%m-%d'),
+                        'source': 'production_line',
+                        'lot': pl.lot_number,
+                        'material': pl.material,
+                        'sqm': sqm,
+                        'hours': pl.install_hours,
+                        'running_total': round(total, 2),
+                    })
+        else:
+            if (e.material or '').strip().upper() == material.strip().upper() and (e.install_sqm or 0) > 0:
+                sqm = e.install_sqm or 0
+                total += sqm
+                rows.append({
+                    'entry_id': e.id,
+                    'date': e.entry_date.strftime('%Y-%m-%d'),
+                    'source': 'legacy',
+                    'lot': e.lot_number,
+                    'material': e.material,
+                    'sqm': sqm,
+                    'hours': e.install_hours,
+                    'running_total': round(total, 2),
+                })
+
+    # Planned
+    planned_sqm = sum(p.planned_sqm or 0 for p in PlannedData.query.filter_by(
+        project_id=project_id, material=material).all())
+
+    return jsonify({
+        'material': material,
+        'planned_sqm': planned_sqm,
+        'total_actual_sqm': round(total, 2),
+        'pct': round(total / planned_sqm * 100, 1) if planned_sqm > 0 else None,
+        'entry_count': len(rows),
+        'entries': rows,
     })
 
 

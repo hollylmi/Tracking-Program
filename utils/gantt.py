@@ -52,16 +52,19 @@ def compute_gantt_data(project_id):
     # Task info: planned_dates is a set of calendar dates (one per planned row)
     # When track_by_lot is off, group by material only
     by_lot = project.track_by_lot if project.track_by_lot is not None else True
+    def _norm(s):
+        return (s or '').strip().upper()
+
     task_info = {}
     task_order_keys = []
     for p in planned:
         if by_lot:
-            key = (p.lot or '', p.material or '')
-            label = (f"{p.lot} — {p.material}" if p.lot and p.material
-                     else (p.lot or p.material or 'Unknown'))
+            key = (_norm(p.lot), _norm(p.material))
+            label = (f"{(p.lot or '').strip()} — {(p.material or '').strip()}" if p.lot and p.material
+                     else ((p.lot or p.material or 'Unknown').strip()))
         else:
-            key = ('', p.material or '')
-            label = p.material or 'Unknown'
+            key = ('', _norm(p.material))
+            label = (p.material or 'Unknown').strip()
         if key not in task_info:
             task_info[key] = {
                 'label': label,
@@ -77,11 +80,15 @@ def compute_gantt_data(project_id):
     task_order_keys.sort(key=lambda k: (_natural_key(k[0]), _natural_key(k[1])))
 
     # Actuals by (lot_number, material) — use production lines if available
+    # Normalize keys to avoid case/whitespace mismatches with planned data
+    def _norm(s):
+        return (s or '').strip().upper()
+
     actuals_by_task = {}
     for e in entries:
         if e.production_lines:
             for pl in e.production_lines:
-                key = (pl.lot_number or '' if by_lot else '', pl.material or '')
+                key = (_norm(pl.lot_number) if by_lot else '', _norm(pl.material))
                 if key not in actuals_by_task:
                     actuals_by_task[key] = {'sqm': 0.0, 'hrs': 0.0, 'p_hrs': 0.0, 'dates': set()}
                 actuals_by_task[key]['sqm'] += pl.install_sqm or 0
@@ -89,7 +96,7 @@ def compute_gantt_data(project_id):
                 actuals_by_task[key]['p_hrs'] += pl.person_hours
                 actuals_by_task[key]['dates'].add(e.entry_date)
         else:
-            key = (e.lot_number or '' if by_lot else '', e.material or '')
+            key = (_norm(e.lot_number) if by_lot else '', _norm(e.material))
             if key not in actuals_by_task:
                 actuals_by_task[key] = {'sqm': 0.0, 'hrs': 0.0, 'p_hrs': 0.0, 'dates': set()}
             actuals_by_task[key]['sqm'] += e.install_sqm or 0

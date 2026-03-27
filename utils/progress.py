@@ -3,6 +3,11 @@ from models import DailyEntry, EntryProductionLine, PlannedData, Project
 from utils.helpers import _natural_key
 
 
+def _norm(s):
+    """Normalize a string for matching: strip whitespace and uppercase."""
+    return (s or '').strip().upper()
+
+
 def compute_project_progress(project_id):
     """Return planned vs actual progress data for a project."""
     project = Project.query.get(project_id)
@@ -22,12 +27,12 @@ def compute_project_progress(project_id):
 
     planned_by_task = {}
     for p in planned:
-        key = (p.lot or '', p.material or '') if by_lot else ('', p.material or '')
+        key = (_norm(p.lot), _norm(p.material)) if by_lot else ('', _norm(p.material))
         if key not in planned_by_task:
             planned_by_task[key] = {
-                'lot': p.lot if by_lot else '',
+                'lot': (p.lot or '').strip() if by_lot else '',
                 'location': p.location,
-                'material': p.material,
+                'material': (p.material or '').strip(),
                 'planned_sqm': 0, 'min_day': float('inf'), 'max_day': 0,
             }
         planned_by_task[key]['planned_sqm'] += p.planned_sqm or 0
@@ -40,15 +45,14 @@ def compute_project_progress(project_id):
     for e in entries:
         if e.production_lines:
             for pl in e.production_lines:
-                key = (pl.lot_number or '', pl.material or '') if by_lot else ('', pl.material or '')
+                key = (_norm(pl.lot_number), _norm(pl.material)) if by_lot else ('', _norm(pl.material))
                 actual_by_task[key] = actual_by_task.get(key, 0.0) + (pl.install_sqm or 0)
                 total_install_hours += (pl.install_hours or 0)
                 total_person_hours += pl.person_hours
         else:
-            key = (e.lot_number or '', e.material or '') if by_lot else ('', e.material or '')
+            key = (_norm(e.lot_number), _norm(e.material)) if by_lot else ('', _norm(e.material))
             actual_by_task[key] = actual_by_task.get(key, 0.0) + (e.install_sqm or 0)
             total_install_hours += (e.install_hours or 0)
-            # Legacy entries without crew data — fall back to hours
             total_person_hours += (e.install_hours or 0)
 
     tasks = []
@@ -159,7 +163,13 @@ def compute_project_progress(project_id):
         delay_events.sort(key=lambda x: x['date'])
 
         # Hours-based "where should we be" — count productive hours, not whole days
-        # For each working day: available = hours_per_day, minus any delay/variation hours
+        # Variations done during a delay day offset the delay impact:
+        #   - The variation would have been done on a good day anyway
+        #   - So doing it during rain = "free", only the unrecovered delay time is truly lost
+        # Per day: overlap = min(delay_hrs, var_hrs)
+        #   lost = (delay_hrs - overlap) + (var_hrs - overlap)
+        #        = delay + var - 2 * overlap
+        # This means: 8h rain + 4h variation = (8-4) + (4-4) = 4h lost (not 8)
         total_available_hours = 0.0
         total_lost_hours = 0.0
         d = project.start_date
@@ -169,21 +179,24 @@ def compute_project_progress(project_id):
             is_nonwork = d in non_work
             if not is_sunday and not is_nonwork:
                 total_available_hours += hours_per_day
-                day_delays = delay_hours_by_date.get(d, 0.0) + variation_hours_by_date.get(d, 0.0)
-                # Cap lost hours at hours_per_day (can't lose more than a full day)
-                lost = min(day_delays, hours_per_day)
-                total_lost_hours += lost
+                delay_hrs = delay_hours_by_date.get(d, 0.0)
+                var_hrs = variation_hours_by_date.get(d, 0.0)
+                # Overlap: variation done during delay (doesn't cost extra schedule time)
+                overlap = min(delay_hrs, var_hrs)
+                # Lost = unrecovered delay + variation done outside delay
+                lost = (delay_hrs - overlap) + (var_hrs - overlap)
+                total_lost_hours += min(lost, hours_per_day)
             d += _td(days=1)
 
         productive_hours = total_available_hours - total_lost_hours
         total_planned_hours = total_planned_days * hours_per_day
         should_be_pct = round(min(productive_hours / total_planned_hours * 100, 100), 1) if total_planned_hours > 0 else 0
 
-        # Delay impact on deadline — expressed as equivalent days lost
+        # Delay impact on deadline — same overlap logic
         total_delay_hours = sum(delay_hours_by_date.values())
         total_variation_hours = sum(variation_hours_by_date.values())
         total_own_delay_hours = sum(own_delay_hours_by_date.values())
-        delay_impact_days = round((total_delay_hours + total_variation_hours) / hours_per_day, 1)
+        delay_impact_days = round(total_lost_hours / hours_per_day, 1)
 
     return {
         'tasks': tasks,
@@ -231,10 +244,10 @@ def compute_material_productivity(project_id):
     if not planned:
         return []
 
-    # Group planned by material
+    # Group planned by material (normalized)
     mat_planned = {}
     for p in planned:
-        mat = p.material or 'Unknown'
+        mat = _norm(p.material) or 'UNKNOWN'
         if mat not in mat_planned:
             mat_planned[mat] = {'sqm': 0.0, 'day_numbers': set()}
         mat_planned[mat]['sqm'] += p.planned_sqm or 0
@@ -255,7 +268,7 @@ def compute_material_productivity(project_id):
 
         if e.production_lines:
             for pl in e.production_lines:
-                mat = pl.material or 'Unknown'
+                mat = _norm(pl.material) or 'UNKNOWN'
                 if mat not in mat_actual:
                     mat_actual[mat] = {'sqm': 0.0, 'hours': 0.0, 'person_hours': 0.0, 'dates': set()}
                 mat_actual[mat]['sqm'] += pl.install_sqm or 0
@@ -264,12 +277,11 @@ def compute_material_productivity(project_id):
                 if e.entry_date:
                     mat_actual[mat]['dates'].add(e.entry_date)
         else:
-            mat = e.material or 'Unknown'
+            mat = _norm(e.material) or 'UNKNOWN'
             if mat not in mat_actual:
                 mat_actual[mat] = {'sqm': 0.0, 'hours': 0.0, 'person_hours': 0.0, 'dates': set()}
             mat_actual[mat]['sqm'] += e.install_sqm or 0
             mat_actual[mat]['hours'] += e.install_hours or 0
-            # Legacy entries without crew data — fall back to hours
             mat_actual[mat]['person_hours'] += e.install_hours or 0
             if e.entry_date:
                 mat_actual[mat]['dates'].add(e.entry_date)

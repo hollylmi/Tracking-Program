@@ -296,8 +296,9 @@ def edit_entry(entry_id):
         line_sqms = request.form.getlist('line_sqm[]')
         line_emp_ids_list = request.form.getlist('line_emp_ids[]')
 
-        # Clear old production lines and rebuild
-        EntryProductionLine.query.filter_by(entry_id=entry.id).delete()
+        # Clear old production lines and rebuild (use ORM to avoid session conflicts)
+        entry.production_lines.clear()
+        db.session.flush()
         total_sqm = 0
         total_hours = 0
         first_lot = None
@@ -326,7 +327,8 @@ def edit_entry(entry_id):
         entry.machines_stood_down = bool(request.form.get('machines_stood_down'))
 
         # Delay lines
-        EntryDelayLine.query.filter_by(entry_id=entry.id).delete()
+        entry.delay_lines.clear()
+        db.session.flush()
         delay_reasons = request.form.getlist('delay_reason[]')
         delay_hours_lines = request.form.getlist('delay_hours_line[]')
         delay_descs = request.form.getlist('delay_desc[]')
@@ -354,7 +356,8 @@ def edit_entry(entry_id):
         entry.other_work_description = request.form.get('other_work_description', '').strip() or None
 
         # Variation lines
-        EntryVariationLine.query.filter_by(entry_id=entry.id).delete()
+        entry.variation_lines.clear()
+        db.session.flush()
         var_numbers = request.form.getlist('var_number[]')
         var_descs = request.form.getlist('var_desc[]')
         var_hours_list = request.form.getlist('var_hours[]')
@@ -373,7 +376,8 @@ def edit_entry(entry_id):
                     employee_ids_json=vemp, machine_ids_json=vmach))
 
         # Other activity lines
-        EntryOtherActivityLine.query.filter_by(entry_id=entry.id).delete()
+        entry.other_activity_lines.clear()
+        db.session.flush()
         other_descs = request.form.getlist('other_desc[]')
         other_hours_list = request.form.getlist('other_hours[]')
         other_emp_ids_list = request.form.getlist('other_emp_ids[]')
