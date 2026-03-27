@@ -96,9 +96,12 @@ def compute_project_progress(project_id):
 
     hours_per_day = project.hours_per_day or 8
 
+    planned_crew = project.planned_crew or 1
+
     should_be_pct = None
     total_delay_hours = 0.0
     total_variation_hours = 0.0
+    total_variation_person_hours = 0.0
     total_own_delay_hours = 0.0
     delay_impact_days = 0.0
     total_available_hours = 0.0
@@ -150,7 +153,9 @@ def compute_project_progress(project_id):
                 })
             if e.variation_lines and sum(vl.hours or 0 for vl in e.variation_lines) > 0:
                 var_hrs = sum(vl.hours or 0 for vl in e.variation_lines)
+                var_p_hrs = sum(vl.person_hours for vl in e.variation_lines)
                 variation_hours_by_date[e.entry_date] += var_hrs
+                total_variation_person_hours += var_p_hrs
                 var_descs = [f"V{vl.variation_number}: {vl.description}" for vl in e.variation_lines if vl.variation_number or vl.description]
                 delay_events.append({
                     'date': e.entry_date.strftime('%d/%m/%Y'),
@@ -162,14 +167,13 @@ def compute_project_progress(project_id):
                 })
         delay_events.sort(key=lambda x: x['date'])
 
-        # Hours-based "where should we be" — count productive hours, not whole days
-        # Variations done during a delay day offset the delay impact:
-        #   - The variation would have been done on a good day anyway
-        #   - So doing it during rain = "free", only the unrecovered delay time is truly lost
-        # Per day: overlap = min(delay_hrs, var_hrs)
-        #   lost = (delay_hrs - overlap) + (var_hrs - overlap)
-        #        = delay + var - 2 * overlap
-        # This means: 8h rain + 4h variation = (8-4) + (4-4) = 4h lost (not 8)
+        # Person-hours based "where should we be"
+        # Planned deployment capacity = planned_crew × hours_per_day × working_days
+        # Actual available for deployment is reduced by:
+        #   - Delays: stop deployment crew from working (delay_hrs × planned_crew)
+        #   - Variations: pull specific crew away from deployment (variation person-hours)
+        # This means: if you pull 2 of 7 people to variations, you deploy with 5 — that's
+        # fewer person-hours of deployment and the schedule slips accordingly.
         total_available_hours = 0.0
         total_lost_hours = 0.0
         d = project.start_date
@@ -180,23 +184,24 @@ def compute_project_progress(project_id):
             if not is_sunday and not is_nonwork:
                 total_available_hours += hours_per_day
                 delay_hrs = delay_hours_by_date.get(d, 0.0)
-                var_hrs = variation_hours_by_date.get(d, 0.0)
-                # Overlap: variation done during delay (doesn't cost extra schedule time)
-                overlap = min(delay_hrs, var_hrs)
-                # Lost = unrecovered delay + variation done outside delay
-                lost = (delay_hrs - overlap) + (var_hrs - overlap)
-                total_lost_hours += min(lost, hours_per_day)
+                total_lost_hours += min(delay_hrs, hours_per_day)
             d += _td(days=1)
 
-        productive_hours = total_available_hours - total_lost_hours
-        total_planned_hours = total_planned_days * hours_per_day
-        should_be_pct = round(min(productive_hours / total_planned_hours * 100, 100), 1) if total_planned_hours > 0 else 0
+        # Person-hours view
+        total_planned_person_hours = total_planned_days * hours_per_day * planned_crew
+        available_person_hours = total_available_hours * planned_crew
+        # Delays impact the full crew; variation person-hours are from entry data
+        delay_person_hours = total_lost_hours * planned_crew
+        # Productive deployment person-hours = available minus delays minus variation crew time
+        productive_deploy_ph = available_person_hours - delay_person_hours - total_variation_person_hours
+        productive_deploy_ph = max(0, productive_deploy_ph)
+        should_be_pct = round(min(productive_deploy_ph / total_planned_person_hours * 100, 100), 1) if total_planned_person_hours > 0 else 0
 
-        # Delay impact on deadline — same overlap logic
+        # Delay impact on deadline
         total_delay_hours = sum(delay_hours_by_date.values())
         total_variation_hours = sum(variation_hours_by_date.values())
         total_own_delay_hours = sum(own_delay_hours_by_date.values())
-        delay_impact_days = round(total_lost_hours / hours_per_day, 1)
+        delay_impact_days = round(total_delay_hours / hours_per_day, 1)
 
     return {
         'tasks': tasks,
@@ -216,7 +221,7 @@ def compute_project_progress(project_id):
         'total_lost_hours': round(total_lost_hours, 1),
         'total_own_delay_hours': round(total_own_delay_hours, 1),
         'total_install_hours': round(total_install_hours, 1),
-        'non_deploy_hours': round(max(0, total_available_hours - total_install_hours - total_lost_hours - total_own_delay_hours), 1),
+        'non_deploy_hours': round(max(0, total_available_hours - total_install_hours - total_lost_hours - total_own_delay_hours - total_variation_hours), 1),
         'hours_per_day': hours_per_day,
         # Backward compat aliases
         'site_delay_days': round(total_delay_hours / hours_per_day, 1) if hours_per_day else 0,
