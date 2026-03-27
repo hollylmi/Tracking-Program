@@ -243,6 +243,9 @@ with app.app_context():
         "ALTER TABLE hired_machine ADD COLUMN delay_rate FLOAT",
         # Person-hours: crew assignment on production lines
         "ALTER TABLE entry_production_line ADD COLUMN employee_ids_json TEXT",
+        # Travel & accommodation feature
+        "ALTER TABLE employee ADD COLUMN requires_accommodation BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE schedule_day_override ADD COLUMN is_half_day BOOLEAN DEFAULT FALSE",
     ]:
         try:
             db.session.execute(db.text(stmt))

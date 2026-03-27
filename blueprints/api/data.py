@@ -2395,6 +2395,37 @@ def send_reminders():
     return {'message': 'Reminders sent', 'count': count}, 200
 
 
+@api_data_bp.route('/admin/send-travel-reminders', methods=['POST'])
+def send_travel_reminders():
+    """Send upcoming flight and accommodation check-in reminders (24h before).
+    Should be called by a daily cron job."""
+    auth_header = request.headers.get('Authorization', '')
+    cron_secret = os.environ.get('CRON_SECRET')
+    is_cron = (
+        cron_secret
+        and auth_header.startswith('Bearer ')
+        and auth_header[7:] == cron_secret
+    )
+
+    if not is_cron:
+        from flask_jwt_extended import verify_jwt_in_request
+        try:
+            verify_jwt_in_request()
+        except Exception:
+            return {'error': 'Invalid token'}, 401
+        user, err = _get_user()
+        if err:
+            return err
+        if user.role != 'admin':
+            return {'error': 'Access denied'}, 403
+
+    from utils.notifications import send_upcoming_flight_reminders, send_upcoming_checkin_reminders
+    flight_count = send_upcoming_flight_reminders()
+    accom_count = send_upcoming_checkin_reminders()
+
+    return {'message': 'Travel reminders sent', 'flights': flight_count, 'accommodations': accom_count}, 200
+
+
 @api_data_bp.route('/admin/beta-metrics', methods=['GET'])
 @jwt_required()
 def beta_metrics():

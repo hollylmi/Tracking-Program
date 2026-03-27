@@ -110,21 +110,12 @@
                         <div style="flex:0 0 80px">
                           <input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ pl.install_sqm or '' }}" placeholder="SQM" onchange="updateTotals()" oninput="updateTotals()">
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.prod-card').remove(); updateTotals(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.prod-card').remove(); updateTotals(); refreshAllCrewLists()"><i class="bi bi-x-lg"></i></button>
                       </div>
                       <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="{{ pl.employee_ids_json or '[]' }}">
                       <div>
                         <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew on this line</div>
-                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light">
-                          {% for emp in employees %}
-                          <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-                            <input type="checkbox" class="form-check-input mt-0 prod-emp-cb"
-                                   value="{{ emp.id }}" {{ 'checked' if pl.crew_employee_ids and emp.id in pl.crew_employee_ids }}
-                                   onchange="syncProdCrewCheckboxes(this); updatePersonHoursSummary()">
-                            {{ emp.name }}{% if emp.role %} <small class="text-muted">— {{ emp.role }}</small>{% endif %}
-                          </label>
-                          {% endfor %}
-                        </div>
+                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light crew-list-container"></div>
                       </div>
                     </div>
                     {% endfor %}
@@ -143,19 +134,12 @@
                         <div style="flex:0 0 80px">
                           <input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" value="{{ entry.install_sqm or '' }}" placeholder="SQM" onchange="updateTotals()" oninput="updateTotals()">
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.prod-card').remove(); updateTotals(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.prod-card').remove(); updateTotals(); refreshAllCrewLists()"><i class="bi bi-x-lg"></i></button>
                       </div>
                       <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="[]">
                       <div>
                         <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew on this line</div>
-                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light">
-                          {% for emp in employees %}
-                          <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-                            <input type="checkbox" class="form-check-input mt-0 prod-emp-cb" value="{{ emp.id }}" onchange="syncProdCrewCheckboxes(this); updatePersonHoursSummary()">
-                            {{ emp.name }}{% if emp.role %} <small class="text-muted">— {{ emp.role }}</small>{% endif %}
-                          </label>
-                          {% endfor %}
-                        </div>
+                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light crew-list-container"></div>
                       </div>
                     </div>
                   {% else %}
@@ -173,22 +157,20 @@
                         <div style="flex:0 0 80px">
                           <input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="SQM" onchange="updateTotals()" oninput="updateTotals()">
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.prod-card').remove(); updateTotals(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.prod-card').remove(); updateTotals(); refreshAllCrewLists()"><i class="bi bi-x-lg"></i></button>
                       </div>
                       <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="[]">
                       <div>
                         <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew on this line</div>
-                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light">
-                          {% for emp in employees %}
-                          <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-                            <input type="checkbox" class="form-check-input mt-0 prod-emp-cb" value="{{ emp.id }}" onchange="syncProdCrewCheckboxes(this); updatePersonHoursSummary()">
-                            {{ emp.name }}{% if emp.role %} <small class="text-muted">— {{ emp.role }}</small>{% endif %}
-                          </label>
-                          {% endfor %}
-                        </div>
+                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light crew-list-container"></div>
                       </div>
                     </div>
                   {% endif %}
+                </div>
+                <div class="card-footer bg-white py-1 d-flex gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary py-0" style="font-size:.7rem;" onclick="sameCrewAllProdLines()">
+                    <i class="bi bi-people-fill me-1"></i>Same crew for all lines
+                  </button>
                 </div>
                 <!-- Hidden fields for totals -->
                 <input type="hidden" name="install_sqm" id="installSqmInput" value="{{ entry.install_sqm if entry else '0' }}">
@@ -226,16 +208,7 @@
                       <div class="d-flex gap-2">
                         <div class="flex-grow-1">
                           <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Bill People</div>
-                          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white">
-                            {% for emp in employees %}
-                            <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-                              <input type="checkbox" class="form-check-input mt-0 var-emp-cb"
-                                     value="{{ emp.id }}" {{ 'checked' if vl.billed_employee_ids and emp.id in vl.billed_employee_ids }}
-                                     onchange="syncVarCheckboxes(this)">
-                              {{ emp.name }}{% if emp.role %} <small class="text-muted">— {{ emp.role }}</small>{% endif %}
-                            </label>
-                            {% endfor %}
-                          </div>
+                          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white crew-list-container"></div>
                         </div>
                         <div class="flex-grow-1">
                           <div class="small text-muted fw-semibold mb-1"><i class="bi bi-tools me-1"></i>Bill Equipment</div>
@@ -378,16 +351,7 @@
                       <input type="hidden" name="other_emp_ids[]" class="other-emp-hidden" value="{{ ol.employee_ids_json or '[]' }}">
                       <div>
                         <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew</div>
-                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-white">
-                          {% for emp in employees %}
-                          <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-                            <input type="checkbox" class="form-check-input mt-0 other-emp-cb"
-                                   value="{{ emp.id }}" {{ 'checked' if ol.crew_employee_ids and emp.id in ol.crew_employee_ids }}
-                                   onchange="syncOtherCrewCheckboxes(this); updatePersonHoursSummary()">
-                            {{ emp.name }}{% if emp.role %} <small class="text-muted">— {{ emp.role }}</small>{% endif %}
-                          </label>
-                          {% endfor %}
-                        </div>
+                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-white crew-list-container"></div>
                       </div>
                     </div>
                     {% endfor %}
@@ -712,14 +676,6 @@
   function addProductionLine() {
     const container = document.getElementById('productionLinesContainer');
     lineCounter++;
-
-    const empHtml = VAR_EMP_OPTIONS.map(e =>
-      `<label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-        <input type="checkbox" class="form-check-input mt-0 prod-emp-cb" value="${e.id}" onchange="syncProdCrewCheckboxes(this); updatePersonHoursSummary()">
-        ${e.label}
-      </label>`
-    ).join('');
-
     const card = document.createElement('div');
     card.className = 'prod-card border rounded p-2 mb-2 bg-white';
     card.innerHTML = `
@@ -736,16 +692,17 @@
         <div style="flex:0 0 80px">
           <input type="number" name="line_sqm[]" class="form-control form-control-sm line-sqm" min="0" step="0.1" placeholder="SQM" onchange="updateTotals()" oninput="updateTotals()">
         </div>
-        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.prod-card').remove(); updateTotals(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.prod-card').remove(); updateTotals(); refreshAllCrewLists()"><i class="bi bi-x-lg"></i></button>
       </div>
       <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="[]">
       <div>
         <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew on this line</div>
-        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light">${empHtml}</div>
+        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light crew-list-container"></div>
       </div>
     `;
     container.appendChild(card);
     updateLotVisibility();
+    refreshAllCrewLists();
     const firstInput = _trackByLot
       ? card.querySelector('[name="line_lot[]"]')
       : card.querySelector('[name="line_material[]"]');
@@ -755,18 +712,7 @@
   function removeProductionLine(btn) {
     btn.closest('.prod-card').remove();
     updateTotalSqm();
-    updatePersonHoursSummary();
-  }
-
-  // Sync production crew checkboxes to hidden JSON field
-  function syncProdCrewCheckboxes(cb) {
-    const card = cb.closest('.prod-card');
-    const ids = Array.from(card.querySelectorAll('.prod-emp-cb:checked')).map(c => parseInt(c.value));
-    card.querySelector('.prod-emp-hidden').value = JSON.stringify(ids);
-  }
-
-  function fetchLineProgress(card) {
-    // Unused in card-based layout — progress is shown per-line via inline widget
+    refreshAllCrewLists();
   }
 
   function updateTotals() {
@@ -777,15 +723,17 @@
     document.getElementById('totalHoursLabel').textContent = 'Hours: ' + totalHours.toLocaleString('en-AU', {maximumFractionDigits:1});
     document.getElementById('installSqmInput').value = totalSqm;
     document.getElementById('installHoursInput').value = totalHours;
-    updatePersonHoursSummary();
+    refreshAllCrewLists();
   }
   // Alias for backward compat with inline onchange handlers
   function updateTotalSqm() { updateTotals(); }
 
   // ── Variation lines ───────────────────────────────────────────────────────
   // Employee, machine, and group options for variation billing
+  // NON_DEPLOY_ROLES: role groups that don't deploy material (excluded from production lines)
+  const NON_DEPLOY_ROLES = ['project manager', 'pm'];
   const VAR_EMP_OPTIONS = [
-    {% for emp in employees %}{ id: {{ emp.id }}, label: '{{ emp.name|replace("'", "\\'") }}{% if emp.role %} — {{ emp.role }}{% endif %}' },{% endfor %}
+    {% for emp in employees %}{ id: {{ emp.id }}, label: '{{ emp.name|replace("'", "\\'") }}{% if emp.role %} — {{ emp.role }}{% endif %}', roles: [{% for r in emp.roles %}'{{ r.group_name|default(r.name, true)|lower|replace("'", "\\'") }}',{% endfor %}] },{% endfor %}
   ];
   const VAR_GROUPS = [
     {% for g in machine_groups %}{% set gm = g.machines | selectattr('active') | list %}{% if gm %}{ id: {{ g.id }}, name: '{{ g.name|replace("'", "\\'") }}', rate: {{ g.delay_rate or 'null' }}, machine_ids: [{{ gm | map(attribute='id') | join(',') }}] },{% endif %}{% endfor %}
@@ -798,13 +746,6 @@
     const container = document.getElementById('variationLines');
     const card = document.createElement('div');
     card.className = 'var-card border rounded p-2 mb-2 bg-light';
-
-    const empHtml = VAR_EMP_OPTIONS.map(e =>
-      `<label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-        <input type="checkbox" class="form-check-input mt-0 var-emp-cb" value="${e.id}" onchange="syncVarCheckboxes(this)">
-        ${e.label}
-      </label>`
-    ).join('');
 
     let machHtml = '';
     VAR_GROUPS.forEach(g => {
@@ -827,14 +768,14 @@
         <div style="flex:0 0 100px"><input type="text" name="var_number[]" class="form-control form-control-sm" placeholder="V001"></div>
         <div class="flex-grow-1"><input type="text" name="var_desc[]" class="form-control form-control-sm" placeholder="Description of work"></div>
         <div style="flex:0 0 80px"><input type="number" name="var_hours[]" class="form-control form-control-sm" min="0" step="0.25" placeholder="Hours"></div>
-        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.var-card').remove()"><i class="bi bi-x-lg"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.var-card').remove(); refreshAllCrewLists()"><i class="bi bi-x-lg"></i></button>
       </div>
       <input type="hidden" name="var_emp_ids[]" class="var-emp-hidden" value="[]">
       <input type="hidden" name="var_mach_ids[]" class="var-mach-hidden" value="[]">
       <div class="d-flex gap-2">
         <div class="flex-grow-1">
           <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Bill People</div>
-          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white">${empHtml}</div>
+          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white crew-list-container"></div>
         </div>
         <div class="flex-grow-1">
           <div class="small text-muted fw-semibold mb-1"><i class="bi bi-tools me-1"></i>Bill Equipment</div>
@@ -843,6 +784,7 @@
       </div>
     `;
     container.appendChild(card);
+    refreshAllCrewLists();
     card.querySelector('input').focus();
   }
 
@@ -877,9 +819,7 @@
   // ── Variation billing sync — serialize checkboxes to hidden JSON input ────
   function syncVarCheckboxes(cb) {
     const card = cb.closest('.var-card');
-    // Sync employee checkboxes
-    const empIds = Array.from(card.querySelectorAll('.var-emp-cb:checked')).map(c => parseInt(c.value));
-    card.querySelector('.var-emp-hidden').value = JSON.stringify(empIds);
+    // Employee IDs are managed by crew-list-container / onCrewCbChange — only sync machines here
     // Sync machine checkboxes — groups prefixed with g_, expand to member IDs
     const machVals = Array.from(card.querySelectorAll('.var-mach-cb:checked')).map(c => c.value);
     const machIds = [];
@@ -894,7 +834,7 @@
       }
     });
     card.querySelector('.var-mach-hidden').value = JSON.stringify(machIds);
-    updatePersonHoursSummary();
+    refreshAllCrewLists();
   }
 
   // ── Track by lot toggle ─────────────────────────────────────────────────────
@@ -911,10 +851,10 @@
   // Run immediately so _trackByLot is set before fetchLineProgress is called
   updateLotVisibility();
 
-  // Init production lines
+  // Init production lines and crew lists
   lineCounter = document.querySelectorAll('.prod-card').length;
   updateTotals();
-  updatePersonHoursSummary();
+  refreshAllCrewLists();
 
   function deletePhoto(url, thumbId) {
     if (!confirm('Delete this photo?')) return;
@@ -1076,12 +1016,12 @@
   // Initial load — populate lot/material datalists
   fetchPlannedOptions('');
 
-  // Employee checkbox counter
+  // Employee checkbox counter — also refreshes crew lists in all activity cards
   function updateEmployeeCount() {
     const count = document.querySelectorAll('.employee-check:checked').length;
     document.getElementById('selectedEmployeeCount').textContent = count + ' selected';
     document.getElementById('numPeopleInput').value = count;
-    updatePersonHoursSummary();
+    refreshAllCrewLists();
   }
   document.querySelectorAll('.employee-check').forEach(cb => cb.addEventListener('change', updateEmployeeCount));
 
@@ -1141,57 +1081,186 @@
     updateStanddownCount();
   });
 
-  // ── Production line crew ─────────────────────────────────────────────────
-  // syncProdCrewCheckboxes is defined above (near removeProductionLine)
+  // ── Centralised crew list management ─────────────────────────────────────
+  // Builds crew checkboxes in all .crew-list-container elements, filtered to
+  // only show employees ticked in the main Crew Members panel. Shows assignment
+  // badges so you can see who is already assigned elsewhere.
+
+  function getOnSiteEmployeeIds() {
+    return Array.from(document.querySelectorAll('.employee-check:checked')).map(cb => parseInt(cb.value));
+  }
+
+  function isNonDeployRole(emp) {
+    // Project managers etc. don't count towards person-hours
+    return emp.roles && emp.roles.some(r => NON_DEPLOY_ROLES.includes(r));
+  }
+
+  function getAllAssignments() {
+    // Returns { empId: [{type, label, hours}, ...] } across all cards
+    const map = {};
+    // Production lines
+    document.querySelectorAll('.prod-card').forEach(card => {
+      const hidden = card.querySelector('.prod-emp-hidden');
+      const mat = card.querySelector('[name="line_material[]"]')?.value || 'Production';
+      const hrs = parseFloat(card.querySelector('.line-hours')?.value) || 0;
+      let ids = [];
+      try { ids = JSON.parse(hidden.value); } catch(e) {}
+      ids.forEach(id => {
+        if (!map[id]) map[id] = [];
+        map[id].push({type: 'prod', label: mat, hours: hrs, card});
+      });
+    });
+    // Variation lines
+    document.querySelectorAll('.var-card').forEach(card => {
+      const hidden = card.querySelector('.var-emp-hidden');
+      const desc = card.querySelector('[name="var_desc[]"]')?.value || 'Variation';
+      const hrs = parseFloat(card.querySelector('[name="var_hours[]"]')?.value) || 0;
+      let ids = [];
+      try { ids = JSON.parse(hidden.value); } catch(e) {}
+      ids.forEach(id => {
+        if (!map[id]) map[id] = [];
+        map[id].push({type: 'var', label: desc, hours: hrs, card});
+      });
+    });
+    // Other activities
+    document.querySelectorAll('.other-card').forEach(card => {
+      const hidden = card.querySelector('.other-emp-hidden');
+      const desc = card.querySelector('[name="other_desc[]"]')?.value || 'Other';
+      const hrs = parseFloat(card.querySelector('.other-line-hours')?.value) || 0;
+      let ids = [];
+      try { ids = JSON.parse(hidden.value); } catch(e) {}
+      ids.forEach(id => {
+        if (!map[id]) map[id] = [];
+        map[id].push({type: 'other', label: desc, hours: hrs, card});
+      });
+    });
+    return map;
+  }
+
+  function refreshAllCrewLists() {
+    const onSite = getOnSiteEmployeeIds();
+    const assignments = getAllAssignments();
+    const projectId = document.getElementById('projectSelect').value;
+    const hpd = PROJECT_HOURS_PER_DAY[projectId] || 8;
+
+    document.querySelectorAll('.crew-list-container').forEach(container => {
+      const card = container.closest('.prod-card, .var-card, .other-card');
+      if (!card) return;
+
+      // Determine which hidden field holds this card's crew
+      const hidden = card.querySelector('.prod-emp-hidden, .var-emp-hidden, .other-emp-hidden');
+      if (!hidden) return;
+
+      let selectedIds = [];
+      try { selectedIds = JSON.parse(hidden.value); } catch(e) {}
+
+      // Remove anyone no longer on site from selected
+      selectedIds = selectedIds.filter(id => onSite.includes(id));
+      hidden.value = JSON.stringify(selectedIds);
+
+      // Build checkboxes for on-site employees only
+      container.innerHTML = '';
+      if (onSite.length === 0) {
+        container.innerHTML = '<div class="px-2 py-1 text-muted small fst-italic">Select crew members on the right first</div>';
+        return;
+      }
+
+      onSite.forEach(empId => {
+        const emp = VAR_EMP_OPTIONS.find(e => e.id === empId);
+        if (!emp) return;
+        // Skip project managers — they don't count towards person-hours
+        if (isNonDeployRole(emp)) return;
+
+        const isChecked = selectedIds.includes(empId);
+
+        // Check other assignments (excluding this card)
+        const otherAssignments = (assignments[empId] || []).filter(a => a.card !== card);
+        const totalOtherHrs = otherAssignments.reduce((s, a) => s + a.hours, 0);
+        const thisHrs = parseFloat(card.querySelector('.line-hours, [name="var_hours[]"], .other-line-hours')?.value) || 0;
+        const totalHrs = totalOtherHrs + (isChecked ? thisHrs : 0);
+        const overAllocated = totalHrs > hpd;
+
+        let badge = '';
+        if (otherAssignments.length > 0) {
+          const summary = otherAssignments.map(a => `${a.label} ${a.hours}h`).join(', ');
+          const color = overAllocated ? 'bg-danger-subtle text-danger' : 'bg-secondary-subtle text-secondary';
+          badge = ` <span class="badge ${color} border ms-auto" style="font-size:.6rem;" title="${summary}">${totalOtherHrs}h elsewhere</span>`;
+        }
+
+        const label = document.createElement('label');
+        label.className = 'd-flex align-items-center gap-1 px-2 py-1 border-bottom';
+        label.style.cssText = 'cursor:pointer;font-size:.78rem;';
+        label.innerHTML = `<input type="checkbox" class="form-check-input mt-0 crew-cb" value="${empId}"
+          ${isChecked ? 'checked' : ''}
+          onchange="onCrewCbChange(this)">
+          <span class="flex-grow-1">${emp.label}</span>${badge}`;
+        container.appendChild(label);
+      });
+    });
+    updatePersonHoursSummary();
+  }
+
+  function onCrewCbChange(cb) {
+    // Sync the hidden field for this card
+    const card = cb.closest('.prod-card, .var-card, .other-card');
+    const hidden = card.querySelector('.prod-emp-hidden, .var-emp-hidden, .other-emp-hidden');
+    const ids = Array.from(card.querySelectorAll('.crew-cb:checked')).map(c => parseInt(c.value));
+    hidden.value = JSON.stringify(ids);
+    refreshAllCrewLists();
+  }
+
+  // ── Same crew for all production lines ──────────────────────────────────
+  function sameCrewAllProdLines() {
+    const cards = document.querySelectorAll('.prod-card');
+    if (cards.length === 0) return;
+    // Use the first production line's crew as the template
+    const firstHidden = cards[0].querySelector('.prod-emp-hidden');
+    let crewIds = [];
+    try { crewIds = JSON.parse(firstHidden.value); } catch(e) {}
+    if (crewIds.length === 0) {
+      // If first line has no crew, use all on-site employees
+      crewIds = getOnSiteEmployeeIds();
+    }
+    cards.forEach(card => {
+      card.querySelector('.prod-emp-hidden').value = JSON.stringify(crewIds);
+    });
+    refreshAllCrewLists();
+  }
 
   // ── Other Activity lines ────────────────────────────────────────────────
   function addOtherActivityLine() {
     const container = document.getElementById('otherActivityLines');
     const card = document.createElement('div');
     card.className = 'other-card border rounded p-2 mb-2 bg-light';
-
-    const empHtml = VAR_EMP_OPTIONS.map(e =>
-      `<label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
-        <input type="checkbox" class="form-check-input mt-0 other-emp-cb" value="${e.id}" onchange="syncOtherCrewCheckboxes(this); updatePersonHoursSummary()">
-        ${e.label}
-      </label>`
-    ).join('');
-
     card.innerHTML = `
       <div class="d-flex gap-2 align-items-start mb-1">
         <div class="flex-grow-1">
           <input type="text" name="other_desc[]" class="form-control form-control-sm" placeholder="e.g. Inductions, chasing materials, site prep">
         </div>
         <div style="flex:0 0 80px">
-          <input type="number" name="other_hours[]" class="form-control form-control-sm other-line-hours" min="0" step="0.25" placeholder="Hours" oninput="updatePersonHoursSummary()">
+          <input type="number" name="other_hours[]" class="form-control form-control-sm other-line-hours" min="0" step="0.25" placeholder="Hours" oninput="refreshAllCrewLists()">
         </div>
-        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.other-card').remove(); updatePersonHoursSummary()"><i class="bi bi-x-lg"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.other-card').remove(); refreshAllCrewLists()"><i class="bi bi-x-lg"></i></button>
       </div>
       <input type="hidden" name="other_emp_ids[]" class="other-emp-hidden" value="[]">
       <div>
         <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew</div>
-        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-white">${empHtml}</div>
+        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-white crew-list-container"></div>
       </div>
     `;
     container.appendChild(card);
+    refreshAllCrewLists();
     card.querySelector('input[name="other_desc[]"]').focus();
-  }
-
-  function syncOtherCrewCheckboxes(cb) {
-    const card = cb.closest('.other-card');
-    const ids = Array.from(card.querySelectorAll('.other-emp-cb:checked')).map(c => parseInt(c.value));
-    card.querySelector('.other-emp-hidden').value = JSON.stringify(ids);
   }
 
   // ── Person-Hours Summary ────────────────────────────────────────────────
   function updatePersonHoursSummary() {
-    // Production person-hours
+    // Production person-hours (from hidden JSON fields)
     let prodPH = 0;
     document.querySelectorAll('.prod-card').forEach(card => {
       const hrs = parseFloat(card.querySelector('.line-hours')?.value) || 0;
-      const hidden = card.querySelector('.prod-emp-hidden');
       let crewCount = 0;
-      try { crewCount = JSON.parse(hidden.value).length; } catch(e) {}
+      try { crewCount = JSON.parse(card.querySelector('.prod-emp-hidden').value).length; } catch(e) {}
       prodPH += hrs * crewCount;
     });
 
@@ -1199,9 +1268,8 @@
     let varPH = 0;
     document.querySelectorAll('.var-card').forEach(card => {
       const hrs = parseFloat(card.querySelector('[name="var_hours[]"]')?.value) || 0;
-      const hidden = card.querySelector('.var-emp-hidden');
       let crewCount = 0;
-      try { crewCount = JSON.parse(hidden.value).length; } catch(e) {}
+      try { crewCount = JSON.parse(card.querySelector('.var-emp-hidden').value).length; } catch(e) {}
       varPH += hrs * crewCount;
     });
 
@@ -1209,18 +1277,20 @@
     let otherPH = 0;
     document.querySelectorAll('.other-card').forEach(card => {
       const hrs = parseFloat(card.querySelector('.other-line-hours')?.value) || 0;
-      const hidden = card.querySelector('.other-emp-hidden');
       let crewCount = 0;
-      try { crewCount = JSON.parse(hidden.value).length; } catch(e) {}
+      try { crewCount = JSON.parse(card.querySelector('.other-emp-hidden').value).length; } catch(e) {}
       otherPH += hrs * crewCount;
     });
 
-    // Available person-hours
-    const crewCount = document.querySelectorAll('.employee-check:checked').length;
+    // Available person-hours (exclude project managers)
+    const onSiteIds = getOnSiteEmployeeIds();
+    const deployableCount = onSiteIds.filter(id => {
+      const emp = VAR_EMP_OPTIONS.find(e => e.id === id);
+      return emp && !isNonDeployRole(emp);
+    }).length;
     const projectId = document.getElementById('projectSelect').value;
-    // Get hours_per_day from project (default 8)
     const hpd = PROJECT_HOURS_PER_DAY[projectId] || 8;
-    const availPH = crewCount * hpd;
+    const availPH = deployableCount * hpd;
 
     const totalAccounted = prodPH + varPH + otherPH;
     const gap = Math.max(0, availPH - totalAccounted);

@@ -18,8 +18,10 @@
   .cell-leave      { background: #fff3cd; color: #664d03; text-align: center; }
   .cell-r_and_r    { background: #e0cffc; color: #3d1a78; text-align: center; font-weight: 600; }
   .cell-travel     { background: #d2f4ea; color: #0b4c34; text-align: center; }
+  .cell-travel_half { background: linear-gradient(135deg, #d2f4ea 50%, #cfe2ff 50%); color: #084298; text-align: center; font-weight: 600; }
   .cell-weekend    { background: #f1f3f5; color: #ced4da; text-align: center; }
   .col-today       { outline: 2px solid #0d6efd; outline-offset: -2px; }
+  .accom-dot::before { content: '\f422'; font-family: 'bootstrap-icons'; font-size:.45rem; vertical-align:super; margin-right:1px; opacity:.7; }
   th.col-today     { background: #cfe2ff !important; }
   .sched-wrapper   { overflow: auto; max-width: 100%; max-height: 80vh; }
   .sched-table thead th { position: sticky; top: 0; z-index: 4; background: #f8f9fa; }
@@ -147,21 +149,39 @@
         {% set css_class = 'cell-weekend' if status == 'sunday' else 'cell-' + status %}
         {% set pid = cell.get('project_id') or (cell.get('override_project_id') | int(0) or None) %}
         {% set colours = project_colour_map.get(pid) if pid else None %}
-        {% set cell_style = ('background:' + colours[0] + ';color:' + colours[1] + ';') if (status == 'assigned' and colours) else '' %}
+        {% set has_accom = cell.get('has_accommodation', false) %}
+        {% set has_flight = cell.get('has_flight', false) %}
+        {% if status == 'assigned' and colours %}
+          {% set cell_style = 'background:' + colours[0] + ';color:' + colours[1] + ';' %}
+        {% elif status == 'travel_half' and colours %}
+          {% set cell_style = 'background:linear-gradient(135deg, #d2f4ea 50%, ' + colours[0] + ' 50%);color:' + colours[1] + ';' %}
+        {% else %}
+          {% set cell_style = '' %}
+        {% endif %}
+        {% set title_text = cell.get('nwd_reason', '') or cell.get('project_name', '') or cell.get('label', status.title()) %}
+        {% if has_accom and cell.get('accommodation_name') %}
+          {% set title_text = title_text + ' | Accom: ' + cell.get('accommodation_name', '') %}
+        {% endif %}
         <td class="{{ css_class }} sched-clickable {{ 'col-today' if d == today else '' }}
                    {{ 'month-divider' if d.day == 1 and not loop.first else '' }}"
             style="{{ cell_style }}"
-            title="{{ cell.get('nwd_reason', '') or cell.get('project_name', '') or cell.get('label', status.title()) }}"
+            title="{{ title_text }}"
             data-emp-id="{{ emp.id }}"
             data-emp-name="{{ emp.name }}"
             data-date="{{ ds }}"
             data-override-id="{{ ov_id }}"
             data-override-status="{{ cell.get('override_status', '') }}"
             data-override-project="{{ cell.get('override_project_id', '') }}"
+            data-has-flight="{{ 'true' if has_flight else '' }}"
+            data-has-accom="{{ 'true' if has_accom else '' }}"
+            data-status="{{ status }}"
             onclick="openSchedModal(this)">
-          {% if status == 'assigned' %}
+          {% if status == 'travel_half' %}
             {% set pname = cell.get('project_name', '') %}
-            <span style="font-size:.6rem;" class="{{ 'cell-override-dot' if ov_id else '' }}">{{ pname[:8] if pname else '—' }}</span>
+            <span style="font-size:.55rem;" class="{{ 'cell-override-dot' if ov_id else '' }}"><i class="bi bi-airplane-fill"></i> {{ pname[:5] }}</span>
+          {% elif status == 'assigned' %}
+            {% set pname = cell.get('project_name', '') %}
+            <span style="font-size:.6rem;" class="{{ 'accom-dot' if has_accom else '' }} {{ 'cell-override-dot' if ov_id else '' }}">{{ pname[:8] if pname else '—' }}</span>
           {% elif status == 'sunday' %}—
           {% elif status == 'rdo' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.6rem;">{{ cell.get('label', 'RDO') }}</span>
           {% elif status == 'r_and_r' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">R&R</span>
@@ -196,6 +216,7 @@
   <span class="badge px-2" style="background:#ffe5d0;color:#6c3a00;">RDO</span>
   <span class="badge px-2" style="background:#e0cffc;color:#3d1a78;">R&amp;R</span>
   <span class="badge px-2" style="background:#d2f4ea;color:#0b4c34;">Travel</span>
+  <span class="badge px-2" style="background:linear-gradient(135deg, #d2f4ea 50%, #cfe2ff 50%);color:#084298;">Half Travel</span>
   <span class="badge px-2" style="background:#fff3cd;color:#664d03;">Leave</span>
   <span class="badge px-2" style="background:#f1f3f5;color:#adb5bd;">Sun off</span>
 </div>
@@ -292,114 +313,282 @@
   </div>
 </div>
 
-<!-- Schedule Override Modal -->
+<!-- Enhanced Day Detail Modal -->
 <div class="modal fade" id="schedOverrideModal" tabindex="-1">
-  <div class="modal-dialog modal-sm">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header py-2">
         <h6 class="modal-title fw-bold" id="schedModalTitle">Edit Schedule</h6>
         <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST" action="{{ url_for('scheduling.schedule_override') }}">
-        <div class="modal-body py-3">
-          <input type="hidden" name="employee_id" id="schedEmpId">
-          <input type="hidden" name="date" id="schedDate">
-          <input type="hidden" name="week" id="schedWeek" value="{{ week_start.isoformat() }}">
-          <input type="hidden" name="redirect_project_id" value="">
-          <input type="hidden" name="action" id="schedAction" value="set" data-field="action">
-          <div class="mb-2">
-            <label class="form-label small fw-semibold mb-1">Status</label>
-            <select class="form-select form-select-sm" name="status" id="schedStatus"
-                    onchange="schedStatusChanged(this)">
-              <option value="available">Available</option>
-              <option value="project">On Job →</option>
-              <option value="r_and_r">R&amp;R</option>
-              <option value="travel">Travel</option>
-              <option value="annual">Annual Leave</option>
-              <option value="sick">Sick Leave</option>
-              <option value="personal">Personal Leave</option>
-              <option value="rdo">RDO (manual)</option>
-              <option value="other">Other Leave</option>
-            </select>
+      <div class="modal-body py-2">
+        <!-- Tabs -->
+        <ul class="nav nav-tabs nav-fill small mb-3" id="schedTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active py-1" id="tab-schedule" data-bs-toggle="tab" data-bs-target="#pane-schedule" type="button">
+              <i class="bi bi-calendar3 me-1"></i>Schedule
+            </button>
+          </li>
+          <li class="nav-item" role="presentation" id="tab-travel-li">
+            <button class="nav-link py-1" id="tab-travel" data-bs-toggle="tab" data-bs-target="#pane-travel" type="button">
+              <i class="bi bi-airplane me-1"></i>Travel
+            </button>
+          </li>
+          <li class="nav-item" role="presentation" id="tab-accom-li">
+            <button class="nav-link py-1" id="tab-accom" data-bs-toggle="tab" data-bs-target="#pane-accom" type="button">
+              <i class="bi bi-house me-1"></i>Accommodation
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content">
+          <!-- Tab 1: Schedule (override) -->
+          <div class="tab-pane fade show active" id="pane-schedule" role="tabpanel">
+            <form method="POST" action="{{ url_for('scheduling.schedule_override') }}" id="schedOverrideForm">
+              <input type="hidden" name="employee_id" id="schedEmpId">
+              <input type="hidden" name="date" id="schedDate">
+              <input type="hidden" name="week" id="schedWeek" value="{{ week_start.isoformat() }}">
+              <input type="hidden" name="redirect_project_id" value="">
+              <input type="hidden" name="action" id="schedAction" value="set" data-field="action">
+              {% if current_user.role in ('admin', 'supervisor') %}
+              <div class="mb-2">
+                <label class="form-label small fw-semibold mb-1">Status</label>
+                <select class="form-select form-select-sm" name="status" id="schedStatus"
+                        onchange="schedStatusChanged(this)">
+                  <option value="available">Available</option>
+                  <option value="project">On Job &rarr;</option>
+                  <option value="r_and_r">R&amp;R</option>
+                  <option value="travel">Travel</option>
+                  <option value="annual">Annual Leave</option>
+                  <option value="sick">Sick Leave</option>
+                  <option value="personal">Personal Leave</option>
+                  <option value="rdo">RDO (manual)</option>
+                  <option value="other">Other Leave</option>
+                </select>
+              </div>
+              <div class="mb-2" id="schedProjectDiv" style="display:none;">
+                <label class="form-label small fw-semibold mb-1">Project</label>
+                <select class="form-select form-select-sm" name="project_id" id="schedProjectId">
+                  <option value="">— select —</option>
+                  {% for p in projects %}
+                  <option value="{{ p.id }}">{{ p.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-2" id="schedHalfDayDiv" style="display:none;">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="is_half_day" value="1" id="schedHalfDay"
+                         onchange="schedHalfDayChanged(this)">
+                  <label class="form-check-label small" for="schedHalfDay">Half-day travel (travel + site work)</label>
+                </div>
+              </div>
+              <div class="mb-2" id="schedHalfDayProjectDiv" style="display:none;">
+                <label class="form-label small fw-semibold mb-1">Site project (PM)</label>
+                <select class="form-select form-select-sm" name="half_day_project_id" id="schedHalfDayProjectId">
+                  <option value="">— select —</option>
+                  {% for p in projects %}
+                  <option value="{{ p.id }}">{{ p.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small fw-semibold mb-1">Notes (optional)</label>
+                <input type="text" class="form-control form-control-sm" name="notes" id="schedNotes">
+              </div>
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-danger me-auto" id="schedClearBtn" style="display:none;">
+                  <i class="bi bi-x-circle me-1"></i>Clear Override
+                </button>
+                <button type="submit" class="btn btn-sm btn-primary">Save Schedule</button>
+              </div>
+              {% else %}
+              <div class="text-muted small" id="schedReadOnly">
+                <p><strong>Status:</strong> <span id="schedReadStatus"></span></p>
+                <p><strong>Notes:</strong> <span id="schedReadNotes">—</span></p>
+              </div>
+              {% endif %}
+            </form>
           </div>
-          <div class="mb-2" id="schedProjectDiv" style="display:none;">
-            <label class="form-label small fw-semibold mb-1">Project</label>
-            <select class="form-select form-select-sm" name="project_id" id="schedProjectId">
-              <option value="">— select —</option>
-              {% for p in projects %}
-              <option value="{{ p.id }}">{{ p.name }}</option>
-              {% endfor %}
-            </select>
+
+          <!-- Tab 2: Travel (flights) -->
+          <div class="tab-pane fade" id="pane-travel" role="tabpanel">
+            <div id="flightsList" class="mb-3">
+              <p class="text-muted small">Loading flight details...</p>
+            </div>
+            {% if current_user.role in ('admin', 'supervisor') %}
+            <hr class="my-2">
+            <h6 class="small fw-bold mb-2"><i class="bi bi-plus-circle me-1"></i>Add Flight</h6>
+            <form id="flightAddForm">
+              <input type="hidden" name="employee_id" id="flightEmpId">
+              <input type="hidden" name="date" id="flightDate">
+              <div class="row g-2 mb-2">
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">Direction</label>
+                  <select class="form-select form-select-sm" name="direction">
+                    <option value="outbound">Outbound</option>
+                    <option value="inbound">Inbound</option>
+                  </select>
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">Airline</label>
+                  <input type="text" class="form-control form-control-sm" name="airline" placeholder="e.g. Qantas">
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">Flight #</label>
+                  <input type="text" class="form-control form-control-sm" name="flight_number" placeholder="e.g. QF456">
+                </div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-sm-3">
+                  <label class="form-label small mb-1">From</label>
+                  <input type="text" class="form-control form-control-sm" name="departure_airport" placeholder="BNE">
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small mb-1">Depart</label>
+                  <input type="time" class="form-control form-control-sm" name="departure_time">
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small mb-1">To</label>
+                  <input type="text" class="form-control form-control-sm" name="arrival_airport" placeholder="SYD">
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small mb-1">Arrive</label>
+                  <input type="time" class="form-control form-control-sm" name="arrival_time">
+                </div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Booking Ref</label>
+                  <input type="text" class="form-control form-control-sm" name="booking_reference">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Notes</label>
+                  <input type="text" class="form-control form-control-sm" name="flight_notes">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-plus me-1"></i>Add Flight</button>
+            </form>
+            {% endif %}
           </div>
-          <div class="mb-1">
-            <label class="form-label small fw-semibold mb-1">Notes (optional)</label>
-            <input type="text" class="form-control form-control-sm" name="notes" id="schedNotes">
+
+          <!-- Tab 3: Accommodation -->
+          <div class="tab-pane fade" id="pane-accom" role="tabpanel">
+            <div id="accomList" class="mb-3">
+              <p class="text-muted small">Loading accommodation details...</p>
+            </div>
+            {% if current_user.role in ('admin', 'supervisor') %}
+            <hr class="my-2">
+            <h6 class="small fw-bold mb-2"><i class="bi bi-plus-circle me-1"></i>Add Accommodation</h6>
+            <form id="accomAddForm">
+              <input type="hidden" name="employee_id" id="accomEmpId">
+              <div class="row g-2 mb-2">
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Check-in</label>
+                  <input type="date" class="form-control form-control-sm" name="accom_date_from" id="accomDateFrom">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Check-out</label>
+                  <input type="date" class="form-control form-control-sm" name="accom_date_to" id="accomDateTo">
+                </div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Property Name</label>
+                  <input type="text" class="form-control form-control-sm" name="property_name" placeholder="e.g. Holiday Inn">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Room / Unit</label>
+                  <input type="text" class="form-control form-control-sm" name="room_info" placeholder="e.g. Room 204">
+                </div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-sm-12">
+                  <label class="form-label small mb-1">Address</label>
+                  <input type="text" class="form-control form-control-sm" name="accom_address">
+                </div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">Phone</label>
+                  <input type="text" class="form-control form-control-sm" name="accom_phone">
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">Check-in Time</label>
+                  <input type="time" class="form-control form-control-sm" name="check_in_time">
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label small mb-1">Check-out Time</label>
+                  <input type="time" class="form-control form-control-sm" name="check_out_time">
+                </div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Booking Ref</label>
+                  <input type="text" class="form-control form-control-sm" name="accom_booking_ref">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label small mb-1">Notes</label>
+                  <input type="text" class="form-control form-control-sm" name="accom_notes">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-plus me-1"></i>Add Accommodation</button>
+            </form>
+            {% endif %}
           </div>
         </div>
-        <div class="modal-footer py-2">
-          <button type="button" class="btn btn-sm btn-outline-danger me-auto" id="schedClearBtn"
-                  onclick="document.getElementById('schedAction').value='clear';this.closest('form').submit();"
-                  style="display:none;">
-            <i class="bi bi-x-circle me-1"></i>Clear
-          </button>
-          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-sm btn-primary">Save</button>
-        </div>
-      </form>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
     </div>
   </div>
 </div>
 {% endblock %}
 
+
 {% block scripts %}
 <script>
 const WEEK_START = '{{ week_start.isoformat() }}';
-const POLL_INTERVAL = 5000; // 5 seconds
+const POLL_INTERVAL = 5000;
 const PROJECT_COLOURS = {{ project_colour_map | tojson }};
+const IS_ADMIN_OR_SUPER = {{ 'true' if current_user.role in ('admin', 'supervisor') else 'false' }};
 
-// ── Cell styling config ──────────────────────────────────────────────────────
-const STATUS_CSS = {
-  available: {cls: 'cell-available', html: '<span>&bull;</span>'},
-  assigned:  {cls: 'cell-assigned',  html: ''},  // handled specially
-  rdo:       {cls: 'cell-rdo',       html: ''},
-  leave:     {cls: 'cell-leave',     html: '<span>L</span>'},
-  r_and_r:   {cls: 'cell-r_and_r',   html: '<span>R&R</span>'},
-  travel:    {cls: 'cell-travel',    html: '<i class="bi bi-airplane-fill" style="font-size:.6rem;"></i>'},
-  sunday:    {cls: 'cell-weekend',   html: '—'},
-};
-const ALL_CELL_CLASSES = Object.values(STATUS_CSS).map(s => s.cls);
+const ALL_CELL_CLASSES = ['cell-available','cell-assigned','cell-rdo','cell-leave',
+  'cell-r_and_r','cell-travel','cell-travel_half','cell-weekend'];
 
-// ── Update a single cell in the DOM ──────────────────────────────────────────
 function updateCell(td, cell, projectColours) {
   const status = cell.status || 'available';
   const ovId = cell.override_id || '';
   const pname = cell.project_name || '';
   const pid = cell.project_id || cell.override_project_id || null;
   const dotCls = ovId ? ' cell-override-dot' : '';
+  const hasAccom = cell.has_accommodation || false;
+  const accomCls = hasAccom ? ' accom-dot' : '';
 
-  // Remove old status classes
   ALL_CELL_CLASSES.forEach(c => td.classList.remove(c));
-
-  // Apply new status class
   const cssClass = status === 'sunday' ? 'cell-weekend' : ('cell-' + status);
   td.classList.add(cssClass);
 
-  // Background colour for assigned cells
   if (status === 'assigned' && pid && projectColours[String(pid)]) {
     const [bg, fg] = projectColours[String(pid)];
     td.style.background = bg;
+    td.style.color = fg;
+  } else if (status === 'travel_half' && pid && projectColours[String(pid)]) {
+    const [bg, fg] = projectColours[String(pid)];
+    td.style.background = `linear-gradient(135deg, #d2f4ea 50%, ${bg} 50%)`;
     td.style.color = fg;
   } else {
     td.style.background = '';
     td.style.color = '';
   }
 
-  // Inner HTML — match exactly what Jinja renders on the server
   let html = '';
-  if (status === 'assigned') {
-    html = `<span style="font-size:.6rem;" class="${dotCls}">${(pname || '—').substring(0, 8)}</span>`;
+  if (status === 'travel_half') {
+    html = `<span style="font-size:.55rem;" class="${dotCls}"><i class="bi bi-airplane-fill"></i> ${(pname || '').substring(0, 5)}</span>`;
+  } else if (status === 'assigned') {
+    html = `<span style="font-size:.6rem;" class="${accomCls}${dotCls}">${(pname || '\u2014').substring(0, 8)}</span>`;
   } else if (status === 'sunday') {
-    html = '—';
+    html = '\u2014';
   } else if (status === 'rdo') {
     html = `<span class="${dotCls}" style="font-size:.6rem;">${cell.label || 'RDO'}</span>`;
   } else if (status === 'r_and_r') {
@@ -409,21 +598,22 @@ function updateCell(td, cell, projectColours) {
   } else if (status === 'leave') {
     html = `<span class="${dotCls}">L</span>`;
   } else {
-    // available or unknown
     html = `<span class="${dotCls}">&bull;</span>`;
   }
   td.innerHTML = html;
 
-  // Title
-  td.title = cell.nwd_reason || pname || cell.label || status.replace('_', ' ');
+  let title = cell.nwd_reason || pname || cell.label || status.replace('_', ' ');
+  if (hasAccom && cell.accommodation_name) title += ' | Accom: ' + cell.accommodation_name;
+  td.title = title;
 
-  // Data attributes
   td.dataset.overrideId = ovId;
   td.dataset.overrideStatus = cell.override_status || '';
   td.dataset.overrideProject = cell.override_project_id || '';
+  td.dataset.hasFlight = cell.has_flight ? 'true' : '';
+  td.dataset.hasAccom = hasAccom ? 'true' : '';
+  td.dataset.status = status;
 }
 
-// ── Poll for grid updates ────────────────────────────────────────────────────
 let lastGridHash = '';
 const indicator = document.getElementById('liveIndicator');
 
@@ -433,11 +623,10 @@ async function pollGrid() {
     if (!resp.ok) return;
     const data = await resp.json();
     const newHash = JSON.stringify(data.grid);
-    if (newHash === lastGridHash) return; // no changes
+    if (newHash === lastGridHash) return;
     lastGridHash = newHash;
 
     const colours = data.project_colours || {};
-    // Update every cell in the grid
     document.querySelectorAll('td.sched-clickable').forEach(td => {
       const empId = td.dataset.empId;
       const dateStr = td.dataset.date;
@@ -449,7 +638,6 @@ async function pollGrid() {
       updateCell(td, cell, colours);
     });
 
-    // Flash the indicator
     indicator.classList.remove('bg-success-subtle', 'text-success', 'border-success-subtle');
     indicator.classList.add('bg-info-subtle', 'text-info', 'border-info-subtle');
     indicator.innerHTML = '<i class="bi bi-arrow-repeat me-1" style="font-size:.4rem;vertical-align:middle;"></i>Updated';
@@ -465,34 +653,115 @@ async function pollGrid() {
   }
 }
 
-// Start polling
 setInterval(pollGrid, POLL_INTERVAL);
-// Initial hash so first poll doesn't flash "Updated" unnecessarily
 pollGrid().then(() => { lastGridHash = lastGridHash; });
 
-// ── Override modal (AJAX) ────────────────────────────────────────────────────
-// ── Role group filter ─────────────────────────────────────────────────────
 function filterByRoleGroup(groupName) {
   document.querySelectorAll('.sched-group-row').forEach(row => {
-    if (groupName === 'all') {
-      row.style.display = '';
-    } else {
-      row.style.display = row.dataset.roleGroup === groupName ? '' : 'none';
-    }
+    row.style.display = groupName === 'all' ? '' : (row.dataset.roleGroup === groupName ? '' : 'none');
   });
   document.querySelectorAll('.sched-emp-row').forEach(row => {
-    if (groupName === 'all') {
-      row.style.display = '';
-    } else {
-      const groups = (row.dataset.roleGroups || '').split(',');
-      row.style.display = groups.includes(groupName) ? '' : 'none';
-    }
+    if (groupName === 'all') { row.style.display = ''; return; }
+    const groups = (row.dataset.roleGroups || '').split(',');
+    row.style.display = groups.includes(groupName) ? '' : 'none';
   });
 }
 
 function schedStatusChanged(sel) {
-  document.getElementById('schedProjectDiv').style.display = sel.value === 'project' ? '' : 'none';
+  const v = sel.value;
+  const projDiv = document.getElementById('schedProjectDiv');
+  const halfDiv = document.getElementById('schedHalfDayDiv');
+  const halfProjDiv = document.getElementById('schedHalfDayProjectDiv');
+  const halfCb = document.getElementById('schedHalfDay');
+
+  projDiv.style.display = v === 'project' ? '' : 'none';
+  halfDiv.style.display = v === 'travel' ? '' : 'none';
+  if (v !== 'travel') {
+    halfProjDiv.style.display = 'none';
+    if (halfCb) halfCb.checked = false;
+  }
 }
+
+function schedHalfDayChanged(cb) {
+  document.getElementById('schedHalfDayProjectDiv').style.display = cb.checked ? '' : 'none';
+}
+
+async function ajaxPost(url, formData) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    body: new URLSearchParams(formData),
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+    credentials: 'same-origin',
+  });
+  const ct = resp.headers.get('content-type') || '';
+  if (resp.ok && ct.includes('application/json')) return await resp.json();
+  return null;
+}
+
+function renderFlights(flights) {
+  const el = document.getElementById('flightsList');
+  if (!flights || flights.length === 0) {
+    el.innerHTML = '<p class="text-muted small mb-0">No flights recorded for this day.</p>';
+    return;
+  }
+  let html = '';
+  for (const f of flights) {
+    const dir = f.direction === 'inbound' ? '<i class="bi bi-arrow-down-circle text-success me-1"></i>Inbound' :
+                                             '<i class="bi bi-arrow-up-circle text-primary me-1"></i>Outbound';
+    html += `<div class="card card-body p-2 mb-2 bg-light">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <span class="small fw-bold">${dir}</span>
+          ${f.airline ? `<span class="small text-muted ms-2">${f.airline}</span>` : ''}
+          ${f.flight_number ? `<span class="badge bg-secondary ms-1">${f.flight_number}</span>` : ''}
+        </div>
+        ${IS_ADMIN_OR_SUPER ? `<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteFlight(${f.id})" title="Delete"><i class="bi bi-trash"></i></button>` : ''}
+      </div>
+      <div class="small mt-1">
+        ${f.departure_airport || '?'} ${f.departure_time || ''} &rarr; ${f.arrival_airport || '?'} ${f.arrival_time || ''}
+      </div>
+      ${f.booking_reference ? `<div class="small text-muted">Ref: ${f.booking_reference}</div>` : ''}
+      ${f.notes ? `<div class="small text-muted fst-italic">${f.notes}</div>` : ''}
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderAccommodations(accoms, requiresAccom) {
+  const el = document.getElementById('accomList');
+  if (!requiresAccom) {
+    el.innerHTML = '<p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>This employee does not require accommodation.</p>';
+    return;
+  }
+  if (!accoms || accoms.length === 0) {
+    el.innerHTML = '<p class="text-muted small mb-0">No accommodation booked covering this date.</p>';
+    return;
+  }
+  let html = '';
+  for (const a of accoms) {
+    html += `<div class="card card-body p-2 mb-2 bg-light">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <span class="small fw-bold"><i class="bi bi-house me-1"></i>${a.property_name || 'Accommodation'}</span>
+          ${a.room_info ? `<span class="small text-muted ms-2">${a.room_info}</span>` : ''}
+        </div>
+        ${IS_ADMIN_OR_SUPER ? `<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteAccom(${a.id})" title="Delete"><i class="bi bi-trash"></i></button>` : ''}
+      </div>
+      <div class="small mt-1">
+        ${a.date_from} &rarr; ${a.date_to}
+        ${a.check_in_time ? `<span class="text-muted ms-2">In: ${a.check_in_time}</span>` : ''}
+        ${a.check_out_time ? `<span class="text-muted ms-1">Out: ${a.check_out_time}</span>` : ''}
+      </div>
+      ${a.address ? `<div class="small text-muted"><i class="bi bi-geo-alt me-1"></i>${a.address}</div>` : ''}
+      ${a.phone ? `<div class="small text-muted"><i class="bi bi-telephone me-1"></i>${a.phone}</div>` : ''}
+      ${a.booking_reference ? `<div class="small text-muted">Ref: ${a.booking_reference}</div>` : ''}
+      ${a.notes ? `<div class="small text-muted fst-italic">${a.notes}</div>` : ''}
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+let _currentEmpId = null, _currentDate = null;
 
 function openSchedModal(td) {
   const empId = td.dataset.empId;
@@ -501,76 +770,208 @@ function openSchedModal(td) {
   const ovId = td.dataset.overrideId;
   const ovStatus = td.dataset.overrideStatus;
   const ovProject = td.dataset.overrideProject;
+  const cellStatus = td.dataset.status;
+
+  _currentEmpId = empId;
+  _currentDate = dt;
 
   const d = new Date(dt + 'T00:00:00');
   const displayDate = d.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
-  document.getElementById('schedModalTitle').textContent = empName + '  —  ' + displayDate;
-  document.getElementById('schedEmpId').value = empId;
-  document.getElementById('schedDate').value = dt;
-  document.getElementById('schedAction').value = 'set';
-  document.getElementById('schedNotes').value = '';
+  document.getElementById('schedModalTitle').textContent = empName + '  \u2014  ' + displayDate;
+
+  const empIdField = document.getElementById('schedEmpId');
+  if (empIdField) empIdField.value = empId;
+  const dateField = document.getElementById('schedDate');
+  if (dateField) dateField.value = dt;
+  const actionField = document.getElementById('schedAction');
+  if (actionField) actionField.value = 'set';
+  const notesField = document.getElementById('schedNotes');
+  if (notesField) notesField.value = '';
+
+  // Reset half-day checkbox
+  const halfCb = document.getElementById('schedHalfDay');
+  if (halfCb) { halfCb.checked = false; schedHalfDayChanged(halfCb); }
 
   const sel = document.getElementById('schedStatus');
-  sel.value = ovStatus || 'available';
-  schedStatusChanged(sel);
-  if (ovProject) document.getElementById('schedProjectId').value = ovProject;
+  if (sel) {
+    sel.value = ovStatus || 'available';
+    schedStatusChanged(sel);
+    if (ovProject) {
+      const projSel = document.getElementById('schedProjectId');
+      if (projSel) projSel.value = ovProject;
+    }
+  }
 
-  document.getElementById('schedClearBtn').style.display = ovId ? '' : 'none';
+  const clearBtn = document.getElementById('schedClearBtn');
+  if (clearBtn) clearBtn.style.display = ovId ? '' : 'none';
+
+  const flightEmpId = document.getElementById('flightEmpId');
+  if (flightEmpId) flightEmpId.value = empId;
+  const flightDate = document.getElementById('flightDate');
+  if (flightDate) flightDate.value = dt;
+
+  const accomEmpId = document.getElementById('accomEmpId');
+  if (accomEmpId) accomEmpId.value = empId;
+  const accomFrom = document.getElementById('accomDateFrom');
+  if (accomFrom) accomFrom.value = dt;
+  const accomTo = document.getElementById('accomDateTo');
+  if (accomTo) accomTo.value = dt;
+
+  document.getElementById('flightsList').innerHTML = '<p class="text-muted small">Loading...</p>';
+  document.getElementById('accomList').innerHTML = '<p class="text-muted small">Loading...</p>';
+
+  const schedTab = document.getElementById('tab-schedule');
+  if (schedTab) new bootstrap.Tab(schedTab).show();
+
+  const readOnly = document.getElementById('schedReadOnly');
+  if (readOnly) {
+    const statusEl = document.getElementById('schedReadStatus');
+    if (statusEl) statusEl.textContent = ovStatus || cellStatus || 'Available';
+    const notesEl = document.getElementById('schedReadNotes');
+    if (notesEl) notesEl.textContent = '\u2014';
+  }
+
   new bootstrap.Modal(document.getElementById('schedOverrideModal')).show();
+  loadDayDetails(empId, dt);
 }
 
-// ── AJAX submit helper ───────────────────────────────────────────────────────
-async function ajaxOverride(form) {
-  const formData = new FormData(form);
-  const url = form.getAttribute('action');
-  const resp = await fetch(url, {
-    method: 'POST',
-    body: new URLSearchParams(formData),
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'Accept': 'application/json',
-    },
-    credentials: 'same-origin',
+async function loadDayDetails(empId, dateStr) {
+  try {
+    const resp = await fetch(`/scheduling/day-details/${empId}/${dateStr}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (!data.ok) return;
+
+    renderFlights(data.flights);
+    renderAccommodations(data.accommodations, data.requires_accommodation);
+
+    const accomLi = document.getElementById('tab-accom-li');
+    if (accomLi) accomLi.style.display = data.requires_accommodation ? '' : 'none';
+
+    if (data.override && data.override.is_half_day) {
+      const halfCb = document.getElementById('schedHalfDay');
+      if (halfCb) {
+        halfCb.checked = true;
+        schedHalfDayChanged(halfCb);
+        const halfProjSel = document.getElementById('schedHalfDayProjectId');
+        if (halfProjSel && data.override.project_id) halfProjSel.value = data.override.project_id;
+      }
+    }
+
+    if (data.override && data.override.notes) {
+      const notesEl = document.getElementById('schedReadNotes');
+      if (notesEl) notesEl.textContent = data.override.notes;
+      const notesInput = document.getElementById('schedNotes');
+      if (notesInput) notesInput.value = data.override.notes;
+    }
+  } catch (err) {
+    console.error('Failed to load day details:', err);
+  }
+}
+
+const overrideForm = document.getElementById('schedOverrideForm');
+if (overrideForm) {
+  overrideForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const status = document.getElementById('schedStatus').value;
+    const halfCb = document.getElementById('schedHalfDay');
+    if (status === 'travel' && halfCb && halfCb.checked) {
+      const halfProjVal = document.getElementById('schedHalfDayProjectId').value;
+      const fd = new FormData(this);
+      fd.set('project_id', halfProjVal);
+      try {
+        const result = await ajaxPost(this.getAttribute('action'), fd);
+        if (result) {
+          bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
+          await pollGrid();
+        } else {
+          alert('Failed to save. You may need to refresh and log in again.');
+        }
+      } catch { alert('Network error.'); }
+      return;
+    }
+    try {
+      const result = await ajaxPost(this.getAttribute('action'), new FormData(this));
+      if (result) {
+        bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
+        await pollGrid();
+      } else {
+        alert('Failed to save. You may need to refresh and log in again.');
+      }
+    } catch { alert('Network error.'); }
   });
-  // Check that we got JSON back (not a redirect to login page)
-  const ct = resp.headers.get('content-type') || '';
-  if (resp.ok && ct.includes('application/json')) {
-    return true;
-  }
-  return false;
 }
 
-// Intercept modal form submit — use AJAX so the page doesn't reload
-document.querySelector('#schedOverrideModal form').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  try {
-    const ok = await ajaxOverride(this);
-    if (ok) {
-      bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
-      await pollGrid();
-    } else {
-      alert('Failed to save. You may need to refresh the page and log in again.');
-    }
-  } catch {
-    alert('Network error. Please check your connection.');
-  }
-});
+const clearBtn = document.getElementById('schedClearBtn');
+if (clearBtn) {
+  clearBtn.addEventListener('click', async function(e) {
+    e.preventDefault();
+    document.getElementById('schedAction').value = 'clear';
+    try {
+      const result = await ajaxPost(overrideForm.getAttribute('action'), new FormData(overrideForm));
+      if (result) {
+        bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
+        await pollGrid();
+      } else { alert('Failed to clear override.'); }
+    } catch { alert('Network error.'); }
+  });
+}
 
-// Also handle the Clear button via AJAX
-document.getElementById('schedClearBtn').addEventListener('click', async function(e) {
-  e.preventDefault();
-  document.getElementById('schedAction').value = 'clear';
+const flightForm = document.getElementById('flightAddForm');
+if (flightForm) {
+  flightForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    try {
+      const result = await ajaxPost('/scheduling/flight/add', new FormData(this));
+      if (result && result.ok) {
+        this.reset();
+        document.getElementById('flightEmpId').value = _currentEmpId;
+        document.getElementById('flightDate').value = _currentDate;
+        loadDayDetails(_currentEmpId, _currentDate);
+        await pollGrid();
+      } else { alert('Failed to add flight.'); }
+    } catch { alert('Network error.'); }
+  });
+}
+
+async function deleteFlight(flightId) {
+  if (!confirm('Delete this flight booking?')) return;
   try {
-    const ok = await ajaxOverride(this.closest('form'));
-    if (ok) {
-      bootstrap.Modal.getInstance(document.getElementById('schedOverrideModal')).hide();
+    const fd = new FormData();
+    const result = await ajaxPost(`/scheduling/flight/${flightId}/delete`, fd);
+    if (result && result.ok) {
+      loadDayDetails(_currentEmpId, _currentDate);
       await pollGrid();
-    } else {
-      alert('Failed to clear override.');
-    }
-  } catch {
-    alert('Network error.');
-  }
-});
+    } else { alert('Failed to delete flight.'); }
+  } catch { alert('Network error.'); }
+}
+
+const accomForm = document.getElementById('accomAddForm');
+if (accomForm) {
+  accomForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    try {
+      const result = await ajaxPost('/scheduling/accommodation/add', new FormData(this));
+      if (result && result.ok) {
+        this.reset();
+        document.getElementById('accomEmpId').value = _currentEmpId;
+        loadDayDetails(_currentEmpId, _currentDate);
+        await pollGrid();
+      } else { alert('Failed to add accommodation.'); }
+    } catch { alert('Network error.'); }
+  });
+}
+
+async function deleteAccom(accomId) {
+  if (!confirm('Delete this accommodation booking?')) return;
+  try {
+    const fd = new FormData();
+    const result = await ajaxPost(`/scheduling/accommodation/${accomId}/delete`, fd);
+    if (result && result.ok) {
+      loadDayDetails(_currentEmpId, _currentDate);
+      await pollGrid();
+    } else { alert('Failed to delete accommodation.'); }
+  } catch { alert('Network error.'); }
+}
 </script>
 {% endblock %}

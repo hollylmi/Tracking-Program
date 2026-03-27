@@ -16,6 +16,7 @@ from models import (
     PublicHoliday, CFMEUDate,
     ProjectEquipmentRequirement, ProjectEquipmentAssignment,
     ProjectMachine, MachineBreakdown,
+    FlightBooking, AccommodationBooking, User,
 )
 from utils.schedule import build_schedule_grid
 
@@ -457,16 +458,19 @@ def schedule_override():
         status = request.form.get('status', 'available')
         project_id = request.form.get('project_id', type=int)
         notes = request.form.get('notes', '').strip() or None
+        is_half_day = request.form.get('is_half_day') == '1'
         if existing:
             existing.status = status
-            existing.project_id = project_id if status == 'project' else None
+            existing.project_id = project_id if status in ('project', 'travel') else None
+            existing.is_half_day = is_half_day if status == 'travel' else False
             existing.notes = notes
         else:
             db.session.add(ScheduleDayOverride(
                 employee_id=employee_id,
                 date=override_date,
                 status=status,
-                project_id=project_id if status == 'project' else None,
+                project_id=project_id if status in ('project', 'travel') else None,
+                is_half_day=is_half_day if status == 'travel' else False,
                 notes=notes,
             ))
         db.session.commit()
@@ -552,3 +556,300 @@ def admin_swings():
                            patterns=patterns,
                            employees=employees,
                            swing_assignments=swing_assignments)
+
+
+# ---------------------------------------------------------------------------
+# Day details — AJAX endpoint for the enhanced modal
+# ---------------------------------------------------------------------------
+
+@scheduling_bp.route('/scheduling/day-details/<int:emp_id>/<string:date_str>')
+@login_required
+def day_details(emp_id, date_str):
+    """Return flight bookings, accommodation, and override info for one employee + date."""
+    try:
+        d = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'ok': False, 'error': 'Invalid date'}), 400
+
+    # Site users can only view their own details
+    if current_user.role == 'site':
+        emp = Employee.query.get(emp_id)
+        if not emp or current_user.employee_id != emp_id:
+            return jsonify({'ok': False, 'error': 'Access denied'}), 403
+
+    employee = Employee.query.get_or_404(emp_id)
+
+    # Flights for this date
+    flights = FlightBooking.query.filter_by(employee_id=emp_id, date=d).order_by(FlightBooking.direction).all()
+
+    # Active accommodation covering this date
+    accommodations = AccommodationBooking.query.filter(
+        AccommodationBooking.employee_id == emp_id,
+        AccommodationBooking.date_from <= d,
+        AccommodationBooking.date_to >= d
+    ).all()
+
+    # Override for this date (for half-day info)
+    override = ScheduleDayOverride.query.filter_by(employee_id=emp_id, date=d).first()
+
+    return jsonify({
+        'ok': True,
+        'employee_name': employee.name,
+        'requires_accommodation': employee.requires_accommodation if employee.requires_accommodation is not None else True,
+        'flights': [{
+            'id': f.id,
+            'direction': f.direction,
+            'airline': f.airline,
+            'flight_number': f.flight_number,
+            'departure_airport': f.departure_airport,
+            'departure_time': f.departure_time,
+            'arrival_airport': f.arrival_airport,
+            'arrival_time': f.arrival_time,
+            'booking_reference': f.booking_reference,
+            'notes': f.notes,
+        } for f in flights],
+        'accommodations': [{
+            'id': a.id,
+            'date_from': a.date_from.isoformat(),
+            'date_to': a.date_to.isoformat(),
+            'property_name': a.property_name,
+            'address': a.address,
+            'phone': a.phone,
+            'room_info': a.room_info,
+            'booking_reference': a.booking_reference,
+            'check_in_time': a.check_in_time,
+            'check_out_time': a.check_out_time,
+            'notes': a.notes,
+        } for a in accommodations],
+        'override': {
+            'id': override.id,
+            'status': override.status,
+            'project_id': override.project_id,
+            'is_half_day': override.is_half_day if override.is_half_day is not None else False,
+            'notes': override.notes,
+        } if override else None,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Flight booking CRUD
+# ---------------------------------------------------------------------------
+
+@scheduling_bp.route('/scheduling/flight/add', methods=['POST'])
+@require_role('admin', 'supervisor')
+def flight_add():
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    employee_id = request.form.get('employee_id', type=int)
+    date_str = request.form.get('date', '').strip()
+
+    try:
+        flight_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Invalid date'}), 400
+        flash('Invalid date.', 'danger')
+        return redirect(url_for('scheduling.scheduling_overview'))
+
+    fb = FlightBooking(
+        employee_id=employee_id,
+        date=flight_date,
+        direction=request.form.get('direction', 'outbound').strip(),
+        airline=request.form.get('airline', '').strip() or None,
+        flight_number=request.form.get('flight_number', '').strip() or None,
+        departure_airport=request.form.get('departure_airport', '').strip() or None,
+        departure_time=request.form.get('departure_time', '').strip() or None,
+        arrival_airport=request.form.get('arrival_airport', '').strip() or None,
+        arrival_time=request.form.get('arrival_time', '').strip() or None,
+        booking_reference=request.form.get('booking_reference', '').strip() or None,
+        notes=request.form.get('flight_notes', '').strip() or None,
+        created_by_id=current_user.id,
+    )
+    db.session.add(fb)
+    db.session.commit()
+
+    # Send push notification to the employee
+    _notify_travel_change(employee_id, flight_date, 'flight', 'added')
+
+    if is_ajax:
+        return jsonify({'ok': True, 'flight_id': fb.id})
+    flash('Flight booking added.', 'success')
+    return redirect(url_for('scheduling.scheduling_overview'))
+
+
+@scheduling_bp.route('/scheduling/flight/<int:flight_id>/edit', methods=['POST'])
+@require_role('admin', 'supervisor')
+def flight_edit(flight_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    fb = FlightBooking.query.get_or_404(flight_id)
+
+    fb.direction = request.form.get('direction', fb.direction).strip()
+    fb.airline = request.form.get('airline', '').strip() or None
+    fb.flight_number = request.form.get('flight_number', '').strip() or None
+    fb.departure_airport = request.form.get('departure_airport', '').strip() or None
+    fb.departure_time = request.form.get('departure_time', '').strip() or None
+    fb.arrival_airport = request.form.get('arrival_airport', '').strip() or None
+    fb.arrival_time = request.form.get('arrival_time', '').strip() or None
+    fb.booking_reference = request.form.get('booking_reference', '').strip() or None
+    fb.notes = request.form.get('flight_notes', '').strip() or None
+    db.session.commit()
+
+    _notify_travel_change(fb.employee_id, fb.date, 'flight', 'updated')
+
+    if is_ajax:
+        return jsonify({'ok': True})
+    flash('Flight booking updated.', 'success')
+    return redirect(url_for('scheduling.scheduling_overview'))
+
+
+@scheduling_bp.route('/scheduling/flight/<int:flight_id>/delete', methods=['POST'])
+@require_role('admin', 'supervisor')
+def flight_delete(flight_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    fb = FlightBooking.query.get_or_404(flight_id)
+    emp_id, flight_date = fb.employee_id, fb.date
+    db.session.delete(fb)
+    db.session.commit()
+
+    _notify_travel_change(emp_id, flight_date, 'flight', 'removed')
+
+    if is_ajax:
+        return jsonify({'ok': True})
+    flash('Flight booking deleted.', 'success')
+    return redirect(url_for('scheduling.scheduling_overview'))
+
+
+# ---------------------------------------------------------------------------
+# Accommodation booking CRUD
+# ---------------------------------------------------------------------------
+
+@scheduling_bp.route('/scheduling/accommodation/add', methods=['POST'])
+@require_role('admin', 'supervisor')
+def accommodation_add():
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    employee_id = request.form.get('employee_id', type=int)
+    date_from_str = request.form.get('accom_date_from', '').strip()
+    date_to_str = request.form.get('accom_date_to', '').strip()
+
+    try:
+        date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Invalid dates'}), 400
+        flash('Invalid dates.', 'danger')
+        return redirect(url_for('scheduling.scheduling_overview'))
+
+    ab = AccommodationBooking(
+        employee_id=employee_id,
+        date_from=date_from,
+        date_to=date_to,
+        property_name=request.form.get('property_name', '').strip() or None,
+        address=request.form.get('accom_address', '').strip() or None,
+        phone=request.form.get('accom_phone', '').strip() or None,
+        room_info=request.form.get('room_info', '').strip() or None,
+        booking_reference=request.form.get('accom_booking_ref', '').strip() or None,
+        check_in_time=request.form.get('check_in_time', '').strip() or None,
+        check_out_time=request.form.get('check_out_time', '').strip() or None,
+        notes=request.form.get('accom_notes', '').strip() or None,
+        created_by_id=current_user.id,
+    )
+    db.session.add(ab)
+    db.session.commit()
+
+    _notify_travel_change(employee_id, date_from, 'accommodation', 'added')
+
+    if is_ajax:
+        return jsonify({'ok': True, 'accommodation_id': ab.id})
+    flash('Accommodation booking added.', 'success')
+    return redirect(url_for('scheduling.scheduling_overview'))
+
+
+@scheduling_bp.route('/scheduling/accommodation/<int:accom_id>/edit', methods=['POST'])
+@require_role('admin', 'supervisor')
+def accommodation_edit(accom_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    ab = AccommodationBooking.query.get_or_404(accom_id)
+
+    date_from_str = request.form.get('accom_date_from', '').strip()
+    date_to_str = request.form.get('accom_date_to', '').strip()
+    try:
+        if date_from_str:
+            ab.date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        if date_to_str:
+            ab.date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        pass
+
+    ab.property_name = request.form.get('property_name', '').strip() or None
+    ab.address = request.form.get('accom_address', '').strip() or None
+    ab.phone = request.form.get('accom_phone', '').strip() or None
+    ab.room_info = request.form.get('room_info', '').strip() or None
+    ab.booking_reference = request.form.get('accom_booking_ref', '').strip() or None
+    ab.check_in_time = request.form.get('check_in_time', '').strip() or None
+    ab.check_out_time = request.form.get('check_out_time', '').strip() or None
+    ab.notes = request.form.get('accom_notes', '').strip() or None
+    db.session.commit()
+
+    _notify_travel_change(ab.employee_id, ab.date_from, 'accommodation', 'updated')
+
+    if is_ajax:
+        return jsonify({'ok': True})
+    flash('Accommodation booking updated.', 'success')
+    return redirect(url_for('scheduling.scheduling_overview'))
+
+
+@scheduling_bp.route('/scheduling/accommodation/<int:accom_id>/delete', methods=['POST'])
+@require_role('admin', 'supervisor')
+def accommodation_delete(accom_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    ab = AccommodationBooking.query.get_or_404(accom_id)
+    emp_id, d_from = ab.employee_id, ab.date_from
+    db.session.delete(ab)
+    db.session.commit()
+
+    _notify_travel_change(emp_id, d_from, 'accommodation', 'removed')
+
+    if is_ajax:
+        return jsonify({'ok': True})
+    flash('Accommodation booking deleted.', 'success')
+    return redirect(url_for('scheduling.scheduling_overview'))
+
+
+# ---------------------------------------------------------------------------
+# Helper: send push notification when travel details change
+# ---------------------------------------------------------------------------
+
+def _notify_travel_change(employee_id, travel_date, detail_type, action):
+    """Send push notification to the affected employee when flight/accommodation changes."""
+    from utils.notifications import send_notification
+    from models import DeviceToken
+
+    employee = Employee.query.get(employee_id)
+    if not employee:
+        return
+
+    # Find the User linked to this employee
+    user = User.query.filter_by(employee_id=employee_id, active=True).first()
+    if not user:
+        return
+
+    tokens = DeviceToken.query.filter_by(user_id=user.id).all()
+    if not tokens:
+        return
+
+    date_display = travel_date.strftime('%a %d %b %Y')
+    if detail_type == 'flight':
+        title = 'Flight details updated'
+        body = f'Your flight details for {date_display} have been {action}.'
+    else:
+        title = 'Accommodation details updated'
+        body = f'Your accommodation details for {date_display} have been {action}.'
+
+    for device in tokens:
+        send_notification(
+            token=device.token,
+            title=title,
+            body=body,
+            data={'type': f'travel_{detail_type}_{action}', 'date': travel_date.isoformat(),
+                  'employee_id': str(employee_id)},
+        )

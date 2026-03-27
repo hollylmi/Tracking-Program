@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from models import (db, ProjectAssignment, EmployeeLeave, EmployeeSwing,
                     ScheduleDayOverride, Project, PublicHoliday, CFMEUDate,
-                    ProjectWorkedSunday)
+                    ProjectWorkedSunday, FlightBooking, AccommodationBooking)
 
 
 def build_day_summary(hm, date_from, date_to):
@@ -159,6 +159,22 @@ def build_schedule_grid(employees, date_list):
             ProjectWorkedSunday.date <= max_date).all():
         worked_sundays_by_project[ws.project_id].add(ws.date)
 
+    # Flight bookings by (employee_id, date)
+    flight_dates = defaultdict(set)
+    for fb in FlightBooking.query.filter(
+            FlightBooking.employee_id.in_(emp_ids),
+            FlightBooking.date >= min_date,
+            FlightBooking.date <= max_date).all():
+        flight_dates[fb.employee_id].add(fb.date)
+
+    # Accommodation bookings by employee — list of (date_from, date_to, property_name)
+    accom_by_emp = defaultdict(list)
+    for ab in AccommodationBooking.query.filter(
+            AccommodationBooking.employee_id.in_(emp_ids),
+            AccommodationBooking.date_from <= max_date,
+            AccommodationBooking.date_to >= min_date).all():
+        accom_by_emp[ab.employee_id].append(ab)
+
     grid = {}
     for emp in employees:
         grid[emp.id] = {}
@@ -177,6 +193,7 @@ def build_schedule_grid(employees, date_list):
                     'personal': 'Personal', 'r_and_r': 'R&R', 'travel': 'Travel',
                     'rdo': 'RDO', 'other': 'Leave',
                 }
+                is_half = bool(override.is_half_day) if override.is_half_day is not None else False
                 if override.status == 'project' and override.project:
                     grid[emp.id][date_str] = {
                         'status': 'assigned',
@@ -185,6 +202,18 @@ def build_schedule_grid(employees, date_list):
                         'override_id': override.id,
                         'override_status': override.status,
                         'override_project_id': override.project_id or '',
+                    }
+                elif override.status == 'travel' and is_half and override.project:
+                    # Half-day travel + half-day on site
+                    grid[emp.id][date_str] = {
+                        'status': 'travel_half',
+                        'label': override.project.name[:8],
+                        'project_name': override.project.name,
+                        'override_id': override.id,
+                        'override_status': override.status,
+                        'override_project_id': override.project_id or '',
+                        'is_half_day': True,
+                        'project_id': override.project_id,
                     }
                 else:
                     css = override.status if override.status in (
@@ -289,5 +318,19 @@ def build_schedule_grid(employees, date_list):
                     'label': 'Available',
                     'project_name': ''
                 }
+
+    # Post-process: enrich cells with flight and accommodation indicators
+    for emp in employees:
+        emp_flights = flight_dates.get(emp.id, set())
+        emp_accoms = accom_by_emp.get(emp.id, [])
+        for d in date_list:
+            date_str = d.isoformat()
+            cell = grid.get(emp.id, {}).get(date_str)
+            if not cell:
+                continue
+            cell['has_flight'] = d in emp_flights
+            accom = next((a for a in emp_accoms if a.date_from <= d <= a.date_to), None)
+            cell['has_accommodation'] = accom is not None
+            cell['accommodation_name'] = accom.property_name if accom else ''
 
     return grid

@@ -116,6 +116,7 @@ class Employee(db.Model):
     role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=True)  # legacy primary role
     delay_rate = db.Column(db.Float)              # overridable; defaults to max of assigned roles
     active = db.Column(db.Boolean, default=True)
+    requires_accommodation = db.Column(db.Boolean, default=True)  # False for locals who don't need accommodation
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     roles = db.relationship('Role', secondary='employee_roles', lazy='subquery',
@@ -697,6 +698,7 @@ class ScheduleDayOverride(db.Model):
     # status: available / project / annual / sick / personal / r_and_r / travel / rdo / other
     status = db.Column(db.String(20), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    is_half_day = db.Column(db.Boolean, default=False)  # True = half travel + half on site (project_id = site project)
     notes = db.Column(db.String(300))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -913,3 +915,57 @@ class DeviceToken(db.Model):
     __table_args__ = (
         db.UniqueConstraint('user_id', 'token', name='uq_user_token'),
     )
+
+
+# ---------------------------------------------------------------------------
+# Travel & accommodation models
+# ---------------------------------------------------------------------------
+
+class FlightBooking(db.Model):
+    """Individual flight leg for an employee on a travel day."""
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    direction = db.Column(db.String(20), nullable=False)  # 'inbound' or 'outbound'
+    airline = db.Column(db.String(200))
+    flight_number = db.Column(db.String(50))
+    departure_airport = db.Column(db.String(100))
+    departure_time = db.Column(db.String(10))       # HH:MM
+    arrival_airport = db.Column(db.String(100))
+    arrival_time = db.Column(db.String(10))          # HH:MM
+    booking_reference = db.Column(db.String(100))
+    notes = db.Column(db.String(500))
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    employee = db.relationship('Employee', backref='flight_bookings')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+    def __repr__(self):
+        return f'<FlightBooking {self.employee_id} {self.date} {self.flight_number}>'
+
+
+class AccommodationBooking(db.Model):
+    """Standalone accommodation booking for an employee (date range, not tied to a project)."""
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    date_from = db.Column(db.Date, nullable=False)
+    date_to = db.Column(db.Date, nullable=False)
+    property_name = db.Column(db.String(300))
+    address = db.Column(db.String(500))
+    phone = db.Column(db.String(50))
+    room_info = db.Column(db.String(200))            # e.g. "Room 204", "Unit 3B"
+    booking_reference = db.Column(db.String(100))
+    check_in_time = db.Column(db.String(10))         # HH:MM
+    check_out_time = db.Column(db.String(10))        # HH:MM
+    notes = db.Column(db.String(500))
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    employee = db.relationship('Employee', backref='accommodation_bookings')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+    def __repr__(self):
+        return f'<AccommodationBooking {self.employee_id} {self.date_from}-{self.date_to}>'

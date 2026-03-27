@@ -746,6 +746,7 @@ def admin_employees():
             delay_rate_raw = request.form.get('delay_rate', '').strip()
             if name:
                 emp = Employee(name=name)
+                emp.requires_accommodation = 'requires_accommodation' in request.form
                 db.session.add(emp)
                 db.session.flush()  # get emp.id before setting m2m
                 if role_ids:
@@ -767,6 +768,7 @@ def admin_employees():
         elif action == 'edit':
             emp = Employee.query.get_or_404(int(request.form.get('id')))
             emp.name = request.form.get('name', '').strip()
+            emp.requires_accommodation = 'requires_accommodation' in request.form
             role_ids = request.form.getlist('role_ids')
             delay_rate_raw = request.form.get('delay_rate', '').strip()
             if role_ids:
