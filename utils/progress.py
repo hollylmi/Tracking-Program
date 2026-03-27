@@ -373,7 +373,7 @@ def compute_material_productivity(project_id):
             'material': mat,
             'planned_sqm': round(planned_sqm, 0),
             'actual_sqm': round(actual_sqm, 0),
-            'planned_days': planned_days,
+            'planned_days': len(plan['day_numbers']),
             'actual_days': len(act['dates']),
             'actual_hours': round(act['hours'], 1),
             'actual_person_hours': round(actual_person_hours, 1),
