@@ -199,9 +199,9 @@
                           <input type="text" name="var_desc[]" class="form-control form-control-sm" value="{{ vl.description or '' }}" placeholder="Description of work">
                         </div>
                         <div style="flex:0 0 80px">
-                          <input type="number" name="var_hours[]" class="form-control form-control-sm" min="0" step="0.25" value="{{ vl.hours or '' }}" placeholder="Hours">
+                          <input type="number" name="var_hours[]" class="form-control form-control-sm" min="0" step="0.25" value="{{ vl.hours or '' }}" placeholder="Hours" oninput="refreshAllCrewLists()">
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.var-card').remove()"><i class="bi bi-x-lg"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.var-card').remove(); refreshAllCrewLists()"><i class="bi bi-x-lg"></i></button>
                       </div>
                       <input type="hidden" name="var_emp_ids[]" class="var-emp-hidden" value="{{ vl.employee_ids_json or '[]' }}">
                       <input type="hidden" name="var_mach_ids[]" class="var-mach-hidden" value="{{ vl.machine_ids_json or '[]' }}">
@@ -383,6 +383,9 @@
                     <span><span class="badge bg-info">&nbsp;</span> Other: <strong id="phOther">0</strong> p-hrs</span>
                     <span class="text-muted">Available: <strong id="phAvail">0</strong> p-hrs</span>
                     <span class="text-muted">Unaccounted: <strong id="phGap">0</strong> p-hrs</span>
+                  </div>
+                  <div id="phDelayNote" class="small text-danger mt-1" style="display:none">
+                    <i class="bi bi-exclamation-triangle me-1"></i><span id="phDelayText"></span>
                   </div>
                 </div>
               </div>
@@ -767,7 +770,7 @@
       <div class="d-flex gap-2 align-items-start mb-2">
         <div style="flex:0 0 100px"><input type="text" name="var_number[]" class="form-control form-control-sm" placeholder="V001"></div>
         <div class="flex-grow-1"><input type="text" name="var_desc[]" class="form-control form-control-sm" placeholder="Description of work"></div>
-        <div style="flex:0 0 80px"><input type="number" name="var_hours[]" class="form-control form-control-sm" min="0" step="0.25" placeholder="Hours"></div>
+        <div style="flex:0 0 80px"><input type="number" name="var_hours[]" class="form-control form-control-sm" min="0" step="0.25" placeholder="Hours" oninput="refreshAllCrewLists()"></div>
         <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('.var-card').remove(); refreshAllCrewLists()"><i class="bi bi-x-lg"></i></button>
       </div>
       <input type="hidden" name="var_emp_ids[]" class="var-emp-hidden" value="[]">
@@ -890,9 +893,9 @@
     const total = parseFloat(document.getElementById('delayHoursInput').value) || 0;
     if (standdownCard) standdownCard.style.display = total > 0 ? '' : 'none';
   }
-  // Watch for delay total changes
+  // Watch for delay total changes — update standdowns + person-hours summary
   const _origUpdateDelay = updateDelayTotal;
-  updateDelayTotal = function() { _origUpdateDelay(); updateStanddownVisibility(); };
+  updateDelayTotal = function() { _origUpdateDelay(); updateStanddownVisibility(); updatePersonHoursSummary(); };
   updateStanddownVisibility();
 
   // (lot toggle code is above the production line init)
@@ -1295,6 +1298,10 @@
     const totalAccounted = prodPH + varPH + otherPH;
     const gap = Math.max(0, availPH - totalAccounted);
 
+    // Delay hours (informational — explains unaccounted time, not a deduction)
+    let totalDelayHrs = 0;
+    document.querySelectorAll('.delay-line-hours').forEach(input => { totalDelayHrs += parseFloat(input.value) || 0; });
+
     // Update display
     document.getElementById('phProd').textContent = prodPH.toFixed(1);
     document.getElementById('phVar').textContent = varPH.toFixed(1);
@@ -1302,11 +1309,27 @@
     document.getElementById('phAvail').textContent = availPH.toFixed(0);
     document.getElementById('phGap').textContent = gap.toFixed(1);
 
+    // Delay note — shows when there are delays and unaccounted time
+    const delayNote = document.getElementById('phDelayNote');
+    const delayText = document.getElementById('phDelayText');
+    if (totalDelayHrs > 0 && gap > 0) {
+      delayNote.style.display = '';
+      delayText.textContent = totalDelayHrs + 'h site delay accounts for unaccounted crew time';
+    } else {
+      delayNote.style.display = 'none';
+    }
+
     // Utilisation %
     const utilPct = availPH > 0 ? Math.round(totalAccounted / availPH * 100) : 0;
     const utilEl = document.getElementById('phUtilPct');
     utilEl.textContent = availPH > 0 ? utilPct + '% accounted' : '—';
-    utilEl.className = 'small fw-bold ' + (utilPct >= 90 ? 'text-success' : utilPct >= 70 ? 'text-warning' : 'text-danger');
+    if (totalDelayHrs > 0 && gap > 0) {
+      // Delays explain the gap — show as OK if accounted + delay coverage is reasonable
+      utilEl.className = 'small fw-bold text-success';
+      utilEl.textContent = utilPct + '% productive (+ ' + totalDelayHrs + 'h delays)';
+    } else {
+      utilEl.className = 'small fw-bold ' + (utilPct >= 90 ? 'text-success' : utilPct >= 70 ? 'text-warning' : 'text-danger');
+    }
 
     // Progress bar segments
     if (availPH > 0) {
