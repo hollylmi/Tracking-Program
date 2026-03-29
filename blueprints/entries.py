@@ -101,24 +101,29 @@ def new_entry():
         machines_stood_down = bool(request.form.get('machines_stood_down'))
 
         # Parse production lines
+        line_activities = request.form.getlist('line_activity[]')
         line_lots = request.form.getlist('line_lot[]')
         line_materials = request.form.getlist('line_material[]')
         line_hours = request.form.getlist('line_hours[]')
         line_sqms = request.form.getlist('line_sqm[]')
+        line_weld_ms = request.form.getlist('line_weld_m[]')
         line_emp_ids_list = request.form.getlist('line_emp_ids[]')
         prod_lines = []
         total_sqm = 0
         total_hours = 0
         first_lot = None
         first_material = None
-        for i in range(len(line_lots)):
+        for i in range(len(line_materials)):
+            act = (line_activities[i].strip() if i < len(line_activities) else 'deploy') or 'deploy'
             lot = (line_lots[i].strip() if i < len(line_lots) else '') or None
             mat = (line_materials[i].strip() if i < len(line_materials) else '') or None
             hrs = float(line_hours[i] or 0) if i < len(line_hours) else 0
             sqm = float(line_sqms[i] or 0) if i < len(line_sqms) else 0
+            weld_m = float(line_weld_ms[i] or 0) if i < len(line_weld_ms) else 0
             lemp = line_emp_ids_list[i] if i < len(line_emp_ids_list) else '[]'
-            if lot or mat or sqm or hrs:
-                prod_lines.append({'lot': lot, 'material': mat, 'hours': hrs, 'sqm': sqm, 'emp_ids': lemp})
+            if lot or mat or sqm or hrs or weld_m:
+                prod_lines.append({'activity': act, 'lot': lot, 'material': mat,
+                                   'hours': hrs, 'sqm': sqm, 'weld_m': weld_m, 'emp_ids': lemp})
                 total_sqm += sqm
                 total_hours += hrs
                 if first_lot is None and lot:
@@ -158,8 +163,9 @@ def new_entry():
         for pl in prod_lines:
             db.session.add(EntryProductionLine(
                 entry_id=entry.id, lot_number=pl['lot'],
-                material=pl['material'], install_hours=pl['hours'],
-                install_sqm=pl['sqm'], employee_ids_json=pl['emp_ids']))
+                material=pl['material'], activity_type=pl['activity'],
+                install_hours=pl['hours'], install_sqm=pl['sqm'],
+                weld_metres=pl['weld_m'], employee_ids_json=pl['emp_ids']))
 
         # Other activity lines
         other_descs = request.form.getlist('other_desc[]')
@@ -290,10 +296,12 @@ def edit_entry(entry_id):
         entry.num_people = int(num_people) if num_people else None
 
         # Parse production lines
+        line_activities = request.form.getlist('line_activity[]')
         line_lots = request.form.getlist('line_lot[]')
         line_materials = request.form.getlist('line_material[]')
         line_hours = request.form.getlist('line_hours[]')
         line_sqms = request.form.getlist('line_sqm[]')
+        line_weld_ms = request.form.getlist('line_weld_m[]')
         line_emp_ids_list = request.form.getlist('line_emp_ids[]')
 
         # Clear old production lines and rebuild (use ORM to avoid session conflicts)
@@ -303,16 +311,19 @@ def edit_entry(entry_id):
         total_hours = 0
         first_lot = None
         first_material = None
-        for i in range(len(line_lots)):
+        for i in range(len(line_materials)):
+            act = (line_activities[i].strip() if i < len(line_activities) else 'deploy') or 'deploy'
             lot = (line_lots[i].strip() if i < len(line_lots) else '') or None
             mat = (line_materials[i].strip() if i < len(line_materials) else '') or None
             hrs = float(line_hours[i] or 0) if i < len(line_hours) else 0
             sqm = float(line_sqms[i] or 0) if i < len(line_sqms) else 0
+            weld_m = float(line_weld_ms[i] or 0) if i < len(line_weld_ms) else 0
             lemp = line_emp_ids_list[i] if i < len(line_emp_ids_list) else '[]'
-            if lot or mat or sqm or hrs:
+            if lot or mat or sqm or hrs or weld_m:
                 db.session.add(EntryProductionLine(
                     entry_id=entry.id, lot_number=lot, material=mat,
-                    install_hours=hrs, install_sqm=sqm, employee_ids_json=lemp))
+                    activity_type=act, install_hours=hrs, install_sqm=sqm,
+                    weld_metres=weld_m, employee_ids_json=lemp))
                 total_sqm += sqm
                 total_hours += hrs
                 if first_lot is None and lot:

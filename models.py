@@ -339,8 +339,10 @@ class EntryProductionLine(db.Model):
     entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
     lot_number = db.Column(db.String(100))
     material = db.Column(db.String(200))
+    activity_type = db.Column(db.String(50), default='deploy')  # deploy / weld
     install_hours = db.Column(db.Float, default=0)
     install_sqm = db.Column(db.Float, default=0)
+    weld_metres = db.Column(db.Float, default=0)               # metres of seam welded
     employee_ids_json = db.Column(db.Text)     # JSON array of employee IDs assigned to this line
 
     @property
