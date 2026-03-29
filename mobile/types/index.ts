@@ -15,6 +15,7 @@ export interface ProductivityRow {
   planned_rate: number | null
   actual_rate: number | null
   pct_of_target: number | null
+  actual_person_hours: number | null
 }
 
 export interface MaterialProductivity extends ProductivityRow {
@@ -52,11 +53,30 @@ export interface ProjectCosts {
   target_finish: string | null // 'DD/MM/YYYY'
 }
 
+export interface DelayEvent {
+  date: string
+  day: string
+  reason: string
+  hours: number
+  description: string | null
+  type: string | null
+}
+
 export interface ProjectProgress {
   overall_pct: number
+  should_be_pct: number | null
   total_planned: number
   total_actual: number
   total_remaining: number
+  total_delay_hours: number | null
+  total_variation_hours: number | null
+  delay_impact_days: number | null
+  total_available_hours: number | null
+  total_lost_hours: number | null
+  total_install_hours: number | null
+  non_deploy_hours: number | null
+  hours_per_day: number | null
+  delay_events: DelayEvent[]
   tasks: ProgressTask[]
 }
 
@@ -95,7 +115,9 @@ export interface Entry {
   employees?: { id: number; name: string; role: string }[]
   machines?: { id: number; name: string; type: string }[]
   standdown_machines?: { id: number; machine_name: string }[]
-  production_lines?: { lot_number: string | null; material: string | null; install_hours: number; install_sqm: number }[]
+  production_lines?: { lot_number: string | null; material: string | null; install_hours: number; install_sqm: number; activity_type?: 'deploy' | 'weld'; weld_metres?: number; employee_ids_json?: string }[]
+  delay_lines?: { reason: string; hours: number; description?: string }[]
+  other_activity_lines?: { description: string; hours: number; employee_ids_json?: string }[]
 }
 
 export interface Photo {
@@ -186,8 +208,23 @@ export interface LocalEntry {
   employee_ids?: number[]
   machine_ids?: number[]
   standdown_machine_ids?: number[]
+  production_lines_json?: string
+  delay_lines_json?: string
+  other_activity_lines_json?: string
   synced?: number
   created_at?: string
+}
+
+export interface DelayLine {
+  reason: string
+  hours: number
+  description?: string
+}
+
+export interface OtherActivityLine {
+  description: string
+  hours: number
+  employee_ids_json?: string
 }
 
 export interface LocalBreakdown {

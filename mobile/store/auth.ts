@@ -28,12 +28,25 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ accessToken, refreshToken, user, isAuthenticated: true })
   },
   logout: async () => {
-    const { unregisterPushToken } = await import('../lib/notifications')
-    await unregisterPushToken()
+    // Reset the API interceptor refresh state FIRST to prevent deadlocks
+    // where unregisterPushToken triggers a 401 -> refresh -> logout loop
+    const { resetRefreshState } = await import('../lib/api')
+    resetRefreshState()
+
+    // Clear tokens from store immediately so no new API calls attach them
+    set({ accessToken: null, refreshToken: null, user: null, isAuthenticated: false })
     await SecureStore.deleteItemAsync('access_token')
     await SecureStore.deleteItemAsync('refresh_token')
     await SecureStore.deleteItemAsync('user')
-    set({ accessToken: null, refreshToken: null, user: null, isAuthenticated: false })
+
+    // Best-effort push token cleanup — token is already cleared so this
+    // will fail with 401 but that's fine since we skip refresh for /device-token
+    try {
+      const { unregisterPushToken } = await import('../lib/notifications')
+      await unregisterPushToken()
+    } catch {
+      // Ignore — tokens already cleared from secure store
+    }
   },
   setLoading: (loading) => set({ isLoading: loading }),
   updateUser: (user) => {

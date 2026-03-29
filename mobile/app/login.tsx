@@ -141,35 +141,54 @@ export default function LoginScreen() {
     }
     setError(null)
     setLoading(true)
+
+    // Clear any stale refresh state from previous session
+    const { resetRefreshState } = await import('../lib/api')
+    resetRefreshState()
+
     try {
+      // Step 1: Authenticate
       const { data: tokenData } = await api.auth.login(username.trim(), password)
       await login(tokenData.access_token, tokenData.refresh_token, {
         ...tokenData.user,
         accessible_projects: [],
       })
-      const { data: fullUser } = await api.auth.me()
-      await login(tokenData.access_token, tokenData.refresh_token, fullUser)
 
-      if (fullUser.accessible_projects.length > 0) {
-        const p = fullUser.accessible_projects[0]
-        setActiveProject({
-          id: p.id,
-          name: p.name,
-          start_date: null,
-          active: true,
-          quoted_days: null,
-          hours_per_day: null,
-          site_address: null,
-          site_contact: null,
-        })
+      // Step 2: Fetch full user profile (with accessible projects)
+      try {
+        const { data: fullUser } = await api.auth.me()
+        await login(tokenData.access_token, tokenData.refresh_token, fullUser)
+
+        if (fullUser.accessible_projects?.length > 0) {
+          const p = fullUser.accessible_projects[0]
+          setActiveProject({
+            id: p.id,
+            name: p.name,
+            start_date: null,
+            active: true,
+            quoted_days: null,
+            hours_per_day: null,
+            site_address: null,
+            site_contact: null,
+            track_by_lot: false,
+          })
+        }
+      } catch {
+        // /auth/me failed but login succeeded — continue with basic user info
+        console.warn('Failed to fetch full user profile, continuing with basic info')
       }
+
       router.replace('/(tabs)')
     } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status
       const message =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Invalid username or password.'
+        (status === 401 ? 'Invalid username or password.' : 'Connection error. Please check your network and try again.')
       setError(message)
-      await useAuthStore.getState().logout()
+      // Only logout if we actually had tokens set (login partially succeeded)
+      if (useAuthStore.getState().accessToken) {
+        await useAuthStore.getState().logout()
+      }
     } finally {
       setLoading(false)
     }

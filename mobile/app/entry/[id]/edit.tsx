@@ -24,7 +24,7 @@ import { useToastStore } from '../../../store/toast'
 import { useProjectStore } from '../../../store/project'
 import { api } from '../../../lib/api'
 import { cachedQuery } from '../../../lib/cachedQuery'
-import { LotMaterialProgress } from '../../../types'
+import { LotMaterialProgress, DelayLine, OtherActivityLine } from '../../../types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -438,8 +438,8 @@ export default function EntryEditScreen() {
   const [weather, setWeather] = useState('')
 
   // Step 2 — Production (multiple lines)
-  const [productionLines, setProductionLines] = useState<{ lot: string; material: string; hours: string; sqm: string }[]>(
-    [{ lot: '', material: '', hours: '', sqm: '' }]
+  const [productionLines, setProductionLines] = useState<{ lot: string; material: string; hours: string; sqm: string; activity_type: 'deploy' | 'weld'; weld_metres: string; employee_ids: number[] }[]>(
+    [{ lot: '', material: '', hours: '', sqm: '', activity_type: 'deploy', weld_metres: '', employee_ids: [] }]
   )
 
   // Step 3 — Crew
@@ -449,43 +449,82 @@ export default function EntryEditScreen() {
   const [selectedMachineIds, setSelectedMachineIds] = useState<number[]>([])
 
   // Step 5 — Delays & Notes
-  const [hasDelays, setHasDelays] = useState(false)
-  const [delayHours, setDelayHours] = useState('')
-  const [delayReason, setDelayReason] = useState('')
-  const [delayBillable, setDelayBillable] = useState(true)
-  const [delayDescription, setDelayDescription] = useState('')
+  const [delayLines, setDelayLines] = useState<{ reason: string; hours: string; description: string }[]>([])
   const [selectedStanddownIds, setSelectedStanddownIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
-  const [otherWork, setOtherWork] = useState('')
+  const [otherActivityLines, setOtherActivityLines] = useState<{ description: string; hours: string; employee_ids: number[] }[]>([])
 
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // ── Keyboard refs ─────────────────────────────────────────────────────────────
   const locationRef = useRef<TextInput>(null)
-  // installHoursRef removed — hours are per production line
-  // installSqmRef removed — sqm is per production line
-  const delayHoursRef = useRef<TextInput>(null)
-  const delayDescRef = useRef<TextInput>(null)
   const notesRef = useRef<TextInput>(null)
-  const otherWorkRef = useRef<TextInput>(null)
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function toggleId(ids: number[], tid: number): number[] {
     return ids.includes(tid) ? ids.filter((x) => x !== tid) : [...ids, tid]
   }
 
-  function updateLine(index: number, field: 'lot' | 'material' | 'hours' | 'sqm', value: string) {
+  function updateLine(index: number, field: 'lot' | 'material' | 'hours' | 'sqm' | 'activity_type' | 'weld_metres', value: string) {
     setProductionLines(prev => prev.map((line, i) => i === index ? { ...line, [field]: value } : line))
   }
 
+  function toggleLineEmployee(lineIndex: number, empId: number) {
+    setProductionLines(prev => prev.map((line, i) => {
+      if (i !== lineIndex) return line
+      const ids = line.employee_ids.includes(empId)
+        ? line.employee_ids.filter(x => x !== empId)
+        : [...line.employee_ids, empId]
+      return { ...line, employee_ids: ids }
+    }))
+  }
+
   function addLine() {
-    setProductionLines(prev => [...prev, { lot: '', material: '', hours: '', sqm: '' }])
+    setProductionLines(prev => [...prev, { lot: '', material: '', hours: '', sqm: '', activity_type: 'deploy', weld_metres: '', employee_ids: [] }])
   }
 
   function removeLine(index: number) {
     setProductionLines(prev => prev.length <= 1 ? prev : prev.filter((_, i) => i !== index))
   }
+
+  // Delay line helpers
+  function addDelayLine() {
+    setDelayLines(prev => [...prev, { reason: '', hours: '', description: '' }])
+  }
+
+  function updateDelayLine(index: number, field: 'reason' | 'hours' | 'description', value: string) {
+    setDelayLines(prev => prev.map((line, i) => i === index ? { ...line, [field]: value } : line))
+  }
+
+  function removeDelayLine(index: number) {
+    setDelayLines(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Other activity line helpers
+  function addOtherActivityLine() {
+    setOtherActivityLines(prev => [...prev, { description: '', hours: '', employee_ids: [] }])
+  }
+
+  function updateOtherActivityLine(index: number, field: 'description' | 'hours', value: string) {
+    setOtherActivityLines(prev => prev.map((line, i) => i === index ? { ...line, [field]: value } : line))
+  }
+
+  function toggleOtherActivityEmployee(lineIndex: number, empId: number) {
+    setOtherActivityLines(prev => prev.map((line, i) => {
+      if (i !== lineIndex) return line
+      const ids = line.employee_ids.includes(empId)
+        ? line.employee_ids.filter(x => x !== empId)
+        : [...line.employee_ids, empId]
+      return { ...line, employee_ids: ids }
+    }))
+  }
+
+  function removeOtherActivityLine(index: number) {
+    setOtherActivityLines(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const hasDelays = delayLines.length > 0
 
   const totalSqm = productionLines.reduce((sum, l) => sum + (parseFloat(l.sqm) || 0), 0)
   const totalHours = productionLines.reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0)
@@ -501,25 +540,39 @@ export default function EntryEditScreen() {
         lot: pl.lot_number ?? '', material: pl.material ?? '',
         hours: pl.install_hours != null ? String(pl.install_hours) : '',
         sqm: pl.install_sqm != null ? String(pl.install_sqm) : '',
+        activity_type: pl.activity_type ?? 'deploy',
+        weld_metres: pl.weld_metres != null ? String(pl.weld_metres) : '',
+        employee_ids: pl.employee_ids_json ? JSON.parse(pl.employee_ids_json) : [],
       })))
     } else if (entry.lot_number || entry.material || entry.install_sqm) {
       setProductionLines([{
         lot: entry.lot_number ?? '', material: entry.material ?? '',
         hours: entry.install_hours != null ? String(entry.install_hours) : '',
         sqm: entry.install_sqm != null ? String(entry.install_sqm) : '',
+        activity_type: 'deploy', weld_metres: '', employee_ids: [],
       }])
     }
     setSelectedEmployeeIds((entry.employees ?? []).map((e: any) => e.id))
     setSelectedMachineIds((entry.machines ?? []).map((m: any) => m.id))
     setSelectedStanddownIds((entry.standdown_machines ?? []).map((h: any) => h.id))
-    const dh = entry.delay_hours ?? 0
-    setHasDelays(dh > 0)
-    setDelayHours(dh > 0 ? String(dh) : '')
-    setDelayReason(entry.delay_reason ?? '')
-    setDelayBillable(entry.delay_billable !== false)
-    setDelayDescription(entry.delay_description ?? '')
+    // Load delay lines
+    if ((entry as any).delay_lines && (entry as any).delay_lines.length > 0) {
+      setDelayLines((entry as any).delay_lines.map((dl: any) => ({
+        reason: dl.reason ?? '', hours: dl.hours != null ? String(dl.hours) : '', description: dl.description ?? '',
+      })))
+    } else if ((entry.delay_hours ?? 0) > 0) {
+      setDelayLines([{
+        reason: entry.delay_reason ?? '', hours: String(entry.delay_hours ?? ''), description: entry.delay_description ?? '',
+      }])
+    }
+    // Load other activity lines
+    if ((entry as any).other_activity_lines && (entry as any).other_activity_lines.length > 0) {
+      setOtherActivityLines((entry as any).other_activity_lines.map((ol: any) => ({
+        description: ol.description ?? '', hours: ol.hours != null ? String(ol.hours) : '',
+        employee_ids: ol.employee_ids_json ? JSON.parse(ol.employee_ids_json) : [],
+      })))
+    }
     setNotes(entry.notes ?? '')
-    setOtherWork(entry.other_work_description ?? '')
     setReady(true)
   }, [entry])
 
@@ -539,9 +592,11 @@ export default function EntryEditScreen() {
   // ── Validation & navigation ───────────────────────────────────────────────────
   function validateStep(): boolean {
     const errs: Record<string, string> = {}
-    if (step === 5 && hasDelays) {
-      if (!delayHours) errs.delayHours = 'Delay hours required'
-      if (!delayReason) errs.delayReason = 'Delay reason required'
+    if (step === 5) {
+      delayLines.forEach((dl, i) => {
+        if (!dl.hours) errs[`delayHours_${i}`] = 'Hours required'
+        if (!dl.reason) errs[`delayReason_${i}`] = 'Reason required'
+      })
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -569,24 +624,45 @@ export default function EntryEditScreen() {
     setSaving(true)
     try {
       const validLines = productionLines.filter(l => l.lot || l.material || l.sqm || l.hours)
+      const totalDelayHours = delayLines.reduce((sum, dl) => sum + (parseFloat(dl.hours) || 0), 0)
+
+      const apiProductionLines = validLines.map(l => ({
+        lot_number: l.lot || null,
+        material: l.material || null,
+        install_hours: parseFloat(l.hours) || 0,
+        install_sqm: l.activity_type === 'weld' ? 0 : (parseFloat(l.sqm) || 0),
+        activity_type: l.activity_type,
+        weld_metres: l.activity_type === 'weld' ? (parseFloat(l.weld_metres) || 0) : undefined,
+        employee_ids_json: l.employee_ids.length > 0 ? JSON.stringify(l.employee_ids) : undefined,
+      }))
+
+      const apiDelayLines: DelayLine[] = delayLines.map(dl => ({
+        reason: dl.reason,
+        hours: parseFloat(dl.hours) || 0,
+        description: dl.description || undefined,
+      }))
+
+      const apiOtherActivityLines: OtherActivityLine[] = otherActivityLines
+        .filter(ol => ol.description || ol.hours)
+        .map(ol => ({
+          description: ol.description,
+          hours: parseFloat(ol.hours) || 0,
+          employee_ids_json: ol.employee_ids.length > 0 ? JSON.stringify(ol.employee_ids) : undefined,
+        }))
+
       await api.entries.update(Number(id), {
         location: location || undefined,
         weather: weather || undefined,
-        delay_hours: hasDelays && delayHours ? parseFloat(delayHours) : 0,
-        delay_reason: hasDelays ? delayReason || undefined : undefined,
-        delay_billable: hasDelays ? delayBillable : undefined,
-        delay_description: hasDelays ? delayDescription || undefined : undefined,
+        delay_hours: totalDelayHours || 0,
+        delay_reason: delayLines[0]?.reason || undefined,
+        delay_description: delayLines[0]?.description || undefined,
         notes: notes || undefined,
-        other_work_description: otherWork || undefined,
         employee_ids: selectedEmployeeIds,
         machine_ids: selectedMachineIds,
         standdown_machine_ids: selectedStanddownIds.length > 0 ? selectedStanddownIds : [],
-        production_lines: validLines.map(l => ({
-          lot_number: l.lot || null,
-          material: l.material || null,
-          install_hours: parseFloat(l.hours) || 0,
-          install_sqm: parseFloat(l.sqm) || 0,
-        })),
+        production_lines: apiProductionLines,
+        delay_lines: apiDelayLines.length > 0 ? apiDelayLines : undefined,
+        other_activity_lines: apiOtherActivityLines.length > 0 ? apiOtherActivityLines : undefined,
       } as any)
       queryClient.invalidateQueries({ queryKey: ['entry', id] })
       queryClient.invalidateQueries({ queryKey: ['entries'] })
@@ -662,6 +738,28 @@ export default function EntryEditScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
+
+                  {/* Deploy / Weld toggle */}
+                  <View style={styles.activityToggle}>
+                    <Text style={sf.label}>Activity Type</Text>
+                    <View style={yn.toggle}>
+                      <TouchableOpacity
+                        style={[yn.btn, line.activity_type === 'deploy' && yn.btnActive]}
+                        onPress={() => updateLine(index, 'activity_type', 'deploy')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[yn.btnText, line.activity_type === 'deploy' && yn.btnTextActive]}>Deploy</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[yn.btn, line.activity_type === 'weld' && yn.btnActive]}
+                        onPress={() => updateLine(index, 'activity_type', 'weld')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[yn.btnText, line.activity_type === 'weld' && yn.btnTextActive]}>Weld</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
                   {(activeProject?.track_by_lot !== false) && (
                   <SelectField label="Lot" value={line.lot} options={lots}
                     onChange={(v) => updateLine(index, 'lot', v)} placeholder="Select lot..." optional />
@@ -678,9 +776,43 @@ export default function EntryEditScreen() {
                   <FieldInput label="Hours" value={line.hours}
                     onChangeText={(v) => updateLine(index, 'hours', v)} placeholder="0.0"
                     keyboardType="decimal-pad" optional returnKeyType="next" />
-                  <FieldInput label="Area Installed (m²)" value={line.sqm}
-                    onChangeText={(v) => updateLine(index, 'sqm', v)} placeholder="0.0"
-                    keyboardType="decimal-pad" optional returnKeyType="done" />
+                  {line.activity_type === 'weld' ? (
+                    <FieldInput label="Weld (m)" value={line.weld_metres}
+                      onChangeText={(v) => updateLine(index, 'weld_metres', v)} placeholder="0.0"
+                      keyboardType="decimal-pad" optional returnKeyType="done" />
+                  ) : (
+                    <FieldInput label="Area Installed (m\u00B2)" value={line.sqm}
+                      onChangeText={(v) => updateLine(index, 'sqm', v)} placeholder="0.0"
+                      keyboardType="decimal-pad" optional returnKeyType="done" />
+                  )}
+
+                  {/* Crew selector per production line */}
+                  <View style={styles.lineCrewSection}>
+                    <Text style={sf.label}>Line Crew</Text>
+                    {selectedEmployeeIds.length === 0 ? (
+                      <Text style={styles.lineCrewHint}>Select crew in Step 3 first</Text>
+                    ) : (
+                      <View style={styles.lineCrewChips}>
+                        {allEmployees
+                          .filter(e => selectedEmployeeIds.includes(e.id))
+                          .map(emp => {
+                            const selected = line.employee_ids.includes(emp.id)
+                            return (
+                              <TouchableOpacity
+                                key={emp.id}
+                                style={[styles.crewChip, selected && styles.crewChipSelected]}
+                                onPress={() => toggleLineEmployee(index, emp.id)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
+                                  {emp.name}
+                                </Text>
+                              </TouchableOpacity>
+                            )
+                          })}
+                      </View>
+                    )}
+                  </View>
                 </View>
               ))}
 
@@ -716,24 +848,40 @@ export default function EntryEditScreen() {
           {/* ── Step 5: Delays & Notes ── */}
           {step === 5 && (
             <View>
-              <YesNoToggle label="Any delays today?" value={hasDelays}
-                onChange={(v) => {
-                  setHasDelays(v)
-                  if (!v) { setDelayHours(''); setDelayReason(''); setDelayDescription('') }
-                }} />
-              {hasDelays && (
-                <View>
-                  <FieldInput ref={delayHoursRef} label="Delay Hours" value={delayHours}
-                    onChangeText={setDelayHours} placeholder="0.0" keyboardType="decimal-pad"
-                    returnKeyType="next" onSubmitEditing={() => delayDescRef.current?.focus()}
-                    error={errors.delayHours} />
-                  <SelectField label="Delay Reason" value={delayReason} options={DELAY_REASONS}
-                    onChange={setDelayReason} placeholder="Select reason..." error={errors.delayReason} />
-                  <YesNoToggle label="Charged to client?" value={delayBillable} onChange={setDelayBillable} />
-                  <FieldInput ref={delayDescRef} label="Delay Description" value={delayDescription}
-                    onChangeText={setDelayDescription} placeholder="Additional details..." multiline optional />
+              {/* ── Delay Lines ── */}
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Delays</Text>
+                {delayLines.length > 0 && (
+                  <Text style={styles.sectionSubtitle}>
+                    {delayLines.reduce((s, dl) => s + (parseFloat(dl.hours) || 0), 0)}h total
+                  </Text>
+                )}
+              </View>
+
+              {delayLines.map((dl, index) => (
+                <View key={index} style={styles.prodLine}>
+                  <View style={styles.prodLineHeader}>
+                    <Text style={styles.prodLineNum}>Delay {index + 1}</Text>
+                    <TouchableOpacity onPress={() => removeDelayLine(index)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close-circle" size={20} color={Colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                  <SelectField label="Reason" value={dl.reason} options={DELAY_REASONS}
+                    onChange={(v) => updateDelayLine(index, 'reason', v)} placeholder="Select reason..."
+                    error={errors[`delayReason_${index}`]} />
+                  <FieldInput label="Hours" value={dl.hours}
+                    onChangeText={(v) => updateDelayLine(index, 'hours', v)} placeholder="0.0"
+                    keyboardType="decimal-pad" error={errors[`delayHours_${index}`]} />
+                  <FieldInput label="Description" value={dl.description}
+                    onChangeText={(v) => updateDelayLine(index, 'description', v)}
+                    placeholder="Additional details..." multiline optional />
                 </View>
-              )}
+              ))}
+
+              <TouchableOpacity style={styles.addLineBtn} onPress={addDelayLine} activeOpacity={0.7}>
+                <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
+                <Text style={styles.addLineBtnText}>Add Delay</Text>
+              </TouchableOpacity>
 
               {hiredMachineItems.length > 0 && (
                 <View>
@@ -758,10 +906,62 @@ export default function EntryEditScreen() {
                 </View>
               )}
 
+              {/* ── Other Activities ── */}
+              <View style={[styles.sectionHeader, { marginTop: Spacing.md }]}>
+                <Text style={styles.sectionTitle}>Other Activities</Text>
+              </View>
+
+              {otherActivityLines.map((ol, index) => (
+                <View key={index} style={styles.prodLine}>
+                  <View style={styles.prodLineHeader}>
+                    <Text style={styles.prodLineNum}>Activity {index + 1}</Text>
+                    <TouchableOpacity onPress={() => removeOtherActivityLine(index)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close-circle" size={20} color={Colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                  <FieldInput label="Description" value={ol.description}
+                    onChangeText={(v) => updateOtherActivityLine(index, 'description', v)}
+                    placeholder="What was done..." multiline />
+                  <FieldInput label="Hours" value={ol.hours}
+                    onChangeText={(v) => updateOtherActivityLine(index, 'hours', v)}
+                    placeholder="0.0" keyboardType="decimal-pad" optional />
+                  {/* Crew selector for other activity line */}
+                  <View style={styles.lineCrewSection}>
+                    <Text style={sf.label}>Crew</Text>
+                    {selectedEmployeeIds.length === 0 ? (
+                      <Text style={styles.lineCrewHint}>Select crew in Step 3 first</Text>
+                    ) : (
+                      <View style={styles.lineCrewChips}>
+                        {allEmployees
+                          .filter(e => selectedEmployeeIds.includes(e.id))
+                          .map(emp => {
+                            const selected = ol.employee_ids.includes(emp.id)
+                            return (
+                              <TouchableOpacity
+                                key={emp.id}
+                                style={[styles.crewChip, selected && styles.crewChipSelected]}
+                                onPress={() => toggleOtherActivityEmployee(index, emp.id)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
+                                  {emp.name}
+                                </Text>
+                              </TouchableOpacity>
+                            )
+                          })}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              ))}
+
+              <TouchableOpacity style={styles.addLineBtn} onPress={addOtherActivityLine} activeOpacity={0.7}>
+                <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
+                <Text style={styles.addLineBtnText}>Add Other Activity</Text>
+              </TouchableOpacity>
+
               <FieldInput ref={notesRef} label="Notes" value={notes}
                 onChangeText={setNotes} placeholder="Any additional notes..." multiline minHeight={100} optional />
-              <FieldInput ref={otherWorkRef} label="Other Work Description" value={otherWork}
-                onChangeText={setOtherWork} placeholder="Other work completed..." multiline minHeight={100} optional />
             </View>
           )}
 
@@ -831,4 +1031,59 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: Colors.border, ...Shadows.sm,
   },
   navBtn: { minWidth: 130 },
+  activityToggle: {
+    marginBottom: Spacing.md,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  sectionTitle: {
+    ...Typography.h4,
+    color: Colors.textPrimary,
+  },
+  sectionSubtitle: {
+    ...Typography.bodySmall,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  lineCrewSection: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  lineCrewHint: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+    paddingVertical: 4,
+  },
+  lineCrewChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  crewChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  crewChipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  crewChipText: {
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
+  },
+  crewChipTextSelected: {
+    color: Colors.dark,
+    fontWeight: '600',
+  },
 })

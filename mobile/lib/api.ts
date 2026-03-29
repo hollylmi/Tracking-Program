@@ -25,16 +25,33 @@ apiClient.interceptors.request.use(
 let isRefreshing = false
 let refreshQueue: Array<(token: string) => void> = []
 
+// Endpoints that should never trigger a token refresh cycle
+const SKIP_REFRESH_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout', '/device-token']
+
+// Call this when explicitly logging out to prevent interceptor deadlocks
+export function resetRefreshState() {
+  isRefreshing = false
+  refreshQueue = []
+}
+
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error) => {
     const originalRequest = error.config
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Never attempt refresh for auth-related endpoints or if already retried
+    const requestPath = originalRequest?.url ?? ''
+    const skipRefresh = SKIP_REFRESH_PATHS.some((p) => requestPath.includes(p))
+
+    if (error.response?.status === 401 && !originalRequest._retry && !skipRefresh) {
       if (isRefreshing) {
         // Queue requests while a refresh is in progress
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
           refreshQueue.push((token: string) => {
+            if (!token) {
+              reject(error)
+              return
+            }
             originalRequest.headers.Authorization = `Bearer ${token}`
             resolve(apiClient(originalRequest))
           })
@@ -65,7 +82,12 @@ apiClient.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
         return apiClient(originalRequest)
       } catch {
+        // Clear refresh state before calling logout to prevent deadlocks
+        isRefreshing = false
+        const pendingQueue = [...refreshQueue]
         refreshQueue = []
+        // Reject all queued requests
+        pendingQueue.forEach((cb) => cb(''))
         await useAuthStore.getState().logout()
         return Promise.reject(error)
       } finally {

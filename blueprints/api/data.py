@@ -9,7 +9,8 @@ import uuid
 from werkzeug.utils import secure_filename
 
 from models import (
-    db, User, Project, DailyEntry, EntryProductionLine, EntryVariationLine, Employee, Machine, MachineGroup, HiredMachine, StandDown,
+    db, User, Project, DailyEntry, EntryProductionLine, EntryVariationLine, EntryDelayLine, EntryOtherActivityLine,
+    Employee, Machine, MachineGroup, HiredMachine, StandDown,
     MachineBreakdown, BreakdownPhoto, ProjectDocument, ProjectMachine, ProjectAssignment,
     PlannedData, Role, DeviceToken, EntryPhoto,
     ProjectBudgetedRole, ProjectNonWorkDate, PublicHoliday, CFMEUDate,
@@ -123,7 +124,10 @@ def _format_entry(entry, include_detail=False):
         ]
         base['production_lines'] = [
             {'lot_number': pl.lot_number, 'material': pl.material,
-             'install_hours': pl.install_hours, 'install_sqm': pl.install_sqm}
+             'install_hours': pl.install_hours, 'install_sqm': pl.install_sqm,
+             'activity_type': pl.activity_type or 'deploy',
+             'weld_metres': pl.weld_metres or 0,
+             'employee_ids_json': pl.employee_ids_json or '[]'}
             for pl in entry.production_lines
         ]
         base['delay_lines'] = [
@@ -131,9 +135,14 @@ def _format_entry(entry, include_detail=False):
             for dl in entry.delay_lines
         ]
         base['variation_lines'] = [
-            {'variation_number': vl.variation_number, 'description': vl.description, 'hours': vl.hours}
+            {'variation_number': vl.variation_number, 'description': vl.description, 'hours': vl.hours,
+             'employee_ids_json': vl.employee_ids_json or '[]', 'machine_ids_json': vl.machine_ids_json or '[]'}
             for vl in entry.variation_lines
         ]
+        base['other_activity_lines'] = [
+            {'description': ol.description, 'hours': ol.hours or 0, 'employee_ids_json': ol.employee_ids_json or '[]'}
+            for ol in entry.other_activity_lines
+        ] if hasattr(entry, 'other_activity_lines') else []
         base['own_delay_hours'] = entry.own_delay_hours
         base['own_delay_description'] = entry.own_delay_description
         sd_ids = [sd.hired_machine_id for sd in entry.stand_downs if sd.hired_machine_id]
@@ -564,8 +573,11 @@ def create_entry():
                 entry_id=entry.id,
                 lot_number=pl.get('lot_number') or None,
                 material=pl.get('material') or None,
+                activity_type=pl.get('activity_type') or 'deploy',
                 install_hours=hrs,
-                install_sqm=sqm))
+                install_sqm=sqm,
+                weld_metres=float(pl.get('weld_metres') or 0),
+                employee_ids_json=pl.get('employee_ids_json') or None))
             total_sqm += sqm
             total_hrs += hrs
         entry.install_sqm = total_sqm
@@ -575,6 +587,15 @@ def create_entry():
         if prod_lines[0].get('material'):
             entry.material = prod_lines[0]['material']
 
+    # ── Delay lines ────────────────────────────────────────────────────
+    delay_lines = data.get('delay_lines') or []
+    for dl in delay_lines:
+        db.session.add(EntryDelayLine(
+            entry_id=entry.id,
+            reason=dl.get('reason') or None,
+            hours=float(dl.get('hours') or 0),
+            description=dl.get('description') or None))
+
     # ── Variation lines ────────────────────────────────────────────────
     var_lines = data.get('variation_lines') or []
     for vl in var_lines:
@@ -582,7 +603,18 @@ def create_entry():
             entry_id=entry.id,
             variation_number=vl.get('variation_number') or None,
             description=vl.get('description') or None,
-            hours=float(vl.get('hours') or 0)))
+            hours=float(vl.get('hours') or 0),
+            employee_ids_json=vl.get('employee_ids_json') or None,
+            machine_ids_json=vl.get('machine_ids_json') or None))
+
+    # ── Other activity lines ──────────────────────────────────────────
+    other_lines = data.get('other_activity_lines') or []
+    for ol in other_lines:
+        db.session.add(EntryOtherActivityLine(
+            entry_id=entry.id,
+            description=ol.get('description') or None,
+            hours=float(ol.get('hours') or 0),
+            employee_ids_json=ol.get('employee_ids_json') or None))
 
     # ── Own delays ─────────────────────────────────────────────────────
     if 'own_delay_hours' in data:
@@ -693,7 +725,10 @@ def update_entry(entry_id):
             mat = pl.get('material') or None
             db.session.add(EntryProductionLine(
                 entry_id=entry.id, lot_number=lot, material=mat,
-                install_hours=hrs, install_sqm=sqm))
+                activity_type=pl.get('activity_type') or 'deploy',
+                install_hours=hrs, install_sqm=sqm,
+                weld_metres=float(pl.get('weld_metres') or 0),
+                employee_ids_json=pl.get('employee_ids_json') or None))
             total_sqm += sqm
             total_hrs += hrs
             if first_lot is None and lot:
@@ -705,6 +740,16 @@ def update_entry(entry_id):
         entry.lot_number = first_lot
         entry.material = first_material
 
+    # Delay lines
+    if 'delay_lines' in data:
+        EntryDelayLine.query.filter_by(entry_id=entry.id).delete()
+        for dl in (data['delay_lines'] or []):
+            db.session.add(EntryDelayLine(
+                entry_id=entry.id,
+                reason=dl.get('reason') or None,
+                hours=float(dl.get('hours') or 0),
+                description=dl.get('description') or None))
+
     # Variation lines
     if 'variation_lines' in data:
         EntryVariationLine.query.filter_by(entry_id=entry.id).delete()
@@ -713,7 +758,19 @@ def update_entry(entry_id):
                 entry_id=entry.id,
                 variation_number=vl.get('variation_number') or None,
                 description=vl.get('description') or None,
-                hours=float(vl.get('hours') or 0)))
+                hours=float(vl.get('hours') or 0),
+                employee_ids_json=vl.get('employee_ids_json') or None,
+                machine_ids_json=vl.get('machine_ids_json') or None))
+
+    # Other activity lines
+    if 'other_activity_lines' in data:
+        EntryOtherActivityLine.query.filter_by(entry_id=entry.id).delete()
+        for ol in (data['other_activity_lines'] or []):
+            db.session.add(EntryOtherActivityLine(
+                entry_id=entry.id,
+                description=ol.get('description') or None,
+                hours=float(ol.get('hours') or 0),
+                employee_ids_json=ol.get('employee_ids_json') or None))
 
     # Own delays
     if 'own_delay_hours' in data:

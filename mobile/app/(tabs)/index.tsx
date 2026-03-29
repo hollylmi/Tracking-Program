@@ -21,7 +21,7 @@ import ScreenHeader from '../../components/layout/ScreenHeader'
 import { api } from '../../lib/api'
 import { saveReferenceData, getReferenceData } from '../../lib/db'
 import { cachedQuery } from '../../lib/cachedQuery'
-import { Entry, ProgressTask, ProjectCosts, MaterialProductivity } from '../../types'
+import { Entry, ProgressTask, ProjectCosts, MaterialProductivity, ProjectProgress } from '../../types'
 import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { useProject } from '../../hooks/useProject'
@@ -658,6 +658,16 @@ function ProductivityCard({
         </View>
       </View>
 
+      {/* Person-hours if available */}
+      {overall.actual_person_hours != null && overall.actual_person_hours > 0 && (
+        <View style={stProd.personHoursRow}>
+          <Ionicons name="people-outline" size={13} color={Colors.textSecondary} />
+          <Text style={stProd.personHoursText}>
+            Total person-hours: {overall.actual_person_hours.toLocaleString()} p-hrs
+          </Text>
+        </View>
+      )}
+
       {/* Per-material breakdown */}
       <View style={st.prodHeader}>
         <Text style={[st.prodCell, { flex: 2 }]}>Material</Text>
@@ -697,6 +707,385 @@ function ProductivityCard({
     </Card>
   )
 }
+
+// ─── Hours Breakdown Bar ──────────────────────────────────────────────────────
+
+function HoursBreakdownCard({
+  progress,
+  isLoading,
+}: {
+  progress?: ProjectProgress
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <Card style={st.card}>
+        <Bone h={12} w="45%" style={{ marginBottom: Spacing.md }} />
+        <Bone h={28} style={{ marginBottom: Spacing.sm }} />
+        <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+          <Bone h={14} w="22%" />
+          <Bone h={14} w="22%" />
+          <Bone h={14} w="22%" />
+          <Bone h={14} w="22%" />
+        </View>
+      </Card>
+    )
+  }
+
+  if (!progress || progress.total_available_hours == null || progress.total_available_hours === 0) return null
+
+  const deploy = progress.total_install_hours ?? 0
+  const variation = progress.total_variation_hours ?? 0
+  const lost = progress.total_lost_hours ?? 0
+  const other = progress.non_deploy_hours ?? 0
+  const total = progress.total_available_hours
+
+  const pctDeploy = Math.round((deploy / total) * 100)
+  const pctVariation = Math.round((variation / total) * 100)
+  const pctLost = Math.round((lost / total) * 100)
+  const pctOther = Math.max(0, 100 - pctDeploy - pctVariation - pctLost)
+
+  const segments = [
+    { label: 'Deploy', hours: deploy, pct: pctDeploy, color: '#3D8B41' },
+    { label: 'Variation', hours: variation, pct: pctVariation, color: '#C96A00' },
+    { label: 'Site Delay', hours: lost, pct: pctLost, color: '#C62828' },
+    { label: 'Other', hours: other, pct: pctOther, color: '#888' },
+  ].filter(s => s.pct > 0)
+
+  return (
+    <Card style={st.card}>
+      <Text style={st.label}>HOURS BREAKDOWN</Text>
+
+      {/* Stacked bar */}
+      <View style={stHours.barContainer}>
+        {segments.map((seg) => (
+          <View
+            key={seg.label}
+            style={[stHours.barSegment, { flex: seg.pct, backgroundColor: seg.color }]}
+          />
+        ))}
+      </View>
+
+      {/* Legend */}
+      <View style={stHours.legend}>
+        {segments.map((seg) => (
+          <View key={seg.label} style={stHours.legendItem}>
+            <View style={[stHours.legendDot, { backgroundColor: seg.color }]} />
+            <Text style={stHours.legendText}>
+              {seg.label}: {seg.hours.toLocaleString()}h ({seg.pct}%)
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Total */}
+      <View style={stHours.totalRow}>
+        <Text style={stHours.totalLabel}>Total Available</Text>
+        <Text style={stHours.totalValue}>{total.toLocaleString()} hrs</Text>
+      </View>
+    </Card>
+  )
+}
+
+const stHours = StyleSheet.create({
+  barContainer: {
+    flexDirection: 'row',
+    height: 24,
+    borderRadius: BorderRadius.sm,
+    overflow: 'hidden',
+    marginBottom: Spacing.sm,
+  },
+  barSegment: {
+    height: '100%',
+  },
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  totalLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+  },
+  totalValue: {
+    ...Typography.caption,
+    color: Colors.textPrimary,
+    fontWeight: '700',
+  },
+})
+
+// ─── Progress Comparison Card ────────────────────────────────────────────────
+
+function ProgressComparisonCard({
+  progress,
+  isLoading,
+}: {
+  progress?: ProjectProgress
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <Card style={st.card}>
+        <Bone h={12} w="50%" style={{ marginBottom: Spacing.md }} />
+        <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+          <Bone h={56} />
+          <Bone h={56} />
+        </View>
+      </Card>
+    )
+  }
+
+  if (!progress || progress.should_be_pct == null) return null
+
+  const actual = Math.round(progress.overall_pct)
+  const expected = Math.round(progress.should_be_pct)
+  const diff = actual - expected
+  const isAhead = diff > 0
+  const isBehind = diff < 0
+  const diffAbs = Math.abs(diff)
+
+  return (
+    <Card style={st.card}>
+      <Text style={st.label}>ACTUAL vs EXPECTED PROGRESS</Text>
+
+      <View style={st.weekRow}>
+        <View style={st.weekCell}>
+          <Text style={st.weekNum}>{actual}%</Text>
+          <Text style={st.weekCaption}>actual</Text>
+        </View>
+        <View style={st.cellDivider} />
+        <View style={st.weekCell}>
+          <Text style={st.weekNum}>{expected}%</Text>
+          <Text style={st.weekCaption}>expected</Text>
+        </View>
+        <View style={st.cellDivider} />
+        <View style={st.weekCell}>
+          <Text style={[
+            st.weekNum,
+            isAhead ? { color: Colors.success } : isBehind ? { color: Colors.error } : {},
+          ]}>
+            {isAhead ? '+' : isBehind ? '-' : ''}{diffAbs}%
+          </Text>
+          <Text style={[
+            st.weekCaption,
+            isAhead ? { color: Colors.success } : isBehind ? { color: Colors.error } : {},
+          ]}>
+            {isAhead ? 'ahead' : isBehind ? 'behind' : 'on track'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Visual comparison bars */}
+      <View style={stComp.barsWrap}>
+        <View style={stComp.barRow}>
+          <Text style={stComp.barLabel}>Actual</Text>
+          <View style={stComp.barTrack}>
+            <View style={[stComp.barFill, { width: `${Math.min(100, actual)}%`, backgroundColor: Colors.primary }]} />
+          </View>
+        </View>
+        <View style={stComp.barRow}>
+          <Text style={stComp.barLabel}>Expected</Text>
+          <View style={stComp.barTrack}>
+            <View style={[stComp.barFill, { width: `${Math.min(100, expected)}%`, backgroundColor: Colors.textLight }]} />
+          </View>
+        </View>
+      </View>
+    </Card>
+  )
+}
+
+const stComp = StyleSheet.create({
+  barsWrap: {
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  barRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  barLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    width: 60,
+  },
+  barTrack: {
+    flex: 1,
+    height: 10,
+    backgroundColor: Colors.border,
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+})
+
+// ─── Delay Impact Card ──────────────────────────────────────────────────────
+
+function DelayImpactCard({
+  progress,
+  isLoading,
+}: {
+  progress?: ProjectProgress
+  isLoading: boolean
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (isLoading) {
+    return (
+      <Card style={st.card}>
+        <Bone h={12} w="35%" style={{ marginBottom: Spacing.md }} />
+        <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+          <Bone h={56} />
+          <Bone h={56} />
+        </View>
+      </Card>
+    )
+  }
+
+  const totalDelay = progress?.total_delay_hours ?? 0
+  const impactDays = progress?.delay_impact_days ?? 0
+  const events = progress?.delay_events ?? []
+
+  if (totalDelay === 0 && events.length === 0) return null
+
+  const visibleEvents = expanded ? events : events.slice(0, 5)
+
+  return (
+    <Card style={st.card}>
+      <Text style={st.label}>DELAY IMPACT</Text>
+
+      {/* Summary */}
+      <View style={st.weekRow}>
+        <View style={st.weekCell}>
+          <Text style={[st.weekNum, { color: Colors.error }]}>{totalDelay.toLocaleString()}</Text>
+          <Text style={st.weekCaption}>total delay hrs</Text>
+        </View>
+        <View style={st.cellDivider} />
+        <View style={st.weekCell}>
+          <Text style={[st.weekNum, { color: Colors.error }]}>{impactDays.toLocaleString()}</Text>
+          <Text style={st.weekCaption}>equiv. days</Text>
+        </View>
+      </View>
+
+      {/* Delay events list */}
+      {events.length > 0 && (
+        <View style={stDelay.eventsList}>
+          <Text style={stDelay.eventsTitle}>Delay Events</Text>
+          {visibleEvents.map((evt, i) => (
+            <View key={`${evt.date}-${i}`} style={stDelay.eventRow}>
+              <View style={stDelay.eventLeft}>
+                <Text style={stDelay.eventDate}>{formatDate(evt.date)}</Text>
+                <Text style={stDelay.eventReason} numberOfLines={2}>
+                  {evt.reason}{evt.description ? ` — ${evt.description}` : ''}
+                </Text>
+              </View>
+              <Text style={stDelay.eventHours}>{evt.hours}h</Text>
+            </View>
+          ))}
+          {events.length > 5 && (
+            <TouchableOpacity
+              onPress={() => setExpanded(!expanded)}
+              activeOpacity={0.75}
+              style={stDelay.toggleBtn}
+            >
+              <Text style={stDelay.toggleText}>
+                {expanded ? 'Show less' : `Show all ${events.length} events`}
+              </Text>
+              <Ionicons
+                name={expanded ? 'chevron-up' : 'chevron-down'}
+                size={14}
+                color={Colors.primary}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </Card>
+  )
+}
+
+const stDelay = StyleSheet.create({
+  eventsList: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  eventsTitle: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: Spacing.sm,
+  },
+  eventRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  eventLeft: {
+    flex: 1,
+    marginRight: Spacing.sm,
+  },
+  eventDate: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    marginBottom: 2,
+  },
+  eventReason: {
+    ...Typography.caption,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  eventHours: {
+    ...Typography.caption,
+    color: Colors.error,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  toggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: Spacing.sm,
+  },
+  toggleText: {
+    ...Typography.caption,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+})
 
 // ─── Sync Status Bar ─────────────────────────────────────────────────────────
 
@@ -775,6 +1164,24 @@ function SyncStatusBar({
   )
 }
 
+const stProd = StyleSheet.create({
+  personHoursRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,183,197,0.08)',
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    marginBottom: Spacing.md,
+  },
+  personHoursText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+})
+
 const stSync = StyleSheet.create({
   bar: {
     flexDirection: 'row',
@@ -833,13 +1240,29 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     if (!activeProject && user?.accessible_projects?.length) {
-      const projectId = user.accessible_projects[0].id
+      const p = user.accessible_projects[0]
+      const projectId = p.id
       api.projects.detail(projectId).then((r) => {
         try { saveReferenceData(`project_${projectId}`, r.data) } catch {}
         setActiveProject(r.data)
       }).catch(() => {
         const cached = getReferenceData(`project_${projectId}`)
-        if (cached) setActiveProject(cached as any)
+        if (cached) {
+          setActiveProject(cached as any)
+        } else {
+          // Fallback: set a minimal project so the UI is not stuck loading forever
+          setActiveProject({
+            id: projectId,
+            name: p.name,
+            start_date: null,
+            active: true,
+            quoted_days: null,
+            hours_per_day: null,
+            site_address: null,
+            site_contact: null,
+            track_by_lot: false,
+          })
+        }
       })
     }
   }, [activeProject, user])
@@ -900,9 +1323,10 @@ export default function DashboardScreen() {
   const hasMultipleProjects = (user?.accessible_projects?.length ?? 0) > 1
   const isInitialLoading = !activeProject && !!user?.accessible_projects?.length
 
-  const handleLogout = () => {
-    useAuthStore.getState().logout()
+  const handleLogout = async () => {
+    await useAuthStore.getState().logout()
     useProjectStore.getState().clearProject()
+    queryClient.clear()
     router.replace('/login')
   }
 
@@ -1034,6 +1458,24 @@ export default function DashboardScreen() {
 
             {/* Weekly summary */}
             <WeeklySummaryCard entries={weekEntries} isLoading={entriesLoading} />
+
+            {/* Hours breakdown bar */}
+            <HoursBreakdownCard
+              progress={project?.progress}
+              isLoading={isInitialLoading || projectLoading}
+            />
+
+            {/* Actual vs Expected progress */}
+            <ProgressComparisonCard
+              progress={project?.progress}
+              isLoading={isInitialLoading || projectLoading}
+            />
+
+            {/* Delay impact panel */}
+            <DelayImpactCard
+              progress={project?.progress}
+              isLoading={isInitialLoading || projectLoading}
+            />
 
             {/* Per-lot donut cards */}
             <LotProgressCards

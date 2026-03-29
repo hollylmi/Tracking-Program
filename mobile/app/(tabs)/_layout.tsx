@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { View } from 'react-native'
+import { View, StyleSheet } from 'react-native'
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors } from '../../constants/theme'
+import { Colors, Spacing } from '../../constants/theme'
 import { useAuthStore } from '../../store/auth'
 import { registerForPushNotifications } from '../../lib/notifications'
 import { OfflineBanner } from '../../components/ui/OfflineBanner'
+import ProjectSwitcher from '../../components/ui/ProjectSwitcher'
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 
@@ -34,6 +35,10 @@ export default function TabsLayout() {
   return (
     <View style={{ flex: 1 }}>
     <OfflineBanner />
+    {/* Global project switcher — visible from every tab */}
+    <View style={layoutStyles.switcherBar}>
+      <ProjectSwitcher variant="pill" />
+    </View>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -87,3 +92,14 @@ export default function TabsLayout() {
     </View>
   )
 }
+
+const layoutStyles = StyleSheet.create({
+  switcherBar: {
+    backgroundColor: Colors.dark,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,183,197,0.1)',
+  },
+})
