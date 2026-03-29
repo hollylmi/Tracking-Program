@@ -39,6 +39,7 @@ export interface Project {
   track_by_lot: boolean
   progress?: ProjectProgress
   productivity?: Productivity
+  gantt?: GanttData
 }
 
 export interface ProjectCosts {
@@ -68,6 +69,8 @@ export interface ProjectProgress {
   total_planned: number
   total_actual: number
   total_remaining: number
+  planned_crew: number | null
+  current_crew: number | null
   total_delay_hours: number | null
   total_variation_hours: number | null
   delay_impact_days: number | null
@@ -86,6 +89,20 @@ export interface ProgressTask {
   planned_sqm: number
   actual_sqm: number
   pct_complete: number
+  remaining?: number
+}
+
+export interface GanttTask {
+  label: string
+  pct_complete: number
+  variance_days: number | null
+}
+
+export interface GanttData {
+  target_finish: string | null
+  est_finish: string | null
+  variance_days: number | null
+  tasks: GanttTask[]
 }
 
 export interface Entry {

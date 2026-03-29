@@ -15,13 +15,14 @@ import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PieChart } from 'react-native-gifted-charts'
+import Svg, { Circle as SvgCircle } from 'react-native-svg'
 import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme'
 import ScreenHeader from '../../components/layout/ScreenHeader'
 import { api } from '../../lib/api'
 import { saveReferenceData, getReferenceData } from '../../lib/db'
 import { cachedQuery } from '../../lib/cachedQuery'
-import { Entry, ProgressTask, ProjectCosts, MaterialProductivity, ProjectProgress } from '../../types'
+import { Entry, ProgressTask, ProjectCosts, MaterialProductivity, ProjectProgress, GanttData, DelayEvent } from '../../types'
 import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { useProject } from '../../hooks/useProject'
@@ -850,66 +851,77 @@ function ProgressComparisonCard({
     return (
       <Card style={st.card}>
         <Bone h={12} w="50%" style={{ marginBottom: Spacing.md }} />
-        <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-          <Bone h={56} />
-          <Bone h={56} />
-        </View>
+        <Bone h={120} style={{ borderRadius: 60, alignSelf: 'center', width: 120 }} />
       </Card>
     )
   }
 
-  if (!progress || progress.should_be_pct == null) return null
+  if (!progress) return null
 
-  const actual = Math.round(progress.overall_pct)
-  const expected = Math.round(progress.should_be_pct)
+  const actual = Math.round(progress.overall_pct ?? 0)
+  const expected = Math.round(progress.should_be_pct ?? 0)
   const diff = actual - expected
   const isAhead = diff > 0
   const isBehind = diff < 0
   const diffAbs = Math.abs(diff)
 
+  // SVG donut params
+  const size = 130
+  const stroke = 10
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const actualDash = (Math.min(actual, 100) / 100) * circumference
+  const expectedDash = (Math.min(expected, 100) / 100) * circumference
+
   return (
     <Card style={st.card}>
-      <Text style={st.label}>ACTUAL vs EXPECTED PROGRESS</Text>
+      <Text style={st.label}>PROGRESS vs SCHEDULE</Text>
 
-      <View style={st.weekRow}>
-        <View style={st.weekCell}>
-          <Text style={st.weekNum}>{actual}%</Text>
-          <Text style={st.weekCaption}>actual</Text>
-        </View>
-        <View style={st.cellDivider} />
-        <View style={st.weekCell}>
-          <Text style={st.weekNum}>{expected}%</Text>
-          <Text style={st.weekCaption}>expected</Text>
-        </View>
-        <View style={st.cellDivider} />
-        <View style={st.weekCell}>
-          <Text style={[
-            st.weekNum,
-            isAhead ? { color: Colors.success } : isBehind ? { color: Colors.error } : {},
-          ]}>
-            {isAhead ? '+' : isBehind ? '-' : ''}{diffAbs}%
-          </Text>
-          <Text style={[
-            st.weekCaption,
-            isAhead ? { color: Colors.success } : isBehind ? { color: Colors.error } : {},
-          ]}>
-            {isAhead ? 'ahead' : isBehind ? 'behind' : 'on track'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Visual comparison bars */}
-      <View style={stComp.barsWrap}>
-        <View style={stComp.barRow}>
-          <Text style={stComp.barLabel}>Actual</Text>
-          <View style={stComp.barTrack}>
-            <View style={[stComp.barFill, { width: `${Math.min(100, actual)}%`, backgroundColor: Colors.primary }]} />
+      <View style={stComp.donutRow}>
+        {/* SVG Donut with both rings */}
+        <View style={{ width: size, height: size }}>
+          <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            {/* Background ring */}
+            <SvgCircle cx={size/2} cy={size/2} r={radius} fill="none" stroke={Colors.border} strokeWidth={stroke} />
+            {/* Expected ring (blue, thinner, behind) */}
+            <SvgCircle cx={size/2} cy={size/2} r={radius} fill="none" stroke={Colors.primary} strokeWidth={stroke * 0.5}
+              strokeDasharray={`${expectedDash} ${circumference}`} strokeLinecap="round" opacity={0.4}
+              transform={`rotate(-90 ${size/2} ${size/2})`} />
+            {/* Actual ring (green, on top) */}
+            <SvgCircle cx={size/2} cy={size/2} r={radius} fill="none" stroke={Colors.success} strokeWidth={stroke}
+              strokeDasharray={`${actualDash} ${circumference}`} strokeLinecap="round"
+              transform={`rotate(-90 ${size/2} ${size/2})`} />
+          </Svg>
+          {/* Center text */}
+          <View style={stComp.donutCenter}>
+            <Text style={stComp.donutPct}>{actual}%</Text>
+            <Text style={stComp.donutLabel}>actual</Text>
           </View>
         </View>
-        <View style={stComp.barRow}>
-          <Text style={stComp.barLabel}>Expected</Text>
-          <View style={stComp.barTrack}>
-            <View style={[stComp.barFill, { width: `${Math.min(100, expected)}%`, backgroundColor: Colors.textLight }]} />
+
+        {/* Legend + badge */}
+        <View style={stComp.donutLegend}>
+          <View style={stComp.legendRow}>
+            <View style={[stComp.legendDot, { backgroundColor: Colors.success }]} />
+            <Text style={stComp.legendText}>Actual progress</Text>
+            <Text style={stComp.legendValue}>{actual}%</Text>
+          </View>
+          <View style={stComp.legendRow}>
+            <View style={[stComp.legendDot, { backgroundColor: Colors.primary, opacity: 0.5 }]} />
+            <Text style={stComp.legendText}>Should be at</Text>
+            <Text style={stComp.legendValue}>{expected}%</Text>
+          </View>
+          <View style={[
+            stComp.heroBadge,
+            { backgroundColor: isAhead ? 'rgba(76,175,80,0.15)' : isBehind ? 'rgba(198,40,40,0.15)' : 'rgba(255,255,255,0.1)',
+              marginTop: Spacing.sm },
+          ]}>
+            <Text style={[
+              stComp.heroBadgeText,
+              isAhead ? { color: Colors.success } : isBehind ? { color: Colors.error } : { color: Colors.textSecondary },
+            ]}>
+              {isAhead ? '↑ ' : isBehind ? '↓ ' : ''}{diffAbs}% {isAhead ? 'ahead' : isBehind ? 'behind' : 'on track'}
+            </Text>
           </View>
         </View>
       </View>
@@ -918,32 +930,445 @@ function ProgressComparisonCard({
 }
 
 const stComp = StyleSheet.create({
-  barsWrap: {
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  barRow: {
+  heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
   },
-  barLabel: {
+  donutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
+    marginTop: Spacing.sm,
+  },
+  donutCenter: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  donutPct: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  donutLabel: {
     ...Typography.caption,
     color: Colors.textSecondary,
-    width: 60,
+    fontSize: 10,
+  },
+  donutLegend: {
+    flex: 1,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  legendText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  legendValue: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+  },
+  heroBadgeText: {
+    ...Typography.caption,
+    fontWeight: '700',
+  },
+})
+
+// ─── Crew Staffing Display ──────────────────────────────────────────────────
+
+function CrewStaffingRow({
+  progress,
+  isLoading,
+}: {
+  progress?: ProjectProgress
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <View style={stCrew.row}>
+        <Bone h={36} />
+      </View>
+    )
+  }
+
+  const planned = progress?.planned_crew
+  const current = progress?.current_crew
+  if (planned == null && current == null) return null
+
+  return (
+    <View style={stCrew.row}>
+      <View style={stCrew.item}>
+        <Ionicons name="people-outline" size={16} color={Colors.textSecondary} />
+        <Text style={stCrew.label}>Planned crew</Text>
+        <Text style={stCrew.value}>{planned ?? '--'}</Text>
+      </View>
+      <View style={stCrew.divider} />
+      <View style={stCrew.item}>
+        <Ionicons name="people" size={16} color={Colors.primary} />
+        <Text style={stCrew.label}>Current crew</Text>
+        <Text style={stCrew.value}>{current ?? '--'}</Text>
+      </View>
+    </View>
+  )
+}
+
+const stCrew = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+  },
+  item: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.sm,
+  },
+  divider: {
+    width: 1,
+    backgroundColor: Colors.border,
+    alignSelf: 'stretch',
+  },
+  label: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+  },
+  value: {
+    ...Typography.body,
+    color: Colors.textPrimary,
+    fontWeight: '700',
+    fontFamily: 'Montserrat_700Bold',
+  },
+})
+
+// ─── Progress by Lot/Material Table ─────────────────────────────────────────
+
+function LotMaterialTableCard({
+  tasks,
+  isLoading,
+}: {
+  tasks?: ProgressTask[]
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <Card style={st.card}>
+        <Bone h={12} w="55%" style={{ marginBottom: Spacing.md }} />
+        {[0, 1, 2].map((i) => (
+          <Bone key={i} h={40} style={{ marginBottom: Spacing.xs }} />
+        ))}
+      </Card>
+    )
+  }
+
+  if (!tasks || tasks.length === 0) return null
+
+  const sorted = sortTasks(tasks)
+
+  return (
+    <Card style={st.card}>
+      <Text style={st.label}>PROGRESS BY LOT & MATERIAL</Text>
+
+      {/* Header row */}
+      <View style={stLotTable.headerRow}>
+        <Text style={[stLotTable.cell, { flex: 1.5 }]}>Lot</Text>
+        <Text style={[stLotTable.cell, { flex: 1.5 }]}>Material</Text>
+        <Text style={[stLotTable.cell, stLotTable.numCell]}>Planned</Text>
+        <Text style={[stLotTable.cell, stLotTable.numCell]}>Actual</Text>
+        <Text style={[stLotTable.cell, stLotTable.numCell]}>Remain</Text>
+      </View>
+
+      {sorted.map((task) => {
+        const pct = Math.round(task.pct_complete)
+        const remaining = Math.max(0, task.planned_sqm - task.actual_sqm)
+        const complete = pct >= 100
+        const barColor = complete ? Colors.success : Colors.primary
+
+        return (
+          <View key={`${task.lot}-${task.material}`} style={stLotTable.row}>
+            <View style={stLotTable.dataRow}>
+              <Text style={[stLotTable.cellValue, { flex: 1.5 }]} numberOfLines={1}>
+                {task.lot || '--'}
+              </Text>
+              <Text style={[stLotTable.cellValue, { flex: 1.5 }]} numberOfLines={1}>
+                {task.material || '--'}
+              </Text>
+              <Text style={[stLotTable.cellValue, stLotTable.numCell]}>
+                {task.planned_sqm.toLocaleString()}
+              </Text>
+              <Text style={[stLotTable.cellValue, stLotTable.numCell]}>
+                {task.actual_sqm.toLocaleString()}
+              </Text>
+              <Text style={[stLotTable.cellValue, stLotTable.numCell]}>
+                {remaining.toLocaleString()}
+              </Text>
+            </View>
+            {/* Progress bar */}
+            <View style={stLotTable.barTrack}>
+              <View style={[stLotTable.barFill, { width: `${Math.min(100, pct)}%`, backgroundColor: barColor }]} />
+            </View>
+            <Text style={[stLotTable.pctText, complete ? { color: Colors.success } : {}]}>
+              {pct}% complete
+            </Text>
+          </View>
+        )
+      })}
+
+      <Text style={stLotTable.footnote}>All values in m²</Text>
+    </Card>
+  )
+}
+
+const stLotTable = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    paddingBottom: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    marginBottom: 2,
+  },
+  cell: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  numCell: {
+    flex: 1,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
+  row: {
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  dataRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  cellValue: {
+    ...Typography.caption,
+    color: Colors.textPrimary,
+    fontWeight: '500',
   },
   barTrack: {
-    flex: 1,
-    height: 10,
+    height: 6,
     backgroundColor: Colors.border,
-    borderRadius: 5,
+    borderRadius: 3,
     overflow: 'hidden',
+    marginBottom: 2,
   },
   barFill: {
     height: '100%',
-    borderRadius: 5,
+    borderRadius: 3,
+  },
+  pctText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontSize: 10,
+  },
+  footnote: {
+    ...Typography.caption,
+    color: Colors.textLight,
+    marginTop: Spacing.sm,
+    fontStyle: 'italic',
   },
 })
+
+// ─── Delay Summary by Reason ────────────────────────────────────────────────
+
+interface DelaySummaryRow {
+  reason: string
+  type: string
+  count: number
+  totalHours: number
+}
+
+function DelaySummaryCard({
+  progress,
+  isLoading,
+}: {
+  progress?: ProjectProgress
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <Card style={st.card}>
+        <Bone h={12} w="45%" style={{ marginBottom: Spacing.md }} />
+        {[0, 1, 2].map((i) => (
+          <Bone key={i} h={32} style={{ marginBottom: Spacing.xs }} />
+        ))}
+      </Card>
+    )
+  }
+
+  const events = progress?.delay_events ?? []
+  if (events.length === 0) return null
+
+  // Aggregate by reason
+  const grouped: Record<string, DelaySummaryRow> = {}
+  for (const evt of events) {
+    const key = evt.reason
+    if (!grouped[key]) {
+      grouped[key] = { reason: key, type: evt.type || 'delay', count: 0, totalHours: 0 }
+    }
+    grouped[key].count += 1
+    grouped[key].totalHours += evt.hours
+  }
+
+  const rows = Object.values(grouped).sort((a, b) => b.totalHours - a.totalHours)
+
+  return (
+    <Card style={st.card}>
+      <Text style={st.label}>DELAY SUMMARY BY REASON</Text>
+
+      {/* Header */}
+      <View style={stDelaySum.headerRow}>
+        <Text style={[stDelaySum.cell, { flex: 2.5 }]}>Reason</Text>
+        <Text style={[stDelaySum.cell, stDelaySum.numCell]}>Type</Text>
+        <Text style={[stDelaySum.cell, stDelaySum.numCell]}>Count</Text>
+        <Text style={[stDelaySum.cell, stDelaySum.numCell]}>Hours</Text>
+      </View>
+
+      {rows.map((row) => {
+        const isVariation = row.type === 'variation'
+        return (
+          <View key={row.reason} style={stDelaySum.row}>
+            <Text style={[stDelaySum.reasonText, { flex: 2.5 }]} numberOfLines={2}>
+              {row.reason}
+            </Text>
+            <View style={[stDelaySum.typeBadge, isVariation ? stDelaySum.typeBadgeVar : stDelaySum.typeBadgeDelay]}>
+              <Text style={[stDelaySum.typeBadgeText, isVariation ? { color: '#C96A00' } : { color: Colors.error }]}>
+                {isVariation ? 'VAR' : 'DLY'}
+              </Text>
+            </View>
+            <Text style={[stDelaySum.numValue, stDelaySum.numCell]}>{row.count}</Text>
+            <Text style={[stDelaySum.numValue, stDelaySum.numCell, { color: Colors.error, fontWeight: '700' }]}>
+              {row.totalHours}h
+            </Text>
+          </View>
+        )
+      })}
+
+      {/* Totals */}
+      <View style={stDelaySum.totalRow}>
+        <Text style={[stDelaySum.totalLabel, { flex: 2.5 }]}>Total</Text>
+        <Text style={stDelaySum.numCell} />
+        <Text style={[stDelaySum.totalValue, stDelaySum.numCell]}>
+          {rows.reduce((s, r) => s + r.count, 0)}
+        </Text>
+        <Text style={[stDelaySum.totalValue, stDelaySum.numCell, { color: Colors.error }]}>
+          {rows.reduce((s, r) => s + r.totalHours, 0)}h
+        </Text>
+      </View>
+    </Card>
+  )
+}
+
+const stDelaySum = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    marginBottom: 2,
+  },
+  cell: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  numCell: {
+    flex: 1,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  reasonText: {
+    ...Typography.caption,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  typeBadge: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  typeBadgeDelay: {},
+  typeBadgeVar: {},
+  typeBadgeText: {
+    ...Typography.caption,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  numValue: {
+    ...Typography.caption,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    marginTop: 2,
+  },
+  totalLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  totalValue: {
+    ...Typography.caption,
+    color: Colors.textPrimary,
+    fontWeight: '700',
+  },
+})
+
+// ─── Gantt/Schedule Summary Card ────────────────────────────────────────────
 
 // ─── Delay Impact Card ──────────────────────────────────────────────────────
 
@@ -1456,17 +1881,23 @@ export default function DashboardScreen() {
               isLoading={isInitialLoading || projectLoading}
             />
 
+            {/* Progress vs Schedule — donut with actual & should-be rings */}
+            <ProgressComparisonCard
+              progress={project?.progress}
+              isLoading={isInitialLoading || projectLoading}
+            />
+
+            {/* Crew staffing display */}
+            <CrewStaffingRow
+              progress={project?.progress}
+              isLoading={isInitialLoading || projectLoading}
+            />
+
             {/* Weekly summary */}
             <WeeklySummaryCard entries={weekEntries} isLoading={entriesLoading} />
 
             {/* Hours breakdown bar */}
             <HoursBreakdownCard
-              progress={project?.progress}
-              isLoading={isInitialLoading || projectLoading}
-            />
-
-            {/* Actual vs Expected progress */}
-            <ProgressComparisonCard
               progress={project?.progress}
               isLoading={isInitialLoading || projectLoading}
             />
@@ -1477,9 +1908,9 @@ export default function DashboardScreen() {
               isLoading={isInitialLoading || projectLoading}
             />
 
-            {/* Per-lot donut cards */}
-            <LotProgressCards
-              tasks={project?.progress?.tasks}
+            {/* Delay summary by reason */}
+            <DelaySummaryCard
+              progress={project?.progress}
               isLoading={isInitialLoading || projectLoading}
             />
 

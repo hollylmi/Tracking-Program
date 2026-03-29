@@ -13,7 +13,8 @@ import {
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { api } from '../lib/api'
+import { api, resetRefreshState } from '../lib/api'
+import { API_BASE_URL } from '../constants/api'
 import { useAuthStore } from '../store/auth'
 import { useProjectStore } from '../store/project'
 import { Colors, Typography, Spacing, BorderRadius } from '../constants/theme'
@@ -143,11 +144,11 @@ export default function LoginScreen() {
     setLoading(true)
 
     // Clear any stale refresh state from previous session
-    const { resetRefreshState } = await import('../lib/api')
     resetRefreshState()
 
     try {
       // Step 1: Authenticate
+      console.log('Attempting login to:', API_BASE_URL)
       const { data: tokenData } = await api.auth.login(username.trim(), password)
       await login(tokenData.access_token, tokenData.refresh_token, {
         ...tokenData.user,
@@ -180,10 +181,13 @@ export default function LoginScreen() {
 
       router.replace('/(tabs)')
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status
+      console.error('Login error:', JSON.stringify(err, Object.getOwnPropertyNames(err as object), 2))
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string } }; code?: string; message?: string }
+      const status = axiosErr?.response?.status
       const message =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        (status === 401 ? 'Invalid username or password.' : 'Connection error. Please check your network and try again.')
+        axiosErr?.response?.data?.error ||
+        (status === 401 ? 'Invalid username or password.' :
+         `Connection error (${axiosErr?.code || axiosErr?.message || 'unknown'}). API: ${API_BASE_URL}`)
       setError(message)
       // Only logout if we actually had tokens set (login partially succeeded)
       if (useAuthStore.getState().accessToken) {

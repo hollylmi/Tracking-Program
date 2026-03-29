@@ -275,9 +275,31 @@ def get_project(project_id):
     if progress:
         data['progress'] = {
             'overall_pct': progress['overall_pct'],
+            'should_be_pct': progress.get('should_be_pct'),
             'total_planned': progress['total_planned'],
             'total_actual': progress['total_actual'],
             'total_remaining': progress['total_remaining'],
+            'planned_crew': progress.get('planned_crew'),
+            'current_crew': progress.get('current_crew'),
+            'total_delay_hours': progress.get('total_delay_hours'),
+            'total_variation_hours': progress.get('total_variation_hours'),
+            'delay_impact_days': progress.get('delay_impact_days'),
+            'total_available_hours': progress.get('total_available_hours'),
+            'total_lost_hours': progress.get('total_lost_hours'),
+            'total_install_hours': progress.get('total_install_hours'),
+            'non_deploy_hours': progress.get('non_deploy_hours'),
+            'hours_per_day': progress.get('hours_per_day'),
+            'delay_events': [
+                {
+                    'date': evt['date'],
+                    'day': evt.get('day', ''),
+                    'reason': evt['reason'],
+                    'hours': evt['hours'],
+                    'description': evt.get('description', ''),
+                    'type': evt.get('type', 'delay'),
+                }
+                for evt in progress.get('delay_events', [])
+            ],
             'tasks': [
                 {
                     'lot': t['lot'],
@@ -288,6 +310,28 @@ def get_project(project_id):
                 }
                 for t in progress['tasks']
             ],
+        }
+
+    # Gantt schedule summary for mobile
+    gantt_data = compute_gantt_data(project_id)
+    if gantt_data:
+        gantt_tasks = []
+        for row in gantt_data.get('rows', []):
+            planned_count = len(row.get('planned_days', []))
+            actual_count = len(row.get('actual_days', []))
+            forecast_count = len(row.get('forecast_days', []))
+            total_bars = planned_count or 1
+            pct_c = round(actual_count / total_bars * 100) if total_bars > 0 else 0
+            gantt_tasks.append({
+                'label': row['label'],
+                'pct_complete': min(pct_c, 100),
+                'variance_days': row.get('variance_days'),
+            })
+        data['gantt'] = {
+            'target_finish': gantt_data.get('target_finish'),
+            'est_finish': gantt_data.get('est_finish'),
+            'variance_days': gantt_data.get('variance_days'),
+            'tasks': gantt_tasks,
         }
 
     productivity = compute_material_productivity(project_id)
