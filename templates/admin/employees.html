@@ -67,7 +67,7 @@
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
                   <button class="btn btn-sm btn-outline-secondary" type="button"
-                          onclick="openEditEmployee({{ emp.id }}, '{{ emp.name|replace("'", "\\'") }}', {{ emp.roles|map(attribute='id')|list|tojson }}, '{{ emp.delay_rate or '' }}', {{ 'true' if emp.requires_accommodation is none or emp.requires_accommodation else 'false' }}, '{{ emp.home_base or '' }}', '{{ emp.termination_date.isoformat() if emp.termination_date else '' }}')"
+                          onclick="openEditEmployee({{ emp.id }}, '{{ emp.name|replace("'", "\\'") }}', {{ emp.roles|map(attribute='id')|list|tojson }}, '{{ emp.delay_rate or '' }}', {{ 'true' if emp.requires_accommodation is none or emp.requires_accommodation else 'false' }}, '{{ emp.home_base or '' }}', '{{ emp.termination_date.isoformat() if emp.termination_date else '' }}', '{{ emp.home_airport or '' }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -176,14 +176,45 @@
             <label class="form-label fw-semibold">Home Base</label>
             <select name="home_base" id="empHomeBase" class="form-select">
               <option value="">— Not set —</option>
-              <option value="sydney">Sydney</option>
-              <option value="melbourne">Melbourne</option>
-              <option value="brisbane">Brisbane</option>
-              <option value="perth">Perth</option>
-              <option value="adelaide">Adelaide</option>
-              <option value="other">Other</option>
+              <optgroup label="Office (shows on schedule)">
+                <option value="office_sydney">Office — Sydney</option>
+                <option value="office_melbourne">Office — Melbourne</option>
+              </optgroup>
+              <optgroup label="Location only (for travel grouping)">
+                <option value="sydney">Sydney</option>
+                <option value="melbourne">Melbourne</option>
+                <option value="brisbane">Brisbane</option>
+                <option value="perth">Perth</option>
+                <option value="adelaide">Adelaide</option>
+                <option value="other">Other</option>
+              </optgroup>
             </select>
-            <div class="form-text">Where the employee is based — used for travel grouping.</div>
+            <div class="form-text">Office locations auto-fill the schedule on weekdays. Other locations are for travel grouping only.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Home Airport</label>
+            <select name="home_airport" id="empHomeAirport" class="form-select">
+              <option value="">— Not set —</option>
+              <option value="DRIVES">Drives (no flights)</option>
+              <optgroup label="Airports">
+                <option value="SYD">SYD — Sydney</option>
+                <option value="MEL">MEL — Melbourne</option>
+                <option value="BNE">BNE — Brisbane</option>
+                <option value="PER">PER — Perth</option>
+                <option value="ADL">ADL — Adelaide</option>
+                <option value="CBR">CBR — Canberra</option>
+                <option value="OOL">OOL — Gold Coast</option>
+                <option value="CNS">CNS — Cairns</option>
+                <option value="TSV">TSV — Townsville</option>
+                <option value="DRW">DRW — Darwin</option>
+                <option value="HBA">HBA — Hobart</option>
+                <option value="KTA">KTA — Karratha</option>
+                <option value="PHE">PHE — Port Hedland</option>
+                <option value="NTL">NTL — Newcastle</option>
+              </optgroup>
+            </select>
+            <div class="form-text">Set to "Drives" if this person never flies. Otherwise select their home airport for travel planning.</div>
           </div>
 
           <div class="mb-3">
@@ -227,7 +258,7 @@
     }
   }
 
-  function openEditEmployee(id, name, roleIds, delayRate, requiresAccom, homeBase, termDate) {
+  function openEditEmployee(id, name, roleIds, delayRate, requiresAccom, homeBase, termDate, homeAirport) {
     document.getElementById('formTitle').textContent = 'Edit Employee';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
@@ -246,6 +277,7 @@
     // Set requires accommodation checkbox
     document.getElementById('empRequiresAccom').checked = requiresAccom !== false;
     document.getElementById('empHomeBase').value = homeBase || '';
+    document.getElementById('empHomeAirport').value = homeAirport || '';
     document.getElementById('empTermDate').value = termDate || '';
 
     document.getElementById('submitBtn').textContent = 'Save Changes';

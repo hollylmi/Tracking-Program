@@ -19,6 +19,7 @@ const tabs: Array<{
   { name: 'index',     title: 'Dashboard', icon: 'home-outline',      iconActive: 'home' },
   { name: 'entries',   title: 'Entries',   icon: 'clipboard-outline',  iconActive: 'clipboard' },
   { name: 'equipment', title: 'Equipment', icon: 'construct-outline',  iconActive: 'construct' },
+  { name: 'travel',    title: 'Travel',    icon: 'airplane-outline',   iconActive: 'airplane' },
   { name: 'documents', title: 'Documents', icon: 'folder-outline',     iconActive: 'folder' },
   { name: 'roster',    title: 'Roster',    icon: 'calendar-outline',   iconActive: 'calendar' },
 ]

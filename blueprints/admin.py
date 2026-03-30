@@ -640,6 +640,7 @@ def admin_projects():
                             pass
                 p.site_address = request.form.get('site_address', '').strip() or None
                 p.site_contact = request.form.get('site_contact', '').strip() or None
+                p.city = request.form.get('city', '').strip() or None
                 db.session.add(p)
                 db.session.commit()
                 flash(f'Project "{name}" added.', 'success')
@@ -659,6 +660,7 @@ def admin_projects():
             project.quoted_days = int(quoted_days) if quoted_days else None
             project.site_address = request.form.get('site_address', '').strip() or None
             project.site_contact = request.form.get('site_contact', '').strip() or None
+            project.city = request.form.get('city', '').strip() or None
             db.session.commit()
             flash('Project updated.', 'success')
         elif action == 'toggle':
@@ -748,6 +750,7 @@ def admin_employees():
                 emp = Employee(name=name)
                 emp.requires_accommodation = 'requires_accommodation' in request.form
                 emp.home_base = request.form.get('home_base', '').strip() or None
+                emp.home_airport = request.form.get('home_airport', '').strip() or None
                 term_str = request.form.get('termination_date', '').strip()
                 emp.termination_date = datetime.strptime(term_str, '%Y-%m-%d').date() if term_str else None
                 db.session.add(emp)
@@ -773,6 +776,7 @@ def admin_employees():
             emp.name = request.form.get('name', '').strip()
             emp.requires_accommodation = 'requires_accommodation' in request.form
             emp.home_base = request.form.get('home_base', '').strip() or None
+            emp.home_airport = request.form.get('home_airport', '').strip() or None
             term_str = request.form.get('termination_date', '').strip()
             emp.termination_date = datetime.strptime(term_str, '%Y-%m-%d').date() if term_str else None
             role_ids = request.form.getlist('role_ids')

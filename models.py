@@ -66,6 +66,8 @@ class Project(db.Model):
     is_cfmeu = db.Column(db.Boolean, default=False)
     track_by_lot = db.Column(db.Boolean, default=True)  # False = track by material only (no lot field)
     site_address = db.Column(db.String(500))      # Physical site address
+    city = db.Column(db.String(100))                 # City/town for travel planning (e.g. "Brisbane", "Sydney")
+    nearest_airport = db.Column(db.String(10))       # Airport code for travel (e.g. "BNE", "SYD", "KTA")
     site_contact = db.Column(db.String(200))      # On-site contact name / phone
     site_manager_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -121,6 +123,7 @@ class Employee(db.Model):
     requires_accommodation = db.Column(db.Boolean, default=True)  # False for locals who don't need accommodation
     termination_date = db.Column(db.Date, nullable=True)  # Employee drops off schedule after this date
     home_base = db.Column(db.String(50), nullable=True)  # e.g. 'sydney', 'melbourne' — for office/travel grouping
+    home_airport = db.Column(db.String(10), nullable=True)  # e.g. 'SYD','MEL','BNE' or 'DRIVES' = no flights needed
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     roles = db.relationship('Role', secondary='employee_roles', lazy='subquery',
@@ -1276,9 +1279,9 @@ class AccommodationProperty(db.Model):
         return [b for b in self.bookings if b.date_from <= today <= b.date_to]
 
     @property
-    def occupants_between(self):
-        """Helper — use query-based filtering in routes instead."""
-        return self.bookings
+    def occupancy(self):
+        """Number of current occupants."""
+        return len(self.current_occupants)
 
     def __repr__(self):
         return f'<AccommodationProperty {self.name}>'

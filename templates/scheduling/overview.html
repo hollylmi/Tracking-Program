@@ -21,6 +21,7 @@
   .cell-travel_half { background: linear-gradient(135deg, #d2f4ea 50%, #cfe2ff 50%); color: #084298; text-align: center; font-weight: 600; }
   .cell-office     { background: #fde8d8; color: #6c3a00; text-align: center; font-weight: 600; }
   .cell-terminated { background: #e9ecef; color: #adb5bd; text-align: center; }
+  .worked-tick::after { content: '\f26e'; font-family: 'bootstrap-icons'; font-size:.4rem; vertical-align:super; margin-left:1px; color:#198754; opacity:.8; }
   .cell-weekend    { background: #f1f3f5; color: #ced4da; text-align: center; }
   .col-today       { outline: 2px solid #0d6efd; outline-offset: -2px; }
   .accom-dot::before { content: '\f422'; font-family: 'bootstrap-icons'; font-size:.45rem; vertical-align:super; margin-right:1px; opacity:.7; }
@@ -153,6 +154,7 @@
         {% set colours = project_colour_map.get(pid) if pid else None %}
         {% set has_accom = cell.get('has_accommodation', false) %}
         {% set has_flight = cell.get('has_flight', false) %}
+        {% set worked = cell.get('worked', false) %}
         {% if status == 'assigned' and colours %}
           {% set cell_style = 'background:' + colours[0] + ';color:' + colours[1] + ';' %}
         {% elif status == 'travel_half' and colours %}
@@ -183,7 +185,7 @@
             <span style="font-size:.55rem;" class="{{ 'cell-override-dot' if ov_id else '' }}"><i class="bi bi-airplane-fill"></i> {{ pname[:5] }}</span>
           {% elif status == 'assigned' %}
             {% set pname = cell.get('project_name', '') %}
-            <span style="font-size:.6rem;" class="{{ 'accom-dot' if has_accom else '' }} {{ 'cell-override-dot' if ov_id else '' }}">{{ pname[:8] if pname else '—' }}</span>
+            <span style="font-size:.6rem;" class="{{ 'accom-dot' if has_accom else '' }} {{ 'cell-override-dot' if ov_id else '' }} {{ 'worked-tick' if worked else '' }}">{{ pname[:8] if pname else '—' }}</span>
           {% elif status == 'sunday' %}—
           {% elif status == 'rdo' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.6rem;">{{ cell.get('label', 'RDO') }}</span>
           {% elif status == 'r_and_r' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">R&R</span>
@@ -224,6 +226,7 @@
   <span class="badge px-2" style="background:#fff3cd;color:#664d03;">Leave</span>
   <span class="badge px-2" style="background:#fde8d8;color:#6c3a00;">Office</span>
   <span class="badge px-2" style="background:#f1f3f5;color:#adb5bd;">Sun off</span>
+  <span class="badge px-2 worked-tick" style="background:#d1e7dd;color:#0a3622;">Entry logged</span>
 </div>
 
 <!-- Add Assignment / Leave panels -->
@@ -571,6 +574,7 @@ function updateCell(td, cell, projectColours) {
   const dotCls = ovId ? ' cell-override-dot' : '';
   const hasAccom = cell.has_accommodation || false;
   const accomCls = hasAccom ? ' accom-dot' : '';
+  const workedCls = cell.worked ? ' worked-tick' : '';
 
   ALL_CELL_CLASSES.forEach(c => td.classList.remove(c));
   const cssClass = status === 'sunday' ? 'cell-weekend' : ('cell-' + status);
@@ -593,7 +597,7 @@ function updateCell(td, cell, projectColours) {
   if (status === 'travel_half') {
     html = `<span style="font-size:.55rem;" class="${dotCls}"><i class="bi bi-airplane-fill"></i> ${(pname || '').substring(0, 5)}</span>`;
   } else if (status === 'assigned') {
-    html = `<span style="font-size:.6rem;" class="${accomCls}${dotCls}">${(pname || '\u2014').substring(0, 8)}</span>`;
+    html = `<span style="font-size:.6rem;" class="${accomCls}${dotCls}${workedCls}">${(pname || '\u2014').substring(0, 8)}</span>`;
   } else if (status === 'sunday') {
     html = '\u2014';
   } else if (status === 'rdo') {

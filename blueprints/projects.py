@@ -953,6 +953,9 @@ def project_settings_save(project_id):
     project.state = request.form.get('state', '').strip() or None
     project.is_cfmeu = bool(request.form.get('is_cfmeu'))
     project.track_by_lot = bool(request.form.get('track_by_lot'))
+    project.city = request.form.get('city', '').strip() or None
+    project.nearest_airport = request.form.get('nearest_airport', '').strip().upper() or None
+    project.site_address = request.form.get('site_address', '').strip() or project.site_address
     db.session.commit()
     flash('Project settings saved.', 'success')
     return redirect(url_for('projects.project_dashboard', project_id=project_id) + '#tab-settings')

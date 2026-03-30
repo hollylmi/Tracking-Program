@@ -19,7 +19,7 @@ from models import (
     ProjectMachine, MachineBreakdown,
     FlightBooking, AccommodationBooking, AccommodationProperty, AccommodationDocument, User,
 )
-from utils.schedule import build_schedule_grid
+from utils.schedule import build_schedule_grid, detect_travel_needs
 
 scheduling_bp = Blueprint('scheduling', __name__)
 
@@ -700,6 +700,28 @@ def travel_overview():
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
+    # Detected travel needs from schedule transitions (next 90 days)
+    date_list = [today + timedelta(days=i) for i in range(91)]
+    grid = build_schedule_grid(employees, date_list)
+    detected_travel = detect_travel_needs(employees, date_list, grid=grid, look_ahead_days=90)
+
+    # Group detected travel by (date, from_location, to_location) for carpooling
+    travel_route_groups = {}
+    for t in detected_travel:
+        key = (t['date'], t['from_location'], t['to_location'])
+        travel_route_groups.setdefault(key, []).append(t)
+
+    carpool_groups = []
+    for (tdate, from_loc, to_loc), members in sorted(travel_route_groups.items()):
+        if len(members) > 1:
+            carpool_groups.append({
+                'date': tdate,
+                'from_location': from_loc,
+                'to_location': to_loc,
+                'members': members,
+                'transport': members[0]['transport_suggestion'],
+            })
+
     return render_template(
         'scheduling/travel.html',
         today=today,
@@ -711,6 +733,8 @@ def travel_overview():
         properties=properties,
         employees=employees,
         projects=projects,
+        detected_travel=detected_travel,
+        carpool_groups=carpool_groups,
     )
 
 

@@ -1243,6 +1243,22 @@
               </select>
               <div class="form-text">Used to apply public holidays and CFMEU dates.</div>
             </div>
+            <div class="row g-2 mb-3">
+              <div class="col-4">
+                <label class="form-label fw-semibold">City / Location</label>
+                <input name="city" class="form-control" value="{{ project.city or '' }}" placeholder="e.g. Brisbane, Karratha">
+                <div class="form-text">For travel planning.</div>
+              </div>
+              <div class="col-3">
+                <label class="form-label fw-semibold">Nearest Airport</label>
+                <input name="nearest_airport" class="form-control" value="{{ project.nearest_airport or '' }}" placeholder="e.g. BNE, KTA">
+                <div class="form-text">Airport code.</div>
+              </div>
+              <div class="col-5">
+                <label class="form-label fw-semibold">Site Address</label>
+                <input name="site_address" class="form-control" value="{{ project.site_address or '' }}" placeholder="Street address">
+              </div>
+            </div>
             <div class="mb-3">
               <div class="form-check">
                 <input type="checkbox" name="is_cfmeu" id="isCfmeu" class="form-check-input"

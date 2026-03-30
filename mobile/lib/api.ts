@@ -379,6 +379,41 @@ export const api = {
       }),
   },
 
+  travel: {
+    my: () => apiClient.get<{
+      flights: Array<{
+        id: number
+        date: string
+        direction: 'inbound' | 'outbound'
+        airline: string | null
+        flight_number: string | null
+        departure_airport: string | null
+        departure_time: string | null
+        arrival_airport: string | null
+        arrival_time: string | null
+        booking_reference: string | null
+        notes: string | null
+      }>
+      accommodations: Array<{
+        id: number
+        date_from: string
+        date_to: string
+        property_name: string | null
+        address: string | null
+        phone: string | null
+        room_info: string | null
+        booking_reference: string | null
+        check_in_time: string | null
+        check_out_time: string | null
+        notes: string | null
+        housemates: Array<{ name: string; room_info: string | null; date_from: string; date_to: string }>
+        instructions: string | null
+        documents: Array<{ id: number; title: string; original_name: string; doc_type: string; url: string }>
+      }>
+      no_employee?: boolean
+    }>('/my-travel'),
+  },
+
   sync: {
     push: (data: unknown) => apiClient.post('/sync', data),
   },

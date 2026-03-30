@@ -3,7 +3,8 @@ from datetime import date, timedelta
 
 from models import (db, ProjectAssignment, EmployeeLeave, EmployeeSwing,
                     ScheduleDayOverride, Project, PublicHoliday, CFMEUDate,
-                    ProjectWorkedSunday, FlightBooking, AccommodationBooking)
+                    ProjectWorkedSunday, FlightBooking, AccommodationBooking,
+                    AccommodationProperty, DailyEntry, entry_employees, Employee)
 
 
 def build_day_summary(hm, date_from, date_to):
@@ -82,6 +83,13 @@ def build_day_summary(hm, date_from, date_to):
         'count_saturdays': count_saturdays,
     }
     return days, summary
+
+
+# Home base values that map to office scheduling (weekday default = office instead of available)
+_OFFICE_BASES = {
+    'office_sydney': 'Office (SYD)',
+    'office_melbourne': 'Office (MEL)',
+}
 
 
 def build_schedule_grid(employees, date_list):
@@ -174,6 +182,23 @@ def build_schedule_grid(employees, date_list):
             AccommodationBooking.date_from <= max_date,
             AccommodationBooking.date_to >= min_date).all():
         accom_by_emp[ab.employee_id].append(ab)
+
+    # Actual work: which employees appear in daily entries for the date range
+    # Returns set of (employee_id, entry_date, project_id)
+    actual_work = defaultdict(dict)  # actual_work[emp_id][date] = project_name
+    work_rows = (db.session.query(
+        entry_employees.c.employee_id,
+        DailyEntry.entry_date,
+        Project.name
+    ).join(DailyEntry, DailyEntry.id == entry_employees.c.entry_id)
+     .join(Project, Project.id == DailyEntry.project_id)
+     .filter(
+        entry_employees.c.employee_id.in_(emp_ids),
+        DailyEntry.entry_date >= min_date,
+        DailyEntry.entry_date <= max_date,
+    ).all())
+    for emp_id, edate, pname in work_rows:
+        actual_work[emp_id][edate] = pname
 
     grid = {}
     for emp in employees:
@@ -325,12 +350,26 @@ def build_schedule_grid(employees, date_list):
                 }
                 continue
 
-            # Default: available
+            # Default: office (if home_base is an office location) or available
             if d.weekday() == 6:
                 grid[emp.id][date_str] = {
                     'status': 'sunday',
                     'label': 'Sun',
                     'project_name': ''
+                }
+            elif d.weekday() == 5:
+                # Saturday — default off unless assigned
+                grid[emp.id][date_str] = {
+                    'status': 'available',
+                    'label': 'Available',
+                    'project_name': ''
+                }
+            elif emp.home_base in _OFFICE_BASES:
+                grid[emp.id][date_str] = {
+                    'status': 'office',
+                    'label': _OFFICE_BASES[emp.home_base],
+                    'project_name': '',
+                    'override_status': f'office_{emp.home_base}',
                 }
             else:
                 grid[emp.id][date_str] = {
@@ -352,5 +391,229 @@ def build_schedule_grid(employees, date_list):
             accom = next((a for a in emp_accoms if a.date_from <= d <= a.date_to), None)
             cell['has_accommodation'] = accom is not None
             cell['accommodation_name'] = accom.property_name if accom else ''
+            # Actual work indicator — did this employee appear in a daily entry for this date?
+            emp_actual = actual_work.get(emp.id, {})
+            cell['worked'] = d in emp_actual
+            cell['worked_project'] = emp_actual.get(d, '')
 
     return grid
+
+
+# ---------------------------------------------------------------------------
+# Home-base → city name mapping
+# ---------------------------------------------------------------------------
+_BASE_CITY = {
+    'office_sydney': 'Sydney',
+    'office_melbourne': 'Melbourne',
+    'sydney': 'Sydney',
+    'melbourne': 'Melbourne',
+    'brisbane': 'Brisbane',
+    'perth': 'Perth',
+    'adelaide': 'Adelaide',
+}
+
+
+def _location_for_cell(cell, project_cities):
+    """Determine the city/location an employee is at based on a grid cell.
+    Returns (city_name, location_type) or (None, None).
+    location_type is 'project', 'office', 'home', or None.
+    """
+    status = cell.get('status', '')
+    if status == 'assigned' or status == 'travel_half':
+        pid = cell.get('project_id')
+        city = project_cities.get(pid) if pid else None
+        return (city, 'project') if city else (None, 'project')
+    if status == 'office':
+        ov = cell.get('override_status', '')
+        if ov in _BASE_CITY:
+            return _BASE_CITY[ov], 'office'
+        return None, 'office'
+    if status in ('r_and_r', 'leave', 'annual', 'sick', 'personal', 'available', 'rdo'):
+        return None, 'home'  # at home base
+    return None, None
+
+
+def detect_travel_needs(employees, date_list, grid=None, look_ahead_days=90):
+    """Scan the schedule for location transitions that indicate travel.
+
+    Returns a list of dicts:
+      {employee, date, from_location, to_location, from_type, to_type,
+       has_flight, has_accommodation, needs_accommodation, transport_suggestion}
+
+    The logic:
+      - Walk each employee's schedule day by day
+      - When their location changes from one day to the next, that's a travel event
+      - The travel happens on the day they arrive at the new location
+      - Compare from/to cities to suggest transport mode
+    """
+    if not employees or not date_list:
+        return []
+
+    today = date.today()
+    cutoff = today + timedelta(days=look_ahead_days)
+
+    # Build grid if not provided
+    if grid is None:
+        grid = build_schedule_grid(employees, date_list)
+
+    # Build project city and airport lookup
+    project_ids = set()
+    for emp in employees:
+        for d in date_list:
+            cell = grid.get(emp.id, {}).get(d.isoformat(), {})
+            pid = cell.get('project_id')
+            if pid:
+                project_ids.add(pid)
+    project_cities = {}
+    project_airports = {}
+    if project_ids:
+        for p in Project.query.filter(Project.id.in_(project_ids)).all():
+            if p.city:
+                project_cities[p.id] = p.city
+            if p.nearest_airport:
+                project_airports[p.id] = p.nearest_airport
+
+    # Flight lookup
+    emp_ids = [e.id for e in employees]
+    min_date = min(date_list)
+    max_date = max(date_list)
+    flight_set = set()
+    for fb in FlightBooking.query.filter(
+            FlightBooking.employee_id.in_(emp_ids),
+            FlightBooking.date >= min_date,
+            FlightBooking.date <= max_date).all():
+        flight_set.add((fb.employee_id, fb.date))
+
+    # Accommodation lookup
+    accom_dates = defaultdict(set)
+    for ab in AccommodationBooking.query.filter(
+            AccommodationBooking.employee_id.in_(emp_ids),
+            AccommodationBooking.date_from <= max_date,
+            AccommodationBooking.date_to >= min_date).all():
+        d = ab.date_from
+        while d <= ab.date_to:
+            accom_dates[ab.employee_id].add(d)
+            d += timedelta(days=1)
+
+    # Short-distance cities (can drive between them)
+    _DRIVE_PAIRS = {
+        frozenset({'Sydney', 'Wollongong'}),
+        frozenset({'Sydney', 'Newcastle'}),
+        frozenset({'Melbourne', 'Geelong'}),
+        frozenset({'Brisbane', 'Gold Coast'}),
+        frozenset({'Brisbane', 'Sunshine Coast'}),
+    }
+
+    def _suggest_transport(from_city, to_city, emp):
+        """Suggest transport mode: 'drives', 'local', 'drive', 'fly', or 'unknown'."""
+        # Employee explicitly set to DRIVES — never suggest flying
+        if emp.home_airport and emp.home_airport.upper() == 'DRIVES':
+            if not from_city or not to_city:
+                return 'drives'
+            if from_city.lower() == to_city.lower():
+                return 'local'
+            return 'drives'
+        if not from_city or not to_city:
+            return 'unknown'
+        if from_city.lower() == to_city.lower():
+            return 'local'
+        pair = frozenset({from_city, to_city})
+        if pair in _DRIVE_PAIRS:
+            return 'drive'
+        return 'fly'
+
+    travel_needs = []
+    for emp in employees:
+        emp_home = _BASE_CITY.get(emp.home_base)
+        prev_location = emp_home  # assume starting at home
+        prev_type = 'home'
+        prev_project_id = None
+
+        for i, d in enumerate(date_list):
+            if d < today or d > cutoff:
+                continue
+
+            date_str = d.isoformat()
+            cell = grid.get(emp.id, {}).get(date_str, {})
+            status = cell.get('status', '')
+
+            # Skip non-working days
+            if status in ('sunday', 'terminated', ''):
+                continue
+
+            curr_location, curr_type = _location_for_cell(cell, project_cities)
+
+            # If at home (R&R, leave, available), location = home base
+            if curr_type == 'home':
+                curr_location = emp_home
+
+            curr_project_id = cell.get('project_id')
+
+            # Detect transition
+            if (curr_location and prev_location and
+                    curr_location != prev_location and
+                    curr_type != 'home'):  # don't flag going home as needing travel *to* home
+                has_flight = (emp.id, d) in flight_set
+                has_accom = d in accom_dates.get(emp.id, set())
+                needs_accom = emp.requires_accommodation if emp.requires_accommodation is not None else True
+                suggestion = _suggest_transport(prev_location, curr_location, emp)
+
+                # Determine airports for the route
+                from_airport = emp.home_airport if prev_type == 'home' and emp.home_airport != 'DRIVES' else (
+                    project_airports.get(prev_project_id) if prev_project_id else None)
+                to_airport = project_airports.get(curr_project_id) if curr_project_id else None
+
+                travel_needs.append({
+                    'employee_id': emp.id,
+                    'employee_name': emp.name,
+                    'employee_role': emp.role,
+                    'home_airport': emp.home_airport,
+                    'date': d,
+                    'from_location': prev_location,
+                    'to_location': curr_location,
+                    'from_airport': from_airport,
+                    'to_airport': to_airport,
+                    'from_type': prev_type,
+                    'to_type': curr_type,
+                    'has_flight': has_flight,
+                    'has_accommodation': has_accom,
+                    'needs_accommodation': needs_accom,
+                    'transport_suggestion': suggestion,
+                    'project_name': cell.get('project_name', ''),
+                })
+
+            # Also detect going home — flag as return travel
+            if (curr_type == 'home' and prev_type == 'project' and
+                    prev_location and emp_home and prev_location != emp_home):
+                has_flight = (emp.id, d) in flight_set
+                suggestion = _suggest_transport(prev_location, emp_home, emp)
+                from_airport = project_airports.get(prev_project_id) if prev_project_id else None
+                to_airport = emp.home_airport if emp.home_airport != 'DRIVES' else None
+
+                travel_needs.append({
+                    'employee_id': emp.id,
+                    'employee_name': emp.name,
+                    'employee_role': emp.role,
+                    'home_airport': emp.home_airport,
+                    'date': d,
+                    'from_location': prev_location,
+                    'to_location': emp_home,
+                    'from_airport': from_airport,
+                    'to_airport': to_airport,
+                    'from_type': prev_type,
+                    'to_type': 'home',
+                    'has_flight': has_flight,
+                    'has_accommodation': False,
+                    'needs_accommodation': False,
+                    'transport_suggestion': suggestion,
+                    'project_name': '',
+                })
+
+            if curr_location:
+                prev_location = curr_location
+                prev_type = curr_type
+                prev_project_id = curr_project_id
+
+    # Sort by date then employee name
+    travel_needs.sort(key=lambda t: (t['date'], t['employee_name']))
+    return travel_needs
