@@ -87,6 +87,11 @@
             <span class="badge bg-secondary">Unassigned</span>
             {% endif %}
             <span class="badge {% if machine.active %}bg-success{% else %}bg-secondary{% endif %} ms-2">{{ 'Active' if machine.active else 'Inactive' }}</span>
+            {% if current_user.role == 'admin' %}
+            <button class="btn btn-sm btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#transferMachineModal">
+              <i class="bi bi-arrow-left-right me-1"></i>Transfer
+            </button>
+            {% endif %}
           </div>
         </div>
         {% if transfers %}
@@ -296,6 +301,41 @@
   </div>
 </div>
 {% endfor %}
+{% endif %}
+
+<!-- Transfer modal (admin) -->
+{% if current_user.role == 'admin' %}
+<div class="modal fade" id="transferMachineModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('equipment.transfer_schedule') }}">
+      <input type="hidden" name="machine_id" value="{{ machine.id }}">
+      {% if assignment %}<input type="hidden" name="from_project_id" value="{{ assignment.project_id }}">{% endif %}
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Transfer {{ machine.name }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          {% if assignment %}
+          <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>Currently assigned to <strong>{{ assignment.project.name }}</strong></div>
+          {% endif %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">To Project *</label>
+            <select name="to_project_id" class="form-select" required>
+              <option value="">— Select Destination —</option>
+              {% for p in projects %}
+              {% if not assignment or p.id != assignment.project_id %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3"><label class="form-label fw-semibold">Scheduled Date *</label><input type="date" name="scheduled_date" class="form-control" required></div>
+          <div class="mb-3"><label class="form-label fw-semibold">Transport Contact</label><input type="text" name="transport_contact" class="form-control" placeholder="Name / phone"></div>
+          <div class="mb-3"><label class="form-label fw-semibold">Travel Notes</label><textarea name="travel_notes" class="form-control" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary"><i class="bi bi-arrow-left-right me-1"></i>Schedule Transfer</button></div>
+      </div>
+    </form>
+  </div>
+</div>
 {% endif %}
 
 {% endblock %}

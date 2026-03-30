@@ -625,7 +625,7 @@ def transfer_schedule():
     db.session.add(transfer)
     db.session.commit()
     flash(f'Transfer scheduled for "{machine.name}".', 'success')
-    return redirect(url_for('equipment.equipment_overview'))
+    return redirect(url_for('equipment.transfer_detail', transfer_id=transfer.id))
 
 
 @equipment_bp.route('/equipment/transfer/<int:transfer_id>/update', methods=['POST'])
@@ -1302,6 +1302,9 @@ def operations_dashboard():
     all_proj = Project.query.order_by(Project.id).all()
     project_colour_map = {p.id: PALETTE[i % len(PALETTE)] for i, p in enumerate(all_proj)}
 
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    all_machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
+
     return render_template('equipment/operations.html',
                            today=today_date,
                            inspection_due=inspection_due,
@@ -1313,7 +1316,9 @@ def operations_dashboard():
                            open_breakdowns=open_breakdowns,
                            pending_transfers=pending_transfers,
                            recent_completions=recent_completions,
-                           project_colour_map=project_colour_map)
+                           project_colour_map=project_colour_map,
+                           projects=projects,
+                           all_machines=all_machines)
 
 
 @equipment_bp.route('/equipment/daily-checks/view')

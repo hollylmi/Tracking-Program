@@ -4,9 +4,14 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="fw-bold mb-0"><i class="bi bi-clipboard2-pulse me-2"></i>Equipment Operations</h2>
-  <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
-    <i class="bi bi-tools me-1"></i>Fleet Management
-  </a>
+  <div class="d-flex gap-2">
+    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#scheduleTransferModal">
+      <i class="bi bi-arrow-left-right me-1"></i>Schedule Transfer
+    </button>
+    <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-tools me-1"></i>Fleet Management
+    </a>
+  </div>
 </div>
 
 <!-- ── Summary strip ────────────────────────────────────���─────────────── -->
@@ -239,5 +244,57 @@
   </div>
 </div>
 {% endif %}
+
+<!-- ── Schedule Transfer Modal ────────────────────────────────────────── -->
+<div class="modal fade" id="scheduleTransferModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('equipment.transfer_schedule') }}">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Schedule Machine Transfer</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Machine *</label>
+            <select name="machine_id" class="form-select" required>
+              <option value="">— Select Machine —</option>
+              {% for m in all_machines %}
+              <option value="{{ m.id }}">{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">From Project</label>
+            <select name="from_project_id" class="form-select">
+              <option value="">— Unassigned —</option>
+              {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">To Project *</label>
+            <select name="to_project_id" class="form-select" required>
+              <option value="">— Select Destination —</option>
+              {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Scheduled Date *</label>
+            <input type="date" name="scheduled_date" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Transport Contact</label>
+            <input type="text" name="transport_contact" class="form-control" placeholder="Name / phone">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Travel Notes</label>
+            <textarea name="travel_notes" class="form-control" rows="2" placeholder="Special instructions, transport method, etc."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-arrow-left-right me-1"></i>Schedule Transfer</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
 
 {% endblock %}
