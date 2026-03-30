@@ -1081,3 +1081,75 @@ def scheduled_check_delete(check_id):
     db.session.commit()
     flash('Scheduled check deleted.', 'info')
     return redirect(request.referrer or url_for('main.index'))
+
+
+# ---------------------------------------------------------------------------
+# Equipment Operations Dashboard (admin)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/operations')
+@require_role('admin')
+def operations_dashboard():
+    """Admin operations view — inspections, check results, breakdowns, transfers."""
+    from sqlalchemy import func
+
+    today_date = date.today()
+
+    # ── 1. Machines due for inspection or disposal ──────────────────────
+    inspection_due = Machine.query.filter(
+        Machine.active == True,
+        Machine.next_inspection_date.isnot(None),
+        Machine.next_inspection_date <= today_date + timedelta(days=30),
+    ).order_by(Machine.next_inspection_date).all()
+
+    disposal_due = Machine.query.filter(
+        Machine.active == True,
+        Machine.dispose_by_date.isnot(None),
+        Machine.dispose_by_date <= today_date + timedelta(days=60),
+    ).order_by(Machine.dispose_by_date).all()
+
+    # ── 2. Scheduled checks — pending / overdue ─────────────────────────
+    scheduled_checks = ScheduledEquipmentCheck.query.filter_by(active=True).order_by(
+        ScheduledEquipmentCheck.next_due_date).all()
+    overdue_checks = [sc for sc in scheduled_checks if sc.next_due_date <= today_date
+                      and not any(c.completed_date == today_date for c in sc.completions)]
+    upcoming_checks = [sc for sc in scheduled_checks if sc.next_due_date > today_date
+                       and sc.next_due_date <= today_date + timedelta(days=7)]
+
+    # ── 3. Recent check results (last 7 days) ──────────────────────────
+    seven_days_ago = today_date - timedelta(days=7)
+    recent_checks = MachineDailyCheck.query.filter(
+        MachineDailyCheck.check_date >= seven_days_ago,
+    ).order_by(MachineDailyCheck.check_date.desc(), MachineDailyCheck.created_at.desc()).limit(100).all()
+
+    # Group by date for display
+    checks_by_date = defaultdict(list)
+    for dc in recent_checks:
+        checks_by_date[dc.check_date].append(dc)
+
+    # ── 4. Open breakdowns ──────────────────────────────────────────────
+    open_breakdowns = MachineBreakdown.query.filter(
+        MachineBreakdown.repair_status != 'completed'
+    ).order_by(MachineBreakdown.incident_date.desc()).all()
+
+    # ── 5. Pending transfers ────────────────────────────────────────────
+    pending_transfers = MachineTransfer.query.filter(
+        MachineTransfer.status.in_(['scheduled', 'in_transit'])
+    ).order_by(MachineTransfer.scheduled_date).all()
+
+    # ── 6. Scheduled check completion history (last 14 days) ────────────
+    recent_completions = ScheduledCheckCompletion.query.filter(
+        ScheduledCheckCompletion.completed_date >= today_date - timedelta(days=14),
+    ).order_by(ScheduledCheckCompletion.completed_date.desc()).all()
+
+    return render_template('equipment/operations.html',
+                           today=today_date,
+                           inspection_due=inspection_due,
+                           disposal_due=disposal_due,
+                           overdue_checks=overdue_checks,
+                           upcoming_checks=upcoming_checks,
+                           scheduled_checks=scheduled_checks,
+                           checks_by_date=dict(checks_by_date),
+                           open_breakdowns=open_breakdowns,
+                           pending_transfers=pending_transfers,
+                           recent_completions=recent_completions)

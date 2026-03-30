@@ -1,0 +1,258 @@
+{% extends 'base.html' %}
+{% block title %}Equipment Operations — Plytrack{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-clipboard2-pulse me-2"></i>Equipment Operations</h2>
+  <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-tools me-1"></i>Fleet Management
+  </a>
+</div>
+
+<!-- ── Summary strip ──────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold {% if overdue_checks %}text-danger{% else %}text-success{% endif %}">{{ overdue_checks | length }}</div>
+        <div class="small text-muted">Overdue Checks</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold {% if open_breakdowns %}text-warning{% else %}text-success{% endif %}">{{ open_breakdowns | length }}</div>
+        <div class="small text-muted">Open Breakdowns</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold {% if inspection_due %}text-warning{% else %}text-success{% endif %}">{{ inspection_due | length }}</div>
+        <div class="small text-muted">Inspections Due (30 days)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold {% if pending_transfers %}text-info{% else %}text-muted{% endif %}">{{ pending_transfers | length }}</div>
+        <div class="small text-muted">Pending Transfers</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Overdue & Upcoming Scheduled Checks ────────────────────────────── -->
+{% if overdue_checks or upcoming_checks %}
+<h5 class="fw-bold mb-3"><i class="bi bi-exclamation-triangle me-2 text-danger"></i>Scheduled Checks — Action Required</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Check</th><th>Project</th><th>Assigned To</th><th>Due Date</th><th>Machines</th><th>Frequency</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for sc in overdue_checks %}
+        <tr class="table-danger">
+          <td class="fw-semibold">{{ sc.name }}</td>
+          <td class="small">{{ sc.project.name if sc.project else '—' }}</td>
+          <td class="small">{{ sc.assigned_user.display_name or sc.assigned_user.username }}</td>
+          <td class="small text-danger fw-bold">{{ sc.next_due_date.strftime('%d/%m/%Y') }}</td>
+          <td class="small">{{ sc.machines | length }}</td>
+          <td><span class="badge bg-secondary">{{ sc.frequency | replace('_', ' ') | title }}</span></td>
+          <td><span class="badge bg-danger">OVERDUE</span></td>
+        </tr>
+        {% endfor %}
+        {% for sc in upcoming_checks %}
+        <tr class="table-warning">
+          <td class="fw-semibold">{{ sc.name }}</td>
+          <td class="small">{{ sc.project.name if sc.project else '—' }}</td>
+          <td class="small">{{ sc.assigned_user.display_name or sc.assigned_user.username }}</td>
+          <td class="small">{{ sc.next_due_date.strftime('%d/%m/%Y') }} <small class="text-muted">({{ (sc.next_due_date - today).days }}d)</small></td>
+          <td class="small">{{ sc.machines | length }}</td>
+          <td><span class="badge bg-secondary">{{ sc.frequency | replace('_', ' ') | title }}</span></td>
+          <td><span class="badge bg-warning">Due Soon</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Inspections & Disposal Due ──────────────────────────────────────── -->
+{% if inspection_due or disposal_due %}
+<h5 class="fw-bold mb-3"><i class="bi bi-search me-2 text-warning"></i>Inspections & Disposal Due</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Machine</th><th>Plant ID</th><th>Alert Type</th><th>Due Date</th><th>Days Left</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for m in inspection_due %}
+        {% set days = (m.next_inspection_date - today).days %}
+        <tr class="{% if days <= 0 %}table-danger{% elif days <= 7 %}table-warning{% endif %}">
+          <td class="fw-semibold"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="text-decoration-none">{{ m.name }}</a></td>
+          <td class="small text-muted">{{ m.plant_id or '—' }}</td>
+          <td><span class="badge bg-info">Inspection</span></td>
+          <td class="small">{{ m.next_inspection_date.strftime('%d/%m/%Y') }}</td>
+          <td class="fw-bold {% if days <= 0 %}text-danger{% elif days <= 7 %}text-warning{% endif %}">{{ days }}d{% if days <= 0 %} OVERDUE{% endif %}</td>
+          <td class="small">{% if m.inspection_interval_days %}Every {{ m.inspection_interval_days }}d{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% for m in disposal_due %}
+        {% set days = (m.dispose_by_date - today).days %}
+        <tr class="{% if days <= 0 %}table-danger{% elif days <= 14 %}table-warning{% endif %}">
+          <td class="fw-semibold"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="text-decoration-none">{{ m.name }}</a></td>
+          <td class="small text-muted">{{ m.plant_id or '—' }}</td>
+          <td><span class="badge bg-danger">Disposal</span></td>
+          <td class="small">{{ m.dispose_by_date.strftime('%d/%m/%Y') }}</td>
+          <td class="fw-bold {% if days <= 0 %}text-danger{% elif days <= 14 %}text-warning{% endif %}">{{ days }}d{% if days <= 0 %} OVERDUE{% endif %}</td>
+          <td class="small">{{ m.disposal_procedure or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Open Breakdowns ────────────────────────────────────────────────── -->
+{% if open_breakdowns %}
+<h5 class="fw-bold mb-3"><i class="bi bi-exclamation-diamond me-2 text-danger"></i>Open Breakdowns ({{ open_breakdowns | length }})</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Machine</th><th>Incident Date</th><th>Description</th><th>Status</th><th>Repairing By</th><th>Est. Return</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for b in open_breakdowns %}
+        <tr>
+          <td class="fw-semibold">
+            {% if b.machine %}
+            <a href="{{ url_for('equipment.machine_detail', machine_id=b.machine.id) }}" class="text-decoration-none">{{ b.machine.name }}</a>
+            {% elif b.hired_machine %}{{ b.hired_machine.machine_name }} <span class="badge bg-secondary">Hired</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="small">{{ b.incident_date.strftime('%d/%m/%Y') }}</td>
+          <td class="small" style="max-width: 250px;">{{ b.description or '—' }}</td>
+          <td><span class="badge {% if b.repair_status == 'pending' %}bg-warning{% else %}bg-info{% endif %}">{{ b.repair_status | replace('_', ' ') | title }}</span></td>
+          <td class="small">{{ b.repairing_by or '—' }}</td>
+          <td class="small">{{ b.anticipated_return.strftime('%d/%m/%Y') if b.anticipated_return else '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('equipment.breakdown_update', bd_id=b.id) }}" class="d-inline">
+              {% if b.repair_status == 'pending' %}
+              <input type="hidden" name="repair_status" value="in_progress">
+              <button class="btn btn-sm btn-outline-info py-0" title="Mark In Progress"><i class="bi bi-wrench"></i></button>
+              {% else %}
+              <input type="hidden" name="repair_status" value="completed">
+              <button class="btn btn-sm btn-outline-success py-0" title="Mark Resolved"><i class="bi bi-check-lg"></i></button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Recent Check Results ───────────────────────────────────────────── -->
+<h5 class="fw-bold mb-3"><i class="bi bi-check2-square me-2 text-primary"></i>Recent Check Results (7 days)</h5>
+{% if checks_by_date %}
+{% for check_date, checks in checks_by_date | dictsort(reverse=true) %}
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-header bg-white py-2 fw-semibold small">
+    {{ check_date.strftime('%A %d %B %Y') }}
+    <span class="badge bg-secondary ms-2">{{ checks | length }} check{{ 's' if checks | length != 1 }}</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Machine</th><th>Project</th><th>Condition</th><th>Hours</th><th>Checked By</th><th>Notes</th><th>Photo</th></tr></thead>
+      <tbody>
+        {% for dc in checks %}
+        <tr>
+          <td class="fw-semibold">
+            {% if dc.machine %}
+            <a href="{{ url_for('equipment.machine_detail', machine_id=dc.machine.id) }}" class="text-decoration-none">{{ dc.machine.name }}</a>
+            {% elif dc.hired_machine %}{{ dc.hired_machine.machine_name }}{% else %}—{% endif %}
+          </td>
+          <td class="small">{{ dc.project.name if dc.project else '—' }}</td>
+          <td><span class="badge {% if dc.condition == 'good' %}bg-success{% elif dc.condition == 'fair' %}bg-warning{% elif dc.condition == 'poor' %}bg-danger{% else %}bg-dark{% endif %}">{{ dc.condition | replace('_', ' ') | title }}</span></td>
+          <td class="small">{{ dc.hours_reading if dc.hours_reading else '—' }}</td>
+          <td class="small">{{ dc.checked_by_user.display_name if dc.checked_by_user else '—' }}</td>
+          <td class="small" style="max-width: 200px;">{{ dc.notes or '—' }}</td>
+          <td>{% if dc.photo_filename %}<a href="{{ url_for('equipment.serve_daily_check_photo', filename=dc.photo_filename) }}" target="_blank"><i class="bi bi-image text-primary"></i></a>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body text-muted text-center py-4">No checks recorded in the last 7 days.</div>
+</div>
+{% endif %}
+
+<!-- ── Recent Scheduled Check Completions ─────────────────────────────── -->
+{% if recent_completions %}
+<h5 class="fw-bold mb-3"><i class="bi bi-calendar-check me-2 text-success"></i>Scheduled Check Completions (14 days)</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Check Name</th><th>Project</th><th>Completed</th><th>By</th><th>Notes</th></tr></thead>
+      <tbody>
+        {% for comp in recent_completions %}
+        <tr>
+          <td class="fw-semibold">{{ comp.scheduled_check.name if comp.scheduled_check else '—' }}</td>
+          <td class="small">{{ comp.scheduled_check.project.name if comp.scheduled_check and comp.scheduled_check.project else '—' }}</td>
+          <td class="small">{{ comp.completed_date.strftime('%d/%m/%Y') }}</td>
+          <td class="small">{{ comp.completed_by.display_name if comp.completed_by else '—' }}</td>
+          <td class="small">{{ comp.notes or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Pending Transfers ──────────────────────────────────────────────── -->
+{% if pending_transfers %}
+<h5 class="fw-bold mb-3"><i class="bi bi-arrow-left-right me-2 text-info"></i>Pending Transfers</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Machine</th><th>From</th><th>To</th><th>Scheduled</th><th>Status</th><th>Contact</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for t in pending_transfers %}
+        <tr>
+          <td class="fw-semibold">{{ t.machine.name if t.machine else '—' }}</td>
+          <td class="small">{{ t.from_project.name if t.from_project else '—' }}</td>
+          <td class="small">{{ t.to_project.name if t.to_project else '—' }}</td>
+          <td class="small">{{ t.scheduled_date.strftime('%d/%m/%Y') }}</td>
+          <td><span class="badge {% if t.status == 'scheduled' %}bg-info{% else %}bg-warning{% endif %}">{{ t.status | replace('_', ' ') | title }}</span></td>
+          <td class="small">{{ t.transport_contact or '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('equipment.transfer_update', transfer_id=t.id) }}" class="d-inline">
+              {% if t.status == 'scheduled' %}
+              <input type="hidden" name="status" value="in_transit"><button class="btn btn-sm btn-outline-warning py-0"><i class="bi bi-truck"></i></button>
+              {% elif t.status == 'in_transit' %}
+              <input type="hidden" name="status" value="completed"><button class="btn btn-sm btn-outline-success py-0"><i class="bi bi-check-lg"></i></button>
+              {% endif %}
+            </form>
+            <form method="POST" action="{{ url_for('equipment.transfer_update', transfer_id=t.id) }}" class="d-inline">
+              <input type="hidden" name="status" value="cancelled"><button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-lg"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

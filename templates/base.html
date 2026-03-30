@@ -73,13 +73,30 @@
           </ul>
         </li>
 
-        <!-- Equipment — all roles -->
+        <!-- Equipment — all roles; Operations dashboard for admin -->
+        {% if current_user.role == 'admin' %}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if request.endpoint and 'equipment' in request.endpoint %}active{% endif %}"
+             href="#" data-bs-toggle="dropdown">
+            <i class="bi bi-tools me-1"></i>Equipment
+          </a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('equipment.equipment_overview') }}">
+              <i class="bi bi-wrench me-2"></i>Fleet Management
+            </a></li>
+            <li><a class="dropdown-item" href="{{ url_for('equipment.operations_dashboard') }}">
+              <i class="bi bi-clipboard2-pulse me-2"></i>Operations Dashboard
+            </a></li>
+          </ul>
+        </li>
+        {% else %}
         <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'equipment.equipment_overview' %}active{% endif %}"
+          <a class="nav-link {% if request.endpoint and 'equipment' in request.endpoint %}active{% endif %}"
              href="{{ url_for('equipment.equipment_overview') }}">
             <i class="bi bi-tools me-1"></i>Equipment
           </a>
         </li>
+        {% endif %}
 
         <!-- Progress dropdown:
              admin     — all active projects (full dropdown with Manage Projects)
