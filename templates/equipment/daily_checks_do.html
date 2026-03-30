@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block title %}Daily Machine Checks — {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="fw-bold mb-1"><i class="bi bi-check2-square me-2"></i>Daily Machine Checks</h3>
+    <div class="small text-muted">{{ project.name }} — {{ check_date.strftime('%A %d %B %Y') }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('equipment.daily_checks_view', project_id=project.id, date=check_date.isoformat()) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-eye me-1"></i>View Results
+    </a>
+    {% endif %}
+    <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Equipment
+    </a>
+  </div>
+</div>
+
+<!-- Progress -->
+{% set checked_count = machines | selectattr('check') | list | length %}
+{% set total_count = machines | length %}
+{% set pct = ((checked_count / total_count * 100) | int) if total_count > 0 else 0 %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-2">
+    <div class="d-flex justify-content-between small mb-1">
+      <span>{{ checked_count }} / {{ total_count }} machines checked</span>
+      <span class="fw-bold {% if pct == 100 %}text-success{% elif pct > 0 %}text-warning{% else %}text-muted{% endif %}">{{ pct }}%</span>
+    </div>
+    <div class="progress" style="height: 6px;">
+      <div class="progress-bar {% if pct == 100 %}bg-success{% elif pct > 0 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {{ pct }}%"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Machine list -->
+{% for m in machines %}
+{% set dc = m.check %}
+<div class="card border-0 shadow-sm mb-2 {% if dc %}border-start border-3 border-success{% endif %}">
+  <div class="card-body py-2">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <div class="d-flex align-items-center gap-2">
+          {% if dc %}
+          <i class="bi bi-check-circle-fill text-success"></i>
+          {% else %}
+          <i class="bi bi-circle text-muted"></i>
+          {% endif %}
+          <span class="fw-bold">{{ m.name }}</span>
+          {% if m.plant_id %}<small class="text-muted">({{ m.plant_id }})</small>{% endif %}
+          {% if m.type %}<small class="text-muted ms-1">— {{ m.type }}</small>{% endif %}
+          {% if m.source == 'hired' %}<span class="badge bg-secondary ms-1">Hired</span>{% endif %}
+        </div>
+        <!-- Alerts -->
+        {% for alert in m.alerts %}
+        <div class="small mt-1">
+          <i class="bi bi-exclamation-triangle-fill {% if alert.urgency == 'danger' %}text-danger{% else %}text-warning{% endif %} me-1"></i>
+          <span class="{% if alert.urgency == 'danger' %}text-danger{% else %}text-warning{% endif %} fw-semibold">{{ alert.message }}</span>
+        </div>
+        {% endfor %}
+        <!-- Transfer -->
+        {% if m.pending_transfer %}
+        <div class="small mt-1">
+          <i class="bi bi-arrow-right-circle text-info me-1"></i>
+          <span class="text-info fw-semibold">Moving to {{ m.pending_transfer.to_project }} — {{ m.pending_transfer.scheduled_date }}</span>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if dc %}
+      <!-- Show existing check + edit toggle -->
+      <div class="text-end">
+        <span class="badge {% if dc.condition == 'good' %}bg-success{% elif dc.condition == 'fair' %}bg-warning{% elif dc.condition == 'poor' %}bg-danger{% else %}bg-dark{% endif %} me-1">{{ dc.condition | replace('_', ' ') | title }}</span>
+        {% if dc.hours_reading %}<span class="small text-muted">{{ dc.hours_reading }} hrs</span>{% endif %}
+        <br>
+        <button class="btn btn-sm btn-link py-0 text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#editCheck{{ dc.id }}">
+          <i class="bi bi-pencil me-1"></i>Edit
+        </button>
+        <form method="POST" action="{{ url_for('equipment.daily_check_delete', check_id=dc.id) }}" class="d-inline" onsubmit="return confirm('Delete this check?')">
+          <button class="btn btn-sm btn-link py-0 text-danger"><i class="bi bi-trash"></i></button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if dc %}
+    <!-- Show check details -->
+    {% if dc.notes %}<div class="small text-muted mt-1"><i class="bi bi-chat-left-text me-1"></i>{{ dc.notes }}</div>{% endif %}
+    {% if dc.checked_by %}<div class="small text-muted">Checked by {{ dc.checked_by }} at {{ dc.checked_at }}</div>{% endif %}
+    {% if dc.photo_url %}<div class="mt-1"><a href="{{ dc.photo_url }}" target="_blank" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-image me-1"></i>Photo</a></div>{% endif %}
+
+    <!-- Edit form (collapsed) -->
+    <div class="collapse mt-2" id="editCheck{{ dc.id }}">
+      <form method="POST" action="{{ url_for('equipment.daily_check_edit', check_id=dc.id) }}">
+        <div class="row g-2">
+          <div class="col-sm-3">
+            <select name="condition" class="form-select form-select-sm">
+              <option value="good" {% if dc.condition == 'good' %}selected{% endif %}>Good</option>
+              <option value="fair" {% if dc.condition == 'fair' %}selected{% endif %}>Fair</option>
+              <option value="poor" {% if dc.condition == 'poor' %}selected{% endif %}>Poor</option>
+              <option value="broken_down" {% if dc.condition == 'broken_down' %}selected{% endif %}>Broken Down</option>
+            </select>
+          </div>
+          <div class="col-sm-2"><input type="number" step="0.1" name="hours_reading" class="form-control form-control-sm" value="{{ dc.hours_reading or '' }}" placeholder="Hours"></div>
+          <div class="col-sm-5"><input type="text" name="notes" class="form-control form-control-sm" value="{{ dc.notes or '' }}" placeholder="Notes"></div>
+          <div class="col-sm-2"><button type="submit" class="btn btn-sm btn-primary w-100">Save</button></div>
+        </div>
+      </form>
+    </div>
+    {% else %}
+    <!-- New check form -->
+    <form method="POST" action="{{ url_for('equipment.daily_check_submit') }}" class="mt-2" enctype="multipart/form-data">
+      {% if m.machine_id %}<input type="hidden" name="machine_id" value="{{ m.machine_id }}">{% endif %}
+      {% if m.hired_machine_id %}<input type="hidden" name="hired_machine_id" value="{{ m.hired_machine_id }}">{% endif %}
+      <input type="hidden" name="project_id" value="{{ project.id }}">
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-3">
+          <label class="form-label small fw-semibold mb-0">Condition</label>
+          <select name="condition" class="form-select form-select-sm">
+            <option value="good">Good</option>
+            <option value="fair">Fair</option>
+            <option value="poor">Poor</option>
+            <option value="broken_down">Broken Down</option>
+          </select>
+        </div>
+        {% if m.source == 'fleet' %}
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-0">Hours</label>
+          <input type="number" step="0.1" name="hours_reading" class="form-control form-control-sm" placeholder="Hours">
+        </div>
+        {% endif %}
+        <div class="col-sm-3">
+          <label class="form-label small fw-semibold mb-0">Notes</label>
+          <input type="text" name="notes" class="form-control form-control-sm" placeholder="Optional">
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-0">Photo</label>
+          <input type="file" name="photo" class="form-control form-control-sm" accept="image/*">
+        </div>
+        <div class="col-sm-2">
+          <button type="submit" class="btn btn-sm btn-success w-100"><i class="bi bi-check-lg me-1"></i>Check</button>
+        </div>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% if total_count == 0 %}
+<div class="card border-0 shadow-sm"><div class="card-body text-muted text-center py-4">No machines assigned to this project.</div></div>
+{% endif %}
+
+{% endblock %}

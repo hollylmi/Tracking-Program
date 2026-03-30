@@ -703,16 +703,27 @@ def transfer_pre_check(transfer_id):
     hours_str = request.form.get('hours_reading', '').strip()
     hours_reading = float(hours_str) if hours_str else None
 
-    # Create a daily check record for this machine
-    check = MachineDailyCheck(
-        machine_id=transfer.machine_id,
-        project_id=transfer.from_project_id or transfer.to_project_id,
-        check_date=date.today(),
-        checked_by_user_id=current_user.id,
-        condition=condition,
-        hours_reading=hours_reading,
-        notes=f'Pre-transfer check. {notes or ""}',
-    )
+    # Create or update a daily check record for this machine
+    project_id = transfer.from_project_id or transfer.to_project_id
+    check = MachineDailyCheck.query.filter_by(
+        machine_id=transfer.machine_id, project_id=project_id, check_date=date.today()
+    ).first()
+    if check:
+        check.condition = condition
+        check.hours_reading = hours_reading
+        check.notes = f'Pre-transfer check. {notes or ""}'
+        check.checked_by_user_id = current_user.id
+    else:
+        check = MachineDailyCheck(
+            machine_id=transfer.machine_id,
+            project_id=project_id,
+            check_date=date.today(),
+            checked_by_user_id=current_user.id,
+            condition=condition,
+            hours_reading=hours_reading,
+            notes=f'Pre-transfer check. {notes or ""}',
+        )
+        db.session.add(check)
 
     photo = request.files.get('photo')
     if photo and photo.filename:
@@ -723,9 +734,7 @@ def transfer_pre_check(transfer_id):
         check.photo_filename = stored
         check.photo_original_name = photo.filename
 
-    db.session.add(check)
     db.session.flush()
-
     transfer.pre_check_id = check.id
     transfer.pre_check_notes = notes
 
@@ -768,15 +777,26 @@ def transfer_arrive(transfer_id):
     hours_str = request.form.get('hours_reading', '').strip()
     hours_reading = float(hours_str) if hours_str else None
 
-    check = MachineDailyCheck(
-        machine_id=transfer.machine_id,
-        project_id=transfer.to_project_id or transfer.from_project_id,
-        check_date=date.today(),
-        checked_by_user_id=current_user.id,
-        condition=condition,
-        hours_reading=hours_reading,
-        notes=f'Arrival check after transfer. {notes or ""}',
-    )
+    dest_project_id = transfer.to_project_id or transfer.from_project_id
+    check = MachineDailyCheck.query.filter_by(
+        machine_id=transfer.machine_id, project_id=dest_project_id, check_date=date.today()
+    ).first()
+    if check:
+        check.condition = condition
+        check.hours_reading = hours_reading
+        check.notes = f'Arrival check after transfer. {notes or ""}'
+        check.checked_by_user_id = current_user.id
+    else:
+        check = MachineDailyCheck(
+            machine_id=transfer.machine_id,
+            project_id=dest_project_id,
+            check_date=date.today(),
+            checked_by_user_id=current_user.id,
+            condition=condition,
+            hours_reading=hours_reading,
+            notes=f'Arrival check after transfer. {notes or ""}',
+        )
+        db.session.add(check)
 
     photo = request.files.get('photo')
     if photo and photo.filename:
@@ -888,6 +908,8 @@ def daily_check_submit():
     project_id = request.form.get('project_id', type=int)
     condition = request.form.get('condition', 'good')
     notes = request.form.get('notes', '').strip() or None
+    hours_str = request.form.get('hours_reading', '').strip()
+    hours_reading = float(hours_str) if hours_str else None
 
     if not project_id or (not machine_id and not hired_machine_id):
         flash('Project and machine are required.', 'danger')
@@ -900,6 +922,7 @@ def daily_check_submit():
         check_date=date.today(),
         checked_by_user_id=current_user.id,
         condition=condition,
+        hours_reading=hours_reading,
         notes=notes,
     )
 
@@ -941,9 +964,24 @@ def daily_check_submit():
             pass
 
     db.session.add(check)
+    db.session.flush()
+
+    # Auto-log hours
+    if hours_reading is not None and (machine_id or hired_machine_id):
+        mid = machine_id or None
+        if mid:
+            db.session.add(MachineHoursLog(
+                machine_id=mid, project_id=project_id, log_date=date.today(),
+                hours_reading=hours_reading, recorded_by_user_id=current_user.id,
+                daily_check_id=check.id,
+            ))
+
     db.session.commit()
     flash('Daily check recorded.', 'success')
-    return redirect(url_for('equipment.equipment_overview'))
+    # Redirect back to the checks page if we came from there
+    if request.referrer and 'daily-checks/do' in request.referrer:
+        return redirect(request.referrer)
+    return redirect(url_for('equipment.daily_checks_do', project_id=project_id))
 
 
 # ---------------------------------------------------------------------------
@@ -1156,6 +1194,8 @@ def daily_check_delete(check_id):
     db.session.delete(check)
     db.session.commit()
     flash('Daily check deleted.', 'info')
+    if request.referrer and 'daily-checks' in request.referrer:
+        return redirect(request.referrer)
     if machine_id:
         return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
     return redirect(url_for('equipment.equipment_overview'))
@@ -1179,6 +1219,8 @@ def daily_check_edit(check_id):
             hl.hours_reading = float(hours_str)
     db.session.commit()
     flash('Daily check updated.', 'success')
+    if request.referrer and 'daily-checks' in request.referrer:
+        return redirect(request.referrer)
     if check.machine_id:
         return redirect(url_for('equipment.machine_detail', machine_id=check.machine_id))
     return redirect(url_for('equipment.equipment_overview'))
@@ -1194,6 +1236,102 @@ def hours_log_delete(log_id):
     db.session.commit()
     flash('Hours log entry deleted.', 'info')
     return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
+
+
+# ---------------------------------------------------------------------------
+# Daily checks — do checks (web interface for supervisors)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/daily-checks/do')
+@require_role('admin', 'supervisor', 'site')
+def daily_checks_do():
+    """Web page where supervisors do their daily machine checks."""
+    project_id = request.args.get('project_id', type=int)
+    if not project_id:
+        # For non-admins, use their active project
+        if current_user.role != 'admin':
+            project_id = get_active_project_id()
+        if not project_id:
+            flash('Please select a project.', 'warning')
+            return redirect(url_for('equipment.equipment_overview'))
+
+    project = Project.query.get_or_404(project_id)
+    check_date = date.today()
+
+    # All machines assigned to this project
+    own_assignments = ProjectMachine.query.filter_by(project_id=project_id).all()
+    hired_machines_list = HiredMachine.query.filter_by(project_id=project_id, active=True).all()
+
+    # Today's checks
+    checks = MachineDailyCheck.query.filter_by(project_id=project_id, check_date=check_date).all()
+    check_by_machine = {c.machine_id: c for c in checks if c.machine_id}
+    check_by_hired = {c.hired_machine_id: c for c in checks if c.hired_machine_id}
+
+    # Pending transfers for these machines
+    machine_ids = [pm.machine_id for pm in own_assignments]
+    pending_transfers = {}
+    if machine_ids:
+        for t in MachineTransfer.query.filter(
+            MachineTransfer.machine_id.in_(machine_ids),
+            MachineTransfer.status.in_(['scheduled', 'in_transit'])
+        ).all():
+            pending_transfers[t.machine_id] = t
+
+    machines = []
+    for pm in own_assignments:
+        m = pm.machine
+        dc = check_by_machine.get(m.id)
+        alerts = []
+        if m.next_inspection_date:
+            days = (m.next_inspection_date - check_date).days
+            if days <= 14:
+                alerts.append({'type': 'inspection', 'message': f'Inspection due in {days} days' if days > 0 else 'Inspection overdue', 'urgency': 'danger' if days <= 3 else 'warning'})
+        if m.dispose_by_date:
+            days = (m.dispose_by_date - check_date).days
+            if days <= 30:
+                alerts.append({'type': 'disposal', 'message': f'Disposal in {days} days' if days > 0 else 'Disposal overdue', 'urgency': 'danger' if days <= 7 else 'warning'})
+
+        transfer = pending_transfers.get(m.id)
+        transfer_info = None
+        if transfer:
+            transfer_info = {
+                'to_project': transfer.to_project.name if transfer.to_project else 'Unassigned',
+                'scheduled_date': transfer.scheduled_date.strftime('%d/%m/%Y'),
+            }
+
+        machines.append({
+            'machine_id': m.id, 'hired_machine_id': None, 'name': m.name,
+            'plant_id': m.plant_id, 'type': m.machine_type, 'source': 'fleet',
+            'alerts': alerts, 'pending_transfer': transfer_info,
+            'check': {
+                'id': dc.id, 'condition': dc.condition, 'hours_reading': dc.hours_reading,
+                'notes': dc.notes,
+                'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'checked_at': dc.created_at.strftime('%H:%M') if dc.created_at else None,
+                'photo_url': url_for('equipment.serve_daily_check_photo', filename=dc.photo_filename) if dc.photo_filename else None,
+            } if dc else None,
+        })
+
+    for hm in hired_machines_list:
+        dc = check_by_hired.get(hm.id)
+        machines.append({
+            'machine_id': None, 'hired_machine_id': hm.id, 'name': hm.machine_name,
+            'plant_id': hm.plant_id, 'type': hm.machine_type, 'source': 'hired',
+            'alerts': [], 'pending_transfer': None,
+            'check': {
+                'id': dc.id, 'condition': dc.condition, 'hours_reading': dc.hours_reading,
+                'notes': dc.notes,
+                'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'checked_at': dc.created_at.strftime('%H:%M') if dc.created_at else None,
+                'photo_url': url_for('equipment.serve_daily_check_photo', filename=dc.photo_filename) if dc.photo_filename else None,
+            } if dc else None,
+        })
+
+    # Sort: unchecked first
+    machines.sort(key=lambda x: (1 if x['check'] else 0))
+
+    return render_template('equipment/daily_checks_do.html',
+                           project=project, check_date=check_date, machines=machines)
 
 
 # ---------------------------------------------------------------------------
