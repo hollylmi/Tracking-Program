@@ -162,9 +162,14 @@
 {% if checks_by_date %}
 {% for check_date, checks in checks_by_date | dictsort(reverse=true) %}
 <div class="card border-0 shadow-sm mb-3">
-  <div class="card-header bg-white py-2 fw-semibold small">
-    {{ check_date.strftime('%A %d %B %Y') }}
-    <span class="badge bg-secondary ms-2">{{ checks | length }} check{{ 's' if checks | length != 1 }}</span>
+  <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+    <span class="fw-semibold small">
+      {{ check_date.strftime('%A %d %B %Y') }}
+      <span class="badge bg-secondary ms-2">{{ checks | length }} check{{ 's' if checks | length != 1 }}</span>
+    </span>
+    <a href="{{ url_for('equipment.daily_checks_view', date=check_date.isoformat()) }}" class="btn btn-sm btn-outline-primary py-0">
+      <i class="bi bi-box-arrow-up-right me-1"></i>Full View
+    </a>
   </div>
   <div class="table-responsive">
     <table class="table table-sm table-hover mb-0 align-middle">

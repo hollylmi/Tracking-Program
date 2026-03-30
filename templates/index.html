@@ -187,7 +187,9 @@
           </td>
           <td>
             <div class="d-flex align-items-center gap-2">
-              {% if tp.startup_complete %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<span class="small fw-semibold {% if tp.checks_done == 0 %}text-danger{% else %}text-warning{% endif %}">{{ tp.checks_done }} started</span>{% endif %}
+              <a href="{{ url_for('equipment.daily_checks_view', project_id=tp.project.id, date=today.isoformat()) }}" class="text-decoration-none">
+                {% if tp.startup_complete %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<span class="small fw-semibold {% if tp.checks_done == 0 %}text-danger{% else %}text-warning{% endif %}">{{ tp.checks_done }} started</span>{% endif %}
+              </a>
               {% if tp.startup_assigned %}<span class="small text-muted">{{ tp.startup_assigned.assigned_user.display_name or tp.startup_assigned.assigned_user.username }}</span>{% else %}<span class="small text-danger">Unassigned</span>{% endif %}
             </div>
           </td>

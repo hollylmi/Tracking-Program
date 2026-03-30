@@ -1153,3 +1153,45 @@ def operations_dashboard():
                            open_breakdowns=open_breakdowns,
                            pending_transfers=pending_transfers,
                            recent_completions=recent_completions)
+
+
+@equipment_bp.route('/equipment/daily-checks/view')
+@require_role('admin', 'supervisor', 'site')
+def daily_checks_view():
+    """View all daily checks for a project on a specific date."""
+    project_id = request.args.get('project_id', type=int)
+    date_str = request.args.get('date', '')
+
+    if date_str:
+        try:
+            check_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            check_date = date.today()
+    else:
+        check_date = date.today()
+
+    project = Project.query.get_or_404(project_id) if project_id else None
+
+    # Get all checks for this project and date
+    query = MachineDailyCheck.query.filter_by(check_date=check_date)
+    if project_id:
+        query = query.filter_by(project_id=project_id)
+    checks = query.order_by(MachineDailyCheck.created_at.desc()).all()
+
+    # Get all machines assigned to this project to show what's NOT been checked
+    unchecked_machines = []
+    if project_id:
+        checked_machine_ids = {c.machine_id for c in checks if c.machine_id}
+        checked_hired_ids = {c.hired_machine_id for c in checks if c.hired_machine_id}
+        for pm in ProjectMachine.query.filter_by(project_id=project_id).all():
+            if pm.machine_id not in checked_machine_ids:
+                unchecked_machines.append({'name': pm.machine.name, 'plant_id': pm.machine.plant_id, 'type': 'fleet'})
+        for hm in HiredMachine.query.filter_by(project_id=project_id, active=True).all():
+            if hm.id not in checked_hired_ids:
+                unchecked_machines.append({'name': hm.machine_name, 'plant_id': hm.plant_id, 'type': 'hired'})
+
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    return render_template('equipment/daily_checks_view.html',
+                           checks=checks, project=project, check_date=check_date,
+                           unchecked_machines=unchecked_machines, projects=projects)
