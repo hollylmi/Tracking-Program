@@ -235,6 +235,92 @@ def equipment_overview():
 
     groups = MachineGroup.query.order_by(MachineGroup.name).all()
 
+    # ── Admin dashboard data (shown inline on the equipment page) ────────
+    dashboard_data = None
+    if current_user.role == 'admin':
+        from sqlalchemy import func
+        today_date = date.today()
+        project_data = []
+        total_incomplete_checks = 0
+        total_open_breakdowns = 0
+
+        for p in projects:
+            own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
+            hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
+            total_machines = own_count + hired_count
+            checks_today = MachineDailyCheck.query.filter_by(
+                project_id=p.id, check_date=today_date).count()
+            entry_today = DailyEntry.query.filter_by(
+                project_id=p.id).filter(
+                func.date(DailyEntry.entry_date) == today_date).first()
+
+            own_machine_ids = {pm.machine_id for pm in ProjectMachine.query.filter_by(project_id=p.id).all()}
+            hired_ids = {hm.id for hm in HiredMachine.query.filter_by(project_id=p.id).all()}
+            open_bds = MachineBreakdown.query.filter(
+                MachineBreakdown.repair_status != 'completed',
+                db.or_(
+                    MachineBreakdown.machine_id.in_(own_machine_ids) if own_machine_ids else db.false(),
+                    MachineBreakdown.hired_machine_id.in_(hired_ids) if hired_ids else db.false(),
+                )
+            ).count()
+
+            active_checklists = SiteEquipmentChecklist.query.filter_by(
+                project_id=p.id).filter(
+                SiteEquipmentChecklist.completed_at.is_(None)).all()
+            checklist_info = []
+            for cl in active_checklists:
+                total_items = len(cl.items)
+                checked_items = sum(1 for i in cl.items if i.checked)
+                checklist_info.append({
+                    'id': cl.id, 'name': cl.checklist_name, 'due_date': cl.due_date,
+                    'total': total_items, 'checked': checked_items,
+                    'overdue': cl.due_date < today_date,
+                })
+
+            if total_machines > checks_today:
+                total_incomplete_checks += 1
+            total_open_breakdowns += open_bds
+
+            site_manager_name = None
+            if p.site_manager:
+                site_manager_name = p.site_manager.display_name or p.site_manager.username
+
+            project_data.append({
+                'project': p, 'site_manager': site_manager_name,
+                'total_machines': total_machines, 'checks_today': checks_today,
+                'entry_submitted': entry_today is not None,
+                'open_breakdowns': open_bds, 'checklists': checklist_info,
+            })
+
+        upcoming_checklists = SiteEquipmentChecklist.query.filter(
+            SiteEquipmentChecklist.completed_at.is_(None),
+            SiteEquipmentChecklist.due_date <= today_date + timedelta(days=7),
+        ).count()
+
+        alert_machines = Machine.query.filter(
+            Machine.active == True,
+            db.or_(
+                db.and_(Machine.dispose_by_date.isnot(None),
+                        Machine.dispose_by_date <= today_date + timedelta(days=30)),
+                db.and_(Machine.next_inspection_date.isnot(None),
+                        Machine.next_inspection_date <= today_date + timedelta(days=14)),
+            )
+        ).order_by(Machine.dispose_by_date, Machine.next_inspection_date).all()
+
+        pending_transfers = MachineTransfer.query.filter(
+            MachineTransfer.status.in_(['scheduled', 'in_transit'])
+        ).order_by(MachineTransfer.scheduled_date).all()
+
+        dashboard_data = {
+            'project_data': project_data,
+            'total_incomplete_checks': total_incomplete_checks,
+            'total_open_breakdowns': total_open_breakdowns,
+            'total_overdue_checklists': upcoming_checklists,
+            'flagged_machines': len(alert_machines),
+            'alert_machines': alert_machines,
+            'pending_transfers': pending_transfers,
+        }
+
     return render_template('equipment/index.html',
                            own_machines=own_machines,
                            hired_machines=hired_machines,
@@ -247,7 +333,8 @@ def equipment_overview():
                            hired_machine_projects=hired_machine_projects,
                            own_bd_history=own_bd_history,
                            hired_bd_history=hired_bd_history,
-                           today=date.today())
+                           today=date.today(),
+                           dashboard=dashboard_data)
 
 
 @equipment_bp.route('/equipment/breakdown/add', methods=['POST'])
@@ -340,13 +427,13 @@ def checklist_create():
 
     if not project_id or not checklist_name or not due_date_str:
         flash('Project, name, and due date are required.', 'danger')
-        return redirect(url_for('equipment.admin_dashboard'))
+        return redirect(url_for('equipment.equipment_overview'))
 
     try:
         due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
     except ValueError:
         flash('Invalid date.', 'danger')
-        return redirect(url_for('equipment.admin_dashboard'))
+        return redirect(url_for('equipment.equipment_overview'))
 
     project = Project.query.get_or_404(project_id)
     cl = SiteEquipmentChecklist(
@@ -468,7 +555,7 @@ def checklist_delete(checklist_id):
     db.session.delete(cl)
     db.session.commit()
     flash('Checklist deleted.', 'info')
-    return redirect(url_for('equipment.admin_dashboard'))
+    return redirect(url_for('equipment.equipment_overview'))
 
 
 # ---------------------------------------------------------------------------
@@ -488,13 +575,13 @@ def transfer_schedule():
 
     if not machine_id or not scheduled_date_str:
         flash('Machine and scheduled date are required.', 'danger')
-        return redirect(url_for('equipment.admin_dashboard'))
+        return redirect(url_for('equipment.equipment_overview'))
 
     try:
         scheduled_date = datetime.strptime(scheduled_date_str, '%Y-%m-%d').date()
     except ValueError:
         flash('Invalid date.', 'danger')
-        return redirect(url_for('equipment.admin_dashboard'))
+        return redirect(url_for('equipment.equipment_overview'))
 
     machine = Machine.query.get_or_404(machine_id)
 
@@ -504,7 +591,7 @@ def transfer_schedule():
             machine_id=machine_id, project_id=from_project_id).first()
         if not existing:
             flash(f'Machine "{machine.name}" is not assigned to the selected source project.', 'danger')
-            return redirect(url_for('equipment.admin_dashboard'))
+            return redirect(url_for('equipment.equipment_overview'))
 
     transfer = MachineTransfer(
         machine_id=machine_id,
@@ -518,7 +605,7 @@ def transfer_schedule():
     db.session.add(transfer)
     db.session.commit()
     flash(f'Transfer scheduled for "{machine.name}".', 'success')
-    return redirect(url_for('equipment.admin_dashboard'))
+    return redirect(url_for('equipment.equipment_overview'))
 
 
 @equipment_bp.route('/equipment/transfer/<int:transfer_id>/update', methods=['POST'])
@@ -555,7 +642,7 @@ def transfer_update(transfer_id):
 
     db.session.commit()
     flash(f'Transfer updated to {new_status}.', 'success')
-    return redirect(url_for('equipment.admin_dashboard'))
+    return redirect(url_for('equipment.equipment_overview'))
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +661,7 @@ def daily_check_submit():
 
     if not project_id or (not machine_id and not hired_machine_id):
         flash('Project and machine are required.', 'danger')
-        return redirect(url_for('equipment.admin_dashboard'))
+        return redirect(url_for('equipment.equipment_overview'))
 
     check = MachineDailyCheck(
         machine_id=machine_id or None,
@@ -626,7 +713,7 @@ def daily_check_submit():
     db.session.add(check)
     db.session.commit()
     flash('Daily check recorded.', 'success')
-    return redirect(url_for('equipment.admin_dashboard'))
+    return redirect(url_for('equipment.equipment_overview'))
 
 
 # ---------------------------------------------------------------------------
@@ -662,7 +749,7 @@ def machine_edit_details(machine_id):
     flash(f'Details updated for "{m.name}".', 'success')
 
     # Redirect back to the referrer if available, else admin dashboard
-    return redirect(request.referrer or url_for('equipment.admin_dashboard'))
+    return redirect(request.referrer or url_for('equipment.equipment_overview'))
 
 
 # ---------------------------------------------------------------------------
@@ -672,114 +759,8 @@ def machine_edit_details(machine_id):
 @equipment_bp.route('/equipment/admin-dashboard')
 @require_role('admin')
 def admin_dashboard():
-    """Admin overview page — daily checks, breakdowns, checklists, transfers."""
-    from sqlalchemy import func
-
-    today_date = date.today()
-    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
-
-    project_data = []
-    total_incomplete_checks = 0
-    total_open_breakdowns = 0
-    total_overdue_checklists = 0
-    flagged_machines = 0
-
-    for p in projects:
-        # Count machines assigned to this project
-        own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
-        hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
-        total_machines = own_count + hired_count
-
-        # Daily checks done today for this project
-        checks_today = MachineDailyCheck.query.filter_by(
-            project_id=p.id, check_date=today_date).count()
-
-        # DailyEntry submitted today
-        entry_today = DailyEntry.query.filter_by(
-            project_id=p.id).filter(
-            func.date(DailyEntry.entry_date) == today_date).first()
-
-        # Open breakdowns for this project
-        own_machine_ids = {pm.machine_id for pm in ProjectMachine.query.filter_by(project_id=p.id).all()}
-        hired_ids = {hm.id for hm in HiredMachine.query.filter_by(project_id=p.id).all()}
-        open_bds = MachineBreakdown.query.filter(
-            MachineBreakdown.repair_status != 'completed',
-            db.or_(
-                MachineBreakdown.machine_id.in_(own_machine_ids) if own_machine_ids else db.false(),
-                MachineBreakdown.hired_machine_id.in_(hired_ids) if hired_ids else db.false(),
-            )
-        ).count()
-
-        # Checklists
-        active_checklists = SiteEquipmentChecklist.query.filter_by(
-            project_id=p.id).filter(
-            SiteEquipmentChecklist.completed_at.is_(None)).all()
-        checklist_info = []
-        for cl in active_checklists:
-            total_items = len(cl.items)
-            checked_items = sum(1 for i in cl.items if i.checked)
-            checklist_info.append({
-                'id': cl.id,
-                'name': cl.checklist_name,
-                'due_date': cl.due_date,
-                'total': total_items,
-                'checked': checked_items,
-                'overdue': cl.due_date < today_date,
-            })
-
-        if total_machines > checks_today:
-            total_incomplete_checks += 1
-        total_open_breakdowns += open_bds
-
-        site_manager_name = None
-        if p.site_manager:
-            site_manager_name = p.site_manager.display_name or p.site_manager.username
-
-        project_data.append({
-            'project': p,
-            'site_manager': site_manager_name,
-            'total_machines': total_machines,
-            'checks_today': checks_today,
-            'entry_submitted': entry_today is not None,
-            'open_breakdowns': open_bds,
-            'checklists': checklist_info,
-        })
-
-    # Checklists due within 7 days (global)
-    upcoming_checklists = SiteEquipmentChecklist.query.filter(
-        SiteEquipmentChecklist.completed_at.is_(None),
-        SiteEquipmentChecklist.due_date <= today_date + timedelta(days=7),
-    ).all()
-    total_overdue_checklists = len(upcoming_checklists)
-
-    # Machines with upcoming disposal or inspection
-    from datetime import timedelta
-    alert_machines = Machine.query.filter(
-        Machine.active == True,
-        db.or_(
-            db.and_(Machine.dispose_by_date.isnot(None),
-                    Machine.dispose_by_date <= today_date + timedelta(days=30)),
-            db.and_(Machine.next_inspection_date.isnot(None),
-                    Machine.next_inspection_date <= today_date + timedelta(days=14)),
-        )
-    ).order_by(Machine.dispose_by_date, Machine.next_inspection_date).all()
-    flagged_machines = len(alert_machines)
-
-    # Pending transfers
-    pending_transfers = MachineTransfer.query.filter(
-        MachineTransfer.status.in_(['scheduled', 'in_transit'])
-    ).order_by(MachineTransfer.scheduled_date).all()
-
-    return render_template('equipment/admin_dashboard.html',
-                           project_data=project_data,
-                           projects=projects,
-                           alert_machines=alert_machines,
-                           pending_transfers=pending_transfers,
-                           total_incomplete_checks=total_incomplete_checks,
-                           total_open_breakdowns=total_open_breakdowns,
-                           total_overdue_checklists=total_overdue_checklists,
-                           flagged_machines=flagged_machines,
-                           today=today_date)
+    """Redirect to consolidated equipment page."""
+    return redirect(url_for('equipment.equipment_overview'))
 
 
 # ---------------------------------------------------------------------------

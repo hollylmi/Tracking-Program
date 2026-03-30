@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -6,20 +6,29 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  Image,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import * as ImagePicker from 'expo-image-picker'
 import ScreenHeader from '../../components/layout/ScreenHeader'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
 import { cachedQuery } from '../../lib/cachedQuery'
+import { compressImage } from '../../lib/compressImage'
 import { useProjectStore } from '../../store/project'
+import { useToastStore } from '../../store/toast'
 import { useHire } from '../../hooks/useHire'
-import { Machine, Breakdown, HiredMachine } from '../../types'
+import { useDailyChecks } from '../../hooks/useEquipment'
+import { Machine, Breakdown, HiredMachine, DailyCheckMachine } from '../../types'
 
 // ── Fleet machine card (existing) ────────────────────────────────────────────
 
@@ -149,12 +158,14 @@ function HiredMachineCard({ machine }: { machine: HiredMachine }) {
 
 // ── Tab selector ──────────────────────────────────────────────────────────────
 
-type TabKey = 'fleet' | 'hired'
+type TabKey = 'fleet' | 'hired' | 'checks'
+
+const TAB_LABELS: Record<TabKey, string> = { fleet: 'Fleet', hired: 'Hired', checks: 'Checks' }
 
 function TabSelector({ active, onChange }: { active: TabKey; onChange: (t: TabKey) => void }) {
   return (
     <View style={tabStyles.container}>
-      {(['fleet', 'hired'] as const).map((key) => (
+      {(['fleet', 'hired', 'checks'] as const).map((key) => (
         <TouchableOpacity
           key={key}
           style={[tabStyles.tab, active === key && tabStyles.tabActive]}
@@ -162,11 +173,129 @@ function TabSelector({ active, onChange }: { active: TabKey; onChange: (t: TabKe
           activeOpacity={0.7}
         >
           <Text style={[tabStyles.label, active === key && tabStyles.labelActive]}>
-            {key === 'fleet' ? 'Fleet' : 'Hired'}
+            {TAB_LABELS[key]}
           </Text>
         </TouchableOpacity>
       ))}
     </View>
+  )
+}
+
+// ── Check condition options ──────────────────────────────────────────────────
+
+const CONDITION_OPTIONS: { value: string; label: string; color: string; bg: string }[] = [
+  { value: 'good', label: 'Good', color: Colors.success, bg: 'rgba(61,139,65,0.15)' },
+  { value: 'fair', label: 'Fair', color: Colors.warning, bg: 'rgba(201,106,0,0.15)' },
+  { value: 'poor', label: 'Poor', color: '#E65100', bg: 'rgba(230,81,0,0.15)' },
+  { value: 'broken_down', label: 'Broken Down', color: Colors.error, bg: 'rgba(198,40,40,0.15)' },
+]
+
+// ── Daily check machine card ─────────────────────────────────────────────────
+
+function MachineCheckCard({ machine, onCheck }: { machine: DailyCheckMachine; onCheck: () => void }) {
+  const checked = !!machine.check
+  const condOpt = CONDITION_OPTIONS.find((c) => c.value === machine.check?.condition)
+  return (
+    <Card padding="none" style={{ overflow: 'hidden' }}>
+      <View style={[styles.accentBar, { backgroundColor: checked ? Colors.success : Colors.border }]} />
+      <View style={styles.row}>
+        <View style={[styles.iconWrap, { backgroundColor: checked ? 'rgba(61,139,65,0.15)' : Colors.surface }]}>
+          <Ionicons name={checked ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={checked ? Colors.success : Colors.textLight} />
+        </View>
+        <View style={styles.info}>
+          <Text style={styles.name}>{machine.name}</Text>
+          {machine.type ? <Text style={styles.type}>{machine.type}</Text> : null}
+          {machine.source === 'hired' ? <Text style={[styles.type, { color: Colors.warning }]}>Hired</Text> : null}
+        </View>
+        <View style={styles.right}>
+          {checked && condOpt ? (
+            <View style={[styles.statusPill, { backgroundColor: condOpt.bg }]}>
+              <Text style={[styles.statusText, { color: condOpt.color }]}>{condOpt.label}</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={checkStyles.checkBtn} onPress={onCheck} activeOpacity={0.8}>
+              <Text style={checkStyles.checkBtnText}>Check</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+      {checked && machine.check?.notes ? (
+        <View style={checkStyles.notesBanner}>
+          <Text style={checkStyles.notesText} numberOfLines={1}>{machine.check.notes}</Text>
+        </View>
+      ) : null}
+    </Card>
+  )
+}
+
+// ── Check modal ──────────────────────────────────────────────────────────────
+
+function CheckModal({ visible, machineName, onClose, onSubmit }: {
+  visible: boolean; machineName: string; onClose: () => void
+  onSubmit: (condition: string, notes: string, photoUri?: string, photoFilename?: string) => Promise<void>
+}) {
+  const [condition, setCondition] = useState('good')
+  const [notes, setNotes] = useState('')
+  const [photo, setPhoto] = useState<{ uri: string; filename: string } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async () => {
+    setSubmitting(true)
+    try {
+      await onSubmit(condition, notes, photo?.uri, photo?.filename)
+      setCondition('good'); setNotes(''); setPhoto(null)
+    } finally { setSubmitting(false) }
+  }
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync()
+    if (status !== 'granted') { Alert.alert('Permission required', 'Camera access is needed.'); return }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
+    if (!result.canceled && result.assets.length > 0) {
+      const compressed = await compressImage(result.assets[0].uri)
+      setPhoto({ uri: compressed, filename: `dc_${Date.now()}.jpg` })
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={modalStyles.root} edges={['top', 'bottom']}>
+        <View style={modalStyles.header}>
+          <TouchableOpacity onPress={onClose}><Text style={modalStyles.cancel}>Cancel</Text></TouchableOpacity>
+          <Text style={modalStyles.title} numberOfLines={1}>{machineName}</Text>
+          <TouchableOpacity onPress={handleSubmit} disabled={submitting}>
+            {submitting ? <ActivityIndicator size="small" color={Colors.primary} /> : <Text style={modalStyles.save}>Submit</Text>}
+          </TouchableOpacity>
+        </View>
+        <View style={modalStyles.body}>
+          <Text style={modalStyles.label}>Condition</Text>
+          <View style={modalStyles.conditionRow}>
+            {CONDITION_OPTIONS.map((opt) => (
+              <TouchableOpacity key={opt.value}
+                style={[modalStyles.conditionBtn, condition === opt.value && { backgroundColor: opt.bg, borderColor: opt.color }]}
+                onPress={() => setCondition(opt.value)} activeOpacity={0.8}>
+                <Text style={[modalStyles.conditionBtnText, condition === opt.value && { color: opt.color, fontWeight: '700' }]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Notes</Text>
+          <TextInput style={modalStyles.input} value={notes} onChangeText={setNotes} placeholder="Optional notes"
+            placeholderTextColor={Colors.textLight} multiline numberOfLines={3} textAlignVertical="top" />
+          <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Photo</Text>
+          {photo ? (
+            <View style={modalStyles.photoRow}>
+              <Image source={{ uri: photo.uri }} style={modalStyles.photoThumb} />
+              <TouchableOpacity onPress={() => setPhoto(null)}><Ionicons name="close-circle" size={24} color={Colors.error} /></TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={modalStyles.photoBtn} onPress={takePhoto} activeOpacity={0.8}>
+              <Ionicons name="camera-outline" size={20} color={Colors.primary} />
+              <Text style={modalStyles.photoBtnText}>Take Photo</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </SafeAreaView>
+    </Modal>
   )
 }
 
@@ -207,8 +336,11 @@ const tabStyles = StyleSheet.create({
 
 export default function EquipmentScreen() {
   const router = useRouter()
+  const queryClient = useQueryClient()
+  const { show } = useToastStore()
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>('fleet')
+  const [checkingMachine, setCheckingMachine] = useState<DailyCheckMachine | null>(null)
   const activeProject = useProjectStore((s) => s.activeProject)
   const projectId = activeProject?.id
 
@@ -239,8 +371,12 @@ export default function EquipmentScreen() {
   const { data: hiredMachines = [], isLoading: hireLoading, refetch: refetchHire } =
     useHire(projectId)
 
+  // Daily checks data
+  const { data: checksData, isLoading: checksLoading, refetch: refetchChecks } =
+    useDailyChecks(projectId)
+
   const fleetLoading = machinesLoading || breakdownsLoading
-  const isLoading = activeTab === 'fleet' ? fleetLoading : hireLoading
+  const isLoading = activeTab === 'fleet' ? fleetLoading : activeTab === 'hired' ? hireLoading : checksLoading
 
   const openCount = breakdowns.filter(b => !b.resolved).length
 
@@ -250,7 +386,6 @@ export default function EquipmentScreen() {
     const active = machines.filter(m => m.active)
     const inactive = machines.filter(m => !m.active)
 
-    // Group active machines by group_name
     const groups: Record<string, Machine[]> = {}
     const ungrouped: Machine[] = []
     for (const m of active) {
@@ -263,17 +398,14 @@ export default function EquipmentScreen() {
     }
 
     const items: FleetItem[] = []
-    // Grouped machines first
     for (const [groupName, groupMachines] of Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))) {
       items.push({ type: 'header', label: `${groupName} (${groupMachines.length})` })
       groupMachines.forEach(m => items.push({ type: 'machine', machine: m }))
     }
-    // Ungrouped active
     if (ungrouped.length > 0 && Object.keys(groups).length > 0) {
       items.push({ type: 'header', label: `Other Equipment (${ungrouped.length})` })
     }
     ungrouped.forEach(m => items.push({ type: 'machine', machine: m }))
-    // Inactive
     if (inactive.length > 0) {
       items.push({ type: 'header', label: `Inactive (${inactive.length})` })
       inactive.forEach(m => items.push({ type: 'machine', machine: m }))
@@ -281,24 +413,80 @@ export default function EquipmentScreen() {
     return items
   })()
 
+  // Checks data
+  const checkMachines = checksData?.machines ?? []
+  const sortedChecks = [...checkMachines].sort((a, b) => (a.check ? 1 : 0) - (b.check ? 1 : 0))
+  const checksTotal = checksData?.total ?? 0
+  const checksChecked = checksData?.checked ?? 0
+  const checksPct = checksTotal > 0 ? Math.round((checksChecked / checksTotal) * 100) : 0
+  const allChecksDone = checksTotal > 0 && checksChecked >= checksTotal
+
   const handleRefresh = async () => {
     setRefreshing(true)
     if (activeTab === 'fleet') {
       await Promise.all([refetchMachines(), refetchBreakdowns()])
-    } else {
+    } else if (activeTab === 'hired') {
       await refetchHire()
+    } else {
+      await refetchChecks()
     }
     setRefreshing(false)
   }
 
+  const handleSubmitCheck = useCallback(
+    async (condition: string, notes: string, photoUri?: string, photoFilename?: string) => {
+      if (!checkingMachine || !projectId) return
+      try {
+        await api.equipment.submitDailyCheck({
+          machine_id: checkingMachine.machine_id ?? undefined,
+          hired_machine_id: checkingMachine.hired_machine_id ?? undefined,
+          project_id: projectId,
+          condition,
+          notes: notes || undefined,
+          photo_uri: photoUri,
+          photo_filename: photoFilename,
+        })
+        show('Check recorded', 'success')
+        setCheckingMachine(null)
+        queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
+        if (condition === 'broken_down') {
+          router.push({
+            pathname: '/breakdown/new',
+            params: { machine_id: String(checkingMachine.machine_id ?? ''), machine_name: checkingMachine.name },
+          })
+        }
+      } catch {
+        show('Failed to submit check', 'error')
+      }
+    },
+    [checkingMachine, projectId, queryClient, router, show]
+  )
+
   const subtitle = activeTab === 'fleet'
     ? (openCount > 0 ? `${openCount} open breakdown${openCount > 1 ? 's' : ''}` : undefined)
-    : (hiredMachines.length > 0 ? `${hiredMachines.length} hired machine${hiredMachines.length !== 1 ? 's' : ''}` : undefined)
+    : activeTab === 'hired'
+    ? (hiredMachines.length > 0 ? `${hiredMachines.length} hired machine${hiredMachines.length !== 1 ? 's' : ''}` : undefined)
+    : (checksTotal > 0 ? `${checksChecked} / ${checksTotal} checked` : undefined)
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScreenHeader title="Equipment" subtitle={subtitle} />
       <TabSelector active={activeTab} onChange={setActiveTab} />
+
+      {/* Checks progress bar */}
+      {activeTab === 'checks' && checksTotal > 0 && (
+        <View style={checkStyles.progressWrap}>
+          <View style={checkStyles.progressTrack}>
+            <View style={[checkStyles.progressFill, { width: `${checksPct}%`, backgroundColor: allChecksDone ? Colors.success : Colors.primary }]} />
+          </View>
+          {allChecksDone && (
+            <View style={checkStyles.doneBanner}>
+              <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+              <Text style={checkStyles.doneText}>All machines checked</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {isLoading ? (
         <View style={styles.body}>
@@ -324,13 +512,11 @@ export default function EquipmentScreen() {
               )
             }}
             contentContainerStyle={styles.list}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
             showsVerticalScrollIndicator={false}
           />
         )
-      ) : (
+      ) : activeTab === 'hired' ? (
         hiredMachines.length === 0 ? (
           <EmptyState icon="📋" title="No hired machines" subtitle="No hired equipment for this project" />
         ) : (
@@ -339,12 +525,30 @@ export default function EquipmentScreen() {
             keyExtractor={m => String(m.id)}
             renderItem={({ item }) => <HiredMachineCard machine={item} />}
             contentContainerStyle={styles.list}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
             showsVerticalScrollIndicator={false}
           />
         )
+      ) : (
+        /* Checks tab */
+        checkMachines.length === 0 ? (
+          <EmptyState icon="🔧" title="No machines" subtitle="No equipment assigned to this project" />
+        ) : (
+          <FlatList
+            data={sortedChecks}
+            keyExtractor={(item) => item.machine_id ? `m-${item.machine_id}` : `h-${item.hired_machine_id}`}
+            renderItem={({ item }) => <MachineCheckCard machine={item} onCheck={() => setCheckingMachine(item)} />}
+            contentContainerStyle={styles.list}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
+            showsVerticalScrollIndicator={false}
+          />
+        )
+      )}
+
+      {/* Check Modal */}
+      {checkingMachine && (
+        <CheckModal visible={!!checkingMachine} machineName={checkingMachine.name}
+          onClose={() => setCheckingMachine(null)} onSubmit={handleSubmitCheck} />
       )}
     </SafeAreaView>
   )
@@ -424,4 +628,105 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.sm,
   },
+})
+
+const checkStyles = StyleSheet.create({
+  checkBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+  },
+  checkBtnText: { ...Typography.caption, color: Colors.dark, fontWeight: '700' },
+  notesBanner: {
+    paddingHorizontal: Spacing.md + 4,
+    paddingVertical: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+  },
+  notesText: { ...Typography.caption, color: Colors.textSecondary },
+  progressWrap: {
+    backgroundColor: Colors.background,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: Colors.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', borderRadius: 3 },
+  doneBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+    backgroundColor: 'rgba(61,139,65,0.12)',
+    borderRadius: BorderRadius.sm,
+    paddingVertical: Spacing.xs,
+  },
+  doneText: { ...Typography.caption, color: Colors.success, fontWeight: '700' },
+})
+
+const modalStyles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.background },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.dark,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 4,
+  },
+  cancel: { ...Typography.body, color: Colors.textLight },
+  title: { ...Typography.h4, color: Colors.white, flex: 1, textAlign: 'center', marginHorizontal: Spacing.sm },
+  save: { ...Typography.body, color: Colors.primary, fontWeight: '700' },
+  body: { padding: Spacing.md },
+  label: {
+    ...Typography.label,
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: Spacing.sm,
+  },
+  conditionRow: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
+  conditionBtn: {
+    flex: 1,
+    minWidth: '45%',
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+  },
+  conditionBtnText: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '500' },
+  input: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    ...Typography.body,
+    color: Colors.textPrimary,
+    minHeight: 80,
+  },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  photoThumb: { width: 80, height: 80, borderRadius: BorderRadius.sm },
+  photoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderStyle: 'dashed',
+  },
+  photoBtnText: { ...Typography.body, color: Colors.primary, fontWeight: '600' },
 })
