@@ -182,7 +182,97 @@ export interface MachineDetail {
   description: string | null
   delay_rate: number | null
   active: boolean
+  serial_number: string | null
+  manufacturer: string | null
+  model_number: string | null
+  acquired_date: string | null
+  dispose_by_date: string | null
+  next_inspection_date: string | null
+  inspection_interval_days: number | null
+  storage_instructions: string | null
+  service_instructions: string | null
+  spare_parts_notes: string | null
+  disposal_procedure: string | null
   breakdowns: BreakdownDetail[]
+  daily_checks: DailyCheckRecord[]
+  open_checklists: ChecklistItemRef[]
+  pending_transfer: TransferInfo | null
+}
+
+export interface DailyCheckRecord {
+  id: number
+  check_date: string
+  condition: 'good' | 'fair' | 'poor' | 'broken_down'
+  notes: string | null
+  checked_by: string | null
+  photo_url: string | null
+}
+
+export interface ChecklistItemRef {
+  checklist_id: number
+  checklist_name: string | null
+  item_id: number
+  machine_label: string
+}
+
+export interface TransferInfo {
+  id: number
+  from_project: string | null
+  to_project: string | null
+  scheduled_date: string
+  status: 'scheduled' | 'in_transit' | 'completed' | 'cancelled'
+  travel_notes: string | null
+  transport_contact: string | null
+}
+
+export interface DailyCheckMachine {
+  machine_id: number | null
+  hired_machine_id: number | null
+  name: string
+  plant_id: string | null
+  type: string | null
+  source: 'fleet' | 'hired'
+  check: {
+    id: number
+    condition: string
+    notes: string | null
+    checked_by: string | null
+    photo_url: string | null
+  } | null
+}
+
+export interface DailyChecksResponse {
+  project_id: number
+  date: string
+  total: number
+  checked: number
+  machines: DailyCheckMachine[]
+}
+
+export interface EquipmentChecklist {
+  id: number
+  checklist_name: string
+  project_id: number
+  project_name: string | null
+  due_date: string
+  completed_at: string | null
+  notes: string | null
+  total: number
+  checked: number
+  items: EquipmentChecklistItem[]
+}
+
+export interface EquipmentChecklistItem {
+  id: number
+  machine_id: number | null
+  hired_machine_id: number | null
+  machine_label: string
+  checked: boolean
+  checked_by: string | null
+  checked_at: string | null
+  condition: string | null
+  notes: string | null
+  photo_url: string | null
 }
 
 export interface Document {

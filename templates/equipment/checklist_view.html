@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% block title %}{{ checklist.checklist_name }} — Plytrack{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="fw-bold mb-1">{{ checklist.checklist_name }}</h3>
+    <div class="small text-muted">
+      <i class="bi bi-folder me-1"></i>{{ checklist.project.name }}
+      <span class="mx-2">|</span>
+      <i class="bi bi-calendar me-1"></i>Due {{ checklist.due_date.strftime('%d/%m/%Y') }}
+      {% if checklist.completed_at %}
+      <span class="badge bg-success ms-2">Completed</span>
+      {% elif checklist.due_date < today %}
+      <span class="badge bg-danger ms-2">OVERDUE</span>
+      {% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('equipment.admin_dashboard') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+  </a>
+</div>
+
+<!-- Progress bar -->
+{% set pct = ((checked_count / total * 100) | int) if total > 0 else 0 %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between small mb-1">
+      <span>Completion</span>
+      <span class="fw-bold">{{ checked_count }} / {{ total }} ({{ pct }}%)</span>
+    </div>
+    <div class="progress" style="height: 8px;">
+      <div class="progress-bar {% if pct == 100 %}bg-success{% elif pct > 50 %}bg-primary{% else %}bg-warning{% endif %}"
+           style="width: {{ pct }}%"></div>
+    </div>
+  </div>
+</div>
+
+{% if checklist.notes %}
+<div class="alert alert-info small"><i class="bi bi-info-circle me-2"></i>{{ checklist.notes }}</div>
+{% endif %}
+
+<!-- Items -->
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 30px;"></th>
+          <th>Machine</th>
+          <th>Condition</th>
+          <th>Checked By</th>
+          <th>Checked At</th>
+          <th>Notes</th>
+          <th>Photo</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items | sort(attribute='checked') %}
+        <tr class="{% if item.checked %}table-success{% endif %}">
+          <td>
+            {% if item.checked %}
+            <i class="bi bi-check-circle-fill text-success"></i>
+            {% else %}
+            <i class="bi bi-circle text-muted"></i>
+            {% endif %}
+          </td>
+          <td class="fw-semibold">{{ item.machine_label }}</td>
+          <td>
+            {% if item.condition %}
+            <span class="badge {% if item.condition == 'good' %}bg-success{% elif item.condition == 'fair' %}bg-warning{% elif item.condition == 'poor' %}bg-danger{% else %}bg-dark{% endif %}">
+              {{ item.condition | title }}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="small">
+            {% if item.checked_by_user %}
+            {{ item.checked_by_user.display_name or item.checked_by_user.username }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="small">
+            {% if item.checked_at %}
+            {{ item.checked_at.strftime('%d/%m %H:%M') }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="small">{{ item.notes or '—' }}</td>
+          <td>
+            {% if item.photo_filename %}
+            <a href="{{ url_for('equipment.serve_checklist_photo', filename=item.photo_filename) }}" target="_blank">
+              <i class="bi bi-image text-primary"></i>
+            </a>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if not item.checked %}
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#checkItem{{ item.id }}">
+              <i class="bi bi-check-lg me-1"></i>Check
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Admin delete -->
+{% if current_user.role == 'admin' %}
+<div class="mt-3">
+  <form method="POST" action="{{ url_for('equipment.checklist_delete', checklist_id=checklist.id) }}"
+        onsubmit="return confirm('Delete this checklist?');">
+    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Delete Checklist</button>
+  </form>
+</div>
+{% endif %}
+
+<!-- Check item modals -->
+{% for item in items %}
+{% if not item.checked %}
+<div class="modal fade" id="checkItem{{ item.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('equipment.checklist_item_check', checklist_id=checklist.id, item_id=item.id) }}"
+          enctype="multipart/form-data">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Check: {{ item.machine_label }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Condition</label>
+            <select name="condition" class="form-select">
+              <option value="good">Good</option>
+              <option value="fair">Fair</option>
+              <option value="poor">Poor</option>
+              <option value="broken_down">Broken Down</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Photo</label>
+            <input type="file" name="photo" class="form-control" accept="image/*">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Mark Checked</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% set today = import('datetime').date.today() if false else checklist.due_date %}
+{% endblock %}

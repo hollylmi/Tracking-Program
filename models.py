@@ -67,8 +67,10 @@ class Project(db.Model):
     track_by_lot = db.Column(db.Boolean, default=True)  # False = track by material only (no lot field)
     site_address = db.Column(db.String(500))      # Physical site address
     site_contact = db.Column(db.String(200))      # On-site contact name / phone
+    site_manager_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     entries = db.relationship('DailyEntry', backref='project', lazy=True)
+    site_manager = db.relationship('User', foreign_keys=[site_manager_user_id], lazy=True)
     planned_data = db.relationship('PlannedData', backref='project',
                                    cascade='all, delete-orphan', lazy=True)
     non_work_dates = db.relationship('ProjectNonWorkDate', backref='project',
@@ -151,6 +153,18 @@ class Machine(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey('machine_group.id'), nullable=True)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Extended equipment tracking fields
+    acquired_date = db.Column(db.Date, nullable=True)
+    dispose_by_date = db.Column(db.Date, nullable=True)
+    next_inspection_date = db.Column(db.Date, nullable=True)
+    inspection_interval_days = db.Column(db.Integer, nullable=True)
+    storage_instructions = db.Column(db.Text, nullable=True)
+    service_instructions = db.Column(db.Text, nullable=True)
+    spare_parts_notes = db.Column(db.Text, nullable=True)
+    disposal_procedure = db.Column(db.Text, nullable=True)
+    serial_number = db.Column(db.String(200), nullable=True)
+    manufacturer = db.Column(db.String(200), nullable=True)
+    model_number = db.Column(db.String(200), nullable=True)
 
     def __repr__(self):
         return f'<Machine {self.name}>'
@@ -793,6 +807,108 @@ class BreakdownPhoto(db.Model):
 
     def __repr__(self):
         return f'<BreakdownPhoto {self.filename}>'
+
+
+# ---------------------------------------------------------------------------
+# Equipment transfer, checklist, and daily check models
+# ---------------------------------------------------------------------------
+
+class MachineTransfer(db.Model):
+    """Scheduled transfer of a machine between projects."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False)
+    from_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    to_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    scheduled_date = db.Column(db.Date, nullable=False)
+    travel_notes = db.Column(db.Text)
+    transport_contact = db.Column(db.String(200))
+    status = db.Column(db.String(20), default='scheduled')  # scheduled / in_transit / completed / cancelled
+    reminder_sent = db.Column(db.Boolean, default=False)
+    created_by = db.Column(db.String(200))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    machine = db.relationship('Machine', backref='transfers')
+    from_project = db.relationship('Project', foreign_keys=[from_project_id])
+    to_project = db.relationship('Project', foreign_keys=[to_project_id])
+
+    def __repr__(self):
+        return f'<MachineTransfer machine={self.machine_id} status={self.status}>'
+
+
+class SiteEquipmentChecklist(db.Model):
+    """Periodic full-fleet audit for a project site."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    checklist_name = db.Column(db.String(200), nullable=False)
+    due_date = db.Column(db.Date, nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    notes = db.Column(db.Text)
+
+    project = db.relationship('Project', backref='equipment_checklists')
+    created_by_user = db.relationship('User', foreign_keys=[created_by_user_id])
+    items = db.relationship('SiteEquipmentChecklistItem', backref='checklist',
+                            cascade='all, delete-orphan', lazy=True)
+
+    def __repr__(self):
+        return f'<SiteEquipmentChecklist {self.checklist_name}>'
+
+
+class SiteEquipmentChecklistItem(db.Model):
+    """One row per machine per checklist."""
+    id = db.Column(db.Integer, primary_key=True)
+    checklist_id = db.Column(db.Integer, db.ForeignKey('site_equipment_checklist.id'), nullable=False)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=True)
+    hired_machine_id = db.Column(db.Integer, db.ForeignKey('hired_machine.id'), nullable=True)
+    machine_label = db.Column(db.String(300))
+    checked = db.Column(db.Boolean, default=False)
+    checked_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    checked_at = db.Column(db.DateTime, nullable=True)
+    condition = db.Column(db.String(20), nullable=True)  # good / fair / poor
+    photo_filename = db.Column(db.String(500), nullable=True)
+    photo_original_name = db.Column(db.String(500), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+
+    machine = db.relationship('Machine', backref='checklist_items')
+    hired_machine = db.relationship('HiredMachine', backref='checklist_items')
+    checked_by_user = db.relationship('User', foreign_keys=[checked_by_user_id])
+
+    def __repr__(self):
+        return f'<SiteEquipmentChecklistItem checklist={self.checklist_id} machine_label={self.machine_label}>'
+
+
+class MachineDailyCheck(db.Model):
+    """Morning supervisor walk-around — one record per machine per day per project."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=True)
+    hired_machine_id = db.Column(db.Integer, db.ForeignKey('hired_machine.id'), nullable=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    check_date = db.Column(db.Date, nullable=False)
+    checked_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    condition = db.Column(db.String(20), nullable=False)  # good / fair / poor / broken_down
+    notes = db.Column(db.Text, nullable=True)
+    photo_filename = db.Column(db.String(500), nullable=True)
+    photo_original_name = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    breakdown_id = db.Column(db.Integer, db.ForeignKey('machine_breakdown.id'), nullable=True)
+
+    machine = db.relationship('Machine', backref='daily_checks')
+    hired_machine = db.relationship('HiredMachine', backref='daily_checks')
+    project = db.relationship('Project', backref='daily_checks')
+    checked_by_user = db.relationship('User', foreign_keys=[checked_by_user_id])
+    breakdown = db.relationship('MachineBreakdown', backref='daily_check')
+
+    __table_args__ = (
+        db.UniqueConstraint('machine_id', 'project_id', 'check_date',
+                            name='uq_daily_check_machine'),
+        db.UniqueConstraint('hired_machine_id', 'project_id', 'check_date',
+                            name='uq_daily_check_hired'),
+    )
+
+    def __repr__(self):
+        return f'<MachineDailyCheck project={self.project_id} date={self.check_date}>'
 
 
 # ---------------------------------------------------------------------------

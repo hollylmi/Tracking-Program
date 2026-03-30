@@ -1,9 +1,9 @@
 import os
 import uuid
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import current_user
 
 from blueprints.auth import require_role
@@ -12,7 +12,9 @@ from utils.helpers import get_active_project_id
 from flask_login import current_user
 from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBreakdown,
                     BreakdownPhoto, ProjectEquipmentAssignment, ProjectEquipmentRequirement,
-                    ProjectMachine, EquipmentAssignmentHistory)
+                    ProjectMachine, EquipmentAssignmentHistory, User, DailyEntry,
+                    MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem,
+                    MachineDailyCheck)
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -321,3 +323,482 @@ def breakdown_delete(bd_id):
     db.session.commit()
     flash('Breakdown record deleted.', 'success')
     return redirect(url_for('equipment.equipment_overview'))
+
+
+# ---------------------------------------------------------------------------
+# Checklist routes
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/checklist/create', methods=['POST'])
+@require_role('admin')
+def checklist_create():
+    """Admin creates a new site equipment checklist for a project."""
+    project_id = request.form.get('project_id', type=int)
+    checklist_name = request.form.get('checklist_name', '').strip()
+    due_date_str = request.form.get('due_date', '').strip()
+    notes = request.form.get('notes', '').strip() or None
+
+    if not project_id or not checklist_name or not due_date_str:
+        flash('Project, name, and due date are required.', 'danger')
+        return redirect(url_for('equipment.admin_dashboard'))
+
+    try:
+        due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid date.', 'danger')
+        return redirect(url_for('equipment.admin_dashboard'))
+
+    project = Project.query.get_or_404(project_id)
+    cl = SiteEquipmentChecklist(
+        project_id=project_id,
+        checklist_name=checklist_name,
+        due_date=due_date,
+        created_by_user_id=current_user.id,
+        notes=notes,
+    )
+    db.session.add(cl)
+    db.session.flush()
+
+    # Auto-populate items for all machines assigned to this project
+    assigned_own = ProjectMachine.query.filter_by(project_id=project_id).all()
+    for pm in assigned_own:
+        label = pm.machine.name
+        if pm.machine.plant_id:
+            label += f' ({pm.machine.plant_id})'
+        db.session.add(SiteEquipmentChecklistItem(
+            checklist_id=cl.id,
+            machine_id=pm.machine_id,
+            machine_label=label,
+        ))
+
+    hired = HiredMachine.query.filter_by(project_id=project_id, active=True).all()
+    for hm in hired:
+        label = hm.machine_name
+        if hm.plant_id:
+            label += f' ({hm.plant_id})'
+        db.session.add(SiteEquipmentChecklistItem(
+            checklist_id=cl.id,
+            hired_machine_id=hm.id,
+            machine_label=label,
+        ))
+
+    db.session.commit()
+    flash(f'Checklist "{checklist_name}" created with {len(assigned_own) + len(hired)} items.', 'success')
+    return redirect(url_for('equipment.checklist_view', checklist_id=cl.id))
+
+
+@equipment_bp.route('/equipment/checklist/<int:checklist_id>')
+@require_role('admin', 'supervisor', 'site')
+def checklist_view(checklist_id):
+    """View a checklist with all items and completion status."""
+    cl = SiteEquipmentChecklist.query.get_or_404(checklist_id)
+    items = SiteEquipmentChecklistItem.query.filter_by(checklist_id=checklist_id).all()
+    total = len(items)
+    checked_count = sum(1 for i in items if i.checked)
+    return render_template('equipment/checklist_view.html',
+                           checklist=cl, items=items,
+                           total=total, checked_count=checked_count)
+
+
+@equipment_bp.route('/equipment/checklist/<int:checklist_id>/item/<int:item_id>/check', methods=['POST'])
+@require_role('admin', 'supervisor')
+def checklist_item_check(checklist_id, item_id):
+    """Supervisor marks a checklist item as checked."""
+    item = SiteEquipmentChecklistItem.query.get_or_404(item_id)
+    if item.checklist_id != checklist_id:
+        flash('Invalid checklist item.', 'danger')
+        return redirect(url_for('equipment.checklist_view', checklist_id=checklist_id))
+
+    condition = request.form.get('condition', 'good')
+    notes = request.form.get('notes', '').strip() or None
+
+    item.checked = True
+    item.checked_by_user_id = current_user.id
+    item.checked_at = datetime.utcnow()
+    item.condition = condition
+    item.notes = notes
+
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower()
+        stored = f"{uuid.uuid4()}{ext}"
+        local_path = os.path.join(UPLOAD_FOLDER, 'checklists', stored)
+        storage.upload_file(photo, f'checklists/{stored}', local_path)
+        item.photo_filename = stored
+        item.photo_original_name = photo.filename
+
+    # If condition is poor or broken_down, create a breakdown record
+    if condition in ('poor', 'broken_down'):
+        bd = MachineBreakdown(
+            machine_id=item.machine_id,
+            hired_machine_id=item.hired_machine_id,
+            incident_date=date.today(),
+            description=f'Flagged during checklist: {item.checklist.checklist_name}. Condition: {condition}. {notes or ""}',
+            repair_status='pending',
+        )
+        db.session.add(bd)
+        db.session.flush()
+
+        # Send notification to admin
+        try:
+            from utils.notifications import notify_breakdown_to_admin
+            machine_name = item.machine_label
+            project_name = item.checklist.project.name if item.checklist.project else 'Unknown'
+            notify_breakdown_to_admin(bd, machine_name, project_name)
+        except Exception:
+            pass
+
+    # Check if all items are now done
+    cl = SiteEquipmentChecklist.query.get(checklist_id)
+    unchecked = SiteEquipmentChecklistItem.query.filter_by(
+        checklist_id=checklist_id, checked=False).count()
+    if unchecked == 0:
+        cl.completed_at = datetime.utcnow()
+
+    db.session.commit()
+    flash(f'Item "{item.machine_label}" checked.', 'success')
+    return redirect(url_for('equipment.checklist_view', checklist_id=checklist_id))
+
+
+@equipment_bp.route('/equipment/checklist/<int:checklist_id>/delete', methods=['POST'])
+@require_role('admin')
+def checklist_delete(checklist_id):
+    """Admin deletes a checklist."""
+    cl = SiteEquipmentChecklist.query.get_or_404(checklist_id)
+    db.session.delete(cl)
+    db.session.commit()
+    flash('Checklist deleted.', 'info')
+    return redirect(url_for('equipment.admin_dashboard'))
+
+
+# ---------------------------------------------------------------------------
+# Transfer routes
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/transfer/schedule', methods=['POST'])
+@require_role('admin', 'supervisor')
+def transfer_schedule():
+    """Schedule a machine transfer between projects."""
+    machine_id = request.form.get('machine_id', type=int)
+    from_project_id = request.form.get('from_project_id', type=int)
+    to_project_id = request.form.get('to_project_id', type=int)
+    scheduled_date_str = request.form.get('scheduled_date', '').strip()
+    travel_notes = request.form.get('travel_notes', '').strip() or None
+    transport_contact = request.form.get('transport_contact', '').strip() or None
+
+    if not machine_id or not scheduled_date_str:
+        flash('Machine and scheduled date are required.', 'danger')
+        return redirect(url_for('equipment.admin_dashboard'))
+
+    try:
+        scheduled_date = datetime.strptime(scheduled_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid date.', 'danger')
+        return redirect(url_for('equipment.admin_dashboard'))
+
+    machine = Machine.query.get_or_404(machine_id)
+
+    # Validate machine is currently assigned to from_project
+    if from_project_id:
+        existing = ProjectMachine.query.filter_by(
+            machine_id=machine_id, project_id=from_project_id).first()
+        if not existing:
+            flash(f'Machine "{machine.name}" is not assigned to the selected source project.', 'danger')
+            return redirect(url_for('equipment.admin_dashboard'))
+
+    transfer = MachineTransfer(
+        machine_id=machine_id,
+        from_project_id=from_project_id or None,
+        to_project_id=to_project_id or None,
+        scheduled_date=scheduled_date,
+        travel_notes=travel_notes,
+        transport_contact=transport_contact,
+        created_by=current_user.display_name or current_user.username,
+    )
+    db.session.add(transfer)
+    db.session.commit()
+    flash(f'Transfer scheduled for "{machine.name}".', 'success')
+    return redirect(url_for('equipment.admin_dashboard'))
+
+
+@equipment_bp.route('/equipment/transfer/<int:transfer_id>/update', methods=['POST'])
+@require_role('admin', 'supervisor')
+def transfer_update(transfer_id):
+    """Update transfer status. When completed, update ProjectMachine and log history."""
+    transfer = MachineTransfer.query.get_or_404(transfer_id)
+    new_status = request.form.get('status', transfer.status)
+    transfer.status = new_status
+
+    if new_status == 'completed' and not transfer.completed_at:
+        transfer.completed_at = datetime.utcnow()
+
+        # Update ProjectMachine
+        existing = ProjectMachine.query.filter_by(machine_id=transfer.machine_id).first()
+        if transfer.to_project_id:
+            if existing:
+                existing.project_id = transfer.to_project_id
+            else:
+                db.session.add(ProjectMachine(
+                    project_id=transfer.to_project_id,
+                    machine_id=transfer.machine_id,
+                ))
+        elif existing:
+            db.session.delete(existing)
+
+        # Log assignment history
+        db.session.add(EquipmentAssignmentHistory(
+            machine_id=transfer.machine_id,
+            from_project_id=transfer.from_project_id,
+            to_project_id=transfer.to_project_id,
+            moved_by=current_user.display_name or current_user.username,
+        ))
+
+    db.session.commit()
+    flash(f'Transfer updated to {new_status}.', 'success')
+    return redirect(url_for('equipment.admin_dashboard'))
+
+
+# ---------------------------------------------------------------------------
+# Daily check routes
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/daily-check/submit', methods=['POST'])
+@require_role('admin', 'supervisor')
+def daily_check_submit():
+    """Supervisor submits a daily check for one machine."""
+    machine_id = request.form.get('machine_id', type=int)
+    hired_machine_id = request.form.get('hired_machine_id', type=int)
+    project_id = request.form.get('project_id', type=int)
+    condition = request.form.get('condition', 'good')
+    notes = request.form.get('notes', '').strip() or None
+
+    if not project_id or (not machine_id and not hired_machine_id):
+        flash('Project and machine are required.', 'danger')
+        return redirect(url_for('equipment.admin_dashboard'))
+
+    check = MachineDailyCheck(
+        machine_id=machine_id or None,
+        hired_machine_id=hired_machine_id or None,
+        project_id=project_id,
+        check_date=date.today(),
+        checked_by_user_id=current_user.id,
+        condition=condition,
+        notes=notes,
+    )
+
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower()
+        stored = f"{uuid.uuid4()}{ext}"
+        local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
+        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        check.photo_filename = stored
+        check.photo_original_name = photo.filename
+
+    # If broken_down, auto-create a breakdown
+    if condition == 'broken_down':
+        machine_name = ''
+        if machine_id:
+            m = Machine.query.get(machine_id)
+            machine_name = m.name if m else ''
+        elif hired_machine_id:
+            hm = HiredMachine.query.get(hired_machine_id)
+            machine_name = hm.machine_name if hm else ''
+
+        bd = MachineBreakdown(
+            machine_id=machine_id or None,
+            hired_machine_id=hired_machine_id or None,
+            incident_date=date.today(),
+            description=f'Flagged as broken down during daily check. {notes or ""}',
+            repair_status='pending',
+        )
+        db.session.add(bd)
+        db.session.flush()
+        check.breakdown_id = bd.id
+
+        try:
+            from utils.notifications import notify_breakdown_to_admin
+            project = Project.query.get(project_id)
+            notify_breakdown_to_admin(bd, machine_name, project.name if project else 'Unknown')
+        except Exception:
+            pass
+
+    db.session.add(check)
+    db.session.commit()
+    flash('Daily check recorded.', 'success')
+    return redirect(url_for('equipment.admin_dashboard'))
+
+
+# ---------------------------------------------------------------------------
+# Machine detail edit
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/machine/<int:machine_id>/edit-details', methods=['POST'])
+@require_role('admin')
+def machine_edit_details(machine_id):
+    """Edit the extended machine detail fields."""
+    m = Machine.query.get_or_404(machine_id)
+
+    for field in ('serial_number', 'manufacturer', 'model_number',
+                  'storage_instructions', 'service_instructions',
+                  'spare_parts_notes', 'disposal_procedure'):
+        val = request.form.get(field, '').strip()
+        setattr(m, field, val if val else None)
+
+    for date_field in ('acquired_date', 'dispose_by_date', 'next_inspection_date'):
+        val = request.form.get(date_field, '').strip()
+        if val:
+            try:
+                setattr(m, date_field, datetime.strptime(val, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+        else:
+            setattr(m, date_field, None)
+
+    interval = request.form.get('inspection_interval_days', '').strip()
+    m.inspection_interval_days = int(interval) if interval else None
+
+    db.session.commit()
+    flash(f'Details updated for "{m.name}".', 'success')
+
+    # Redirect back to the referrer if available, else admin dashboard
+    return redirect(request.referrer or url_for('equipment.admin_dashboard'))
+
+
+# ---------------------------------------------------------------------------
+# Admin dashboard
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/admin-dashboard')
+@require_role('admin')
+def admin_dashboard():
+    """Admin overview page — daily checks, breakdowns, checklists, transfers."""
+    from sqlalchemy import func
+
+    today_date = date.today()
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    project_data = []
+    total_incomplete_checks = 0
+    total_open_breakdowns = 0
+    total_overdue_checklists = 0
+    flagged_machines = 0
+
+    for p in projects:
+        # Count machines assigned to this project
+        own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
+        hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
+        total_machines = own_count + hired_count
+
+        # Daily checks done today for this project
+        checks_today = MachineDailyCheck.query.filter_by(
+            project_id=p.id, check_date=today_date).count()
+
+        # DailyEntry submitted today
+        entry_today = DailyEntry.query.filter_by(
+            project_id=p.id).filter(
+            func.date(DailyEntry.entry_date) == today_date).first()
+
+        # Open breakdowns for this project
+        own_machine_ids = {pm.machine_id for pm in ProjectMachine.query.filter_by(project_id=p.id).all()}
+        hired_ids = {hm.id for hm in HiredMachine.query.filter_by(project_id=p.id).all()}
+        open_bds = MachineBreakdown.query.filter(
+            MachineBreakdown.repair_status != 'completed',
+            db.or_(
+                MachineBreakdown.machine_id.in_(own_machine_ids) if own_machine_ids else db.false(),
+                MachineBreakdown.hired_machine_id.in_(hired_ids) if hired_ids else db.false(),
+            )
+        ).count()
+
+        # Checklists
+        active_checklists = SiteEquipmentChecklist.query.filter_by(
+            project_id=p.id).filter(
+            SiteEquipmentChecklist.completed_at.is_(None)).all()
+        checklist_info = []
+        for cl in active_checklists:
+            total_items = len(cl.items)
+            checked_items = sum(1 for i in cl.items if i.checked)
+            checklist_info.append({
+                'id': cl.id,
+                'name': cl.checklist_name,
+                'due_date': cl.due_date,
+                'total': total_items,
+                'checked': checked_items,
+                'overdue': cl.due_date < today_date,
+            })
+
+        if total_machines > checks_today:
+            total_incomplete_checks += 1
+        total_open_breakdowns += open_bds
+
+        site_manager_name = None
+        if p.site_manager:
+            site_manager_name = p.site_manager.display_name or p.site_manager.username
+
+        project_data.append({
+            'project': p,
+            'site_manager': site_manager_name,
+            'total_machines': total_machines,
+            'checks_today': checks_today,
+            'entry_submitted': entry_today is not None,
+            'open_breakdowns': open_bds,
+            'checklists': checklist_info,
+        })
+
+    # Checklists due within 7 days (global)
+    upcoming_checklists = SiteEquipmentChecklist.query.filter(
+        SiteEquipmentChecklist.completed_at.is_(None),
+        SiteEquipmentChecklist.due_date <= today_date + timedelta(days=7),
+    ).all()
+    total_overdue_checklists = len(upcoming_checklists)
+
+    # Machines with upcoming disposal or inspection
+    from datetime import timedelta
+    alert_machines = Machine.query.filter(
+        Machine.active == True,
+        db.or_(
+            db.and_(Machine.dispose_by_date.isnot(None),
+                    Machine.dispose_by_date <= today_date + timedelta(days=30)),
+            db.and_(Machine.next_inspection_date.isnot(None),
+                    Machine.next_inspection_date <= today_date + timedelta(days=14)),
+        )
+    ).order_by(Machine.dispose_by_date, Machine.next_inspection_date).all()
+    flagged_machines = len(alert_machines)
+
+    # Pending transfers
+    pending_transfers = MachineTransfer.query.filter(
+        MachineTransfer.status.in_(['scheduled', 'in_transit'])
+    ).order_by(MachineTransfer.scheduled_date).all()
+
+    return render_template('equipment/admin_dashboard.html',
+                           project_data=project_data,
+                           projects=projects,
+                           alert_machines=alert_machines,
+                           pending_transfers=pending_transfers,
+                           total_incomplete_checks=total_incomplete_checks,
+                           total_open_breakdowns=total_open_breakdowns,
+                           total_overdue_checklists=total_overdue_checklists,
+                           flagged_machines=flagged_machines,
+                           today=today_date)
+
+
+# ---------------------------------------------------------------------------
+# Checklist photo serving
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/checklist-photo/<filename>')
+@require_role('admin', 'supervisor', 'site')
+def serve_checklist_photo(filename):
+    return storage.serve_file(
+        f'checklists/{filename}',
+        os.path.join(UPLOAD_FOLDER, 'checklists', filename)
+    )
+
+
+@equipment_bp.route('/equipment/daily-check-photo/<filename>')
+@require_role('admin', 'supervisor', 'site')
+def serve_daily_check_photo(filename):
+    return storage.serve_file(
+        f'daily_checks/{filename}',
+        os.path.join(UPLOAD_FOLDER, 'daily_checks', filename)
+    )

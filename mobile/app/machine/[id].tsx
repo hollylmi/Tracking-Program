@@ -25,7 +25,7 @@ import { api } from '../../lib/api'
 import { cachedQuery } from '../../lib/cachedQuery'
 import { useAuthStore } from '../../store/auth'
 import { useToastStore } from '../../store/toast'
-import { BreakdownDetail, MachineDetail } from '../../types'
+import { BreakdownDetail, MachineDetail, DailyCheckRecord } from '../../types'
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
@@ -618,6 +618,30 @@ export default function MachineDetailScreen() {
                 <Text style={styles.infoValue}>{display.plant_id}</Text>
               </View>
             )}
+            {display.serial_number && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Serial No.</Text>
+                <Text style={styles.infoValue}>{display.serial_number}</Text>
+              </View>
+            )}
+            {display.manufacturer && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Manufacturer</Text>
+                <Text style={styles.infoValue}>{display.manufacturer}</Text>
+              </View>
+            )}
+            {display.model_number && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Model</Text>
+                <Text style={styles.infoValue}>{display.model_number}</Text>
+              </View>
+            )}
+            {display.acquired_date && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Acquired</Text>
+                <Text style={styles.infoValue}>{formatDate(display.acquired_date)}</Text>
+              </View>
+            )}
             {display.delay_rate != null && (
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Delay Rate</Text>
@@ -631,7 +655,148 @@ export default function MachineDetailScreen() {
               </View>
             )}
           </View>
+
+          {/* Storage, service, spare parts info */}
+          {(display.storage_instructions || display.service_instructions || display.spare_parts_notes || display.disposal_procedure) && (
+            <View style={[styles.infoGrid, { marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.border }]}>
+              {display.storage_instructions && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Storage</Text>
+                  <Text style={[styles.infoValue, { flex: 1 }]}>{display.storage_instructions}</Text>
+                </View>
+              )}
+              {display.service_instructions && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Service</Text>
+                  <Text style={[styles.infoValue, { flex: 1 }]}>{display.service_instructions}</Text>
+                </View>
+              )}
+              {display.spare_parts_notes && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Spare Parts</Text>
+                  <Text style={[styles.infoValue, { flex: 1 }]}>{display.spare_parts_notes}</Text>
+                </View>
+              )}
+              {display.disposal_procedure && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Disposal</Text>
+                  <Text style={[styles.infoValue, { flex: 1 }]}>{display.disposal_procedure}</Text>
+                </View>
+              )}
+            </View>
+          )}
         </Card>
+
+        {/* Lifecycle section */}
+        {(display.dispose_by_date || display.next_inspection_date) && (
+          <Card style={styles.infoCard}>
+            <Text style={[styles.sectionTitle, { marginBottom: Spacing.sm }]}>Lifecycle</Text>
+            <View style={styles.infoGrid}>
+              {display.dispose_by_date && (() => {
+                const daysLeft = Math.ceil((new Date(display.dispose_by_date + 'T00:00:00').getTime() - Date.now()) / 86400000)
+                return (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Dispose By</Text>
+                    <Text style={[styles.infoValue, daysLeft <= 14 ? { color: Colors.error, fontWeight: '700' } : {}]}>
+                      {formatDate(display.dispose_by_date)} ({daysLeft}d)
+                    </Text>
+                  </View>
+                )
+              })()}
+              {display.next_inspection_date && (() => {
+                const daysLeft = Math.ceil((new Date(display.next_inspection_date + 'T00:00:00').getTime() - Date.now()) / 86400000)
+                return (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Inspection</Text>
+                    <Text style={[styles.infoValue, daysLeft <= 7 ? { color: Colors.warning, fontWeight: '700' } : {}]}>
+                      {formatDate(display.next_inspection_date)} ({daysLeft}d)
+                    </Text>
+                  </View>
+                )
+              })()}
+              {display.inspection_interval_days && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Interval</Text>
+                  <Text style={styles.infoValue}>Every {display.inspection_interval_days} days</Text>
+                </View>
+              )}
+            </View>
+          </Card>
+        )}
+
+        {/* Daily checks timeline */}
+        {(display.daily_checks ?? []).length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recent Daily Checks</Text>
+            <Card padding="none">
+              {(display.daily_checks ?? []).map((dc: DailyCheckRecord, idx: number) => {
+                const condColors: Record<string, string> = {
+                  good: Colors.success,
+                  fair: Colors.warning,
+                  poor: '#E65100',
+                  broken_down: Colors.error,
+                }
+                return (
+                  <View key={dc.id}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: Spacing.md }}>
+                      <View style={{
+                        width: 10, height: 10, borderRadius: 5,
+                        backgroundColor: condColors[dc.condition] ?? Colors.textLight,
+                      }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ ...Typography.bodySmall, color: Colors.textPrimary }}>
+                          {formatDate(dc.check_date)} — {dc.condition.replace('_', ' ')}
+                        </Text>
+                        {dc.checked_by && (
+                          <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>
+                            by {dc.checked_by}
+                          </Text>
+                        )}
+                        {dc.notes && (
+                          <Text style={{ ...Typography.caption, color: Colors.textLight }} numberOfLines={1}>
+                            {dc.notes}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    {idx < (display.daily_checks ?? []).length - 1 && <View style={styles.divider} />}
+                  </View>
+                )
+              })}
+            </Card>
+          </View>
+        )}
+
+        {/* Pending transfer */}
+        {display.pending_transfer && (
+          <Card style={[styles.infoCard, { borderLeftWidth: 4, borderLeftColor: Colors.warning }]}>
+            <Text style={[styles.sectionTitle, { marginBottom: Spacing.sm }]}>Pending Transfer</Text>
+            <View style={styles.infoGrid}>
+              {display.pending_transfer.from_project && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>From</Text>
+                  <Text style={styles.infoValue}>{display.pending_transfer.from_project}</Text>
+                </View>
+              )}
+              {display.pending_transfer.to_project && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>To</Text>
+                  <Text style={styles.infoValue}>{display.pending_transfer.to_project}</Text>
+                </View>
+              )}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Scheduled</Text>
+                <Text style={styles.infoValue}>{formatDate(display.pending_transfer.scheduled_date)}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Status</Text>
+                <Text style={[styles.infoValue, { color: Colors.warning, fontWeight: '600' }]}>
+                  {display.pending_transfer.status.replace('_', ' ')}
+                </Text>
+              </View>
+            </View>
+          </Card>
+        )}
 
         {/* Breakdown status summary */}
         {openCount > 0 && (

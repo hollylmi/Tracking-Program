@@ -15,6 +15,7 @@ from models import (
     PlannedData, Role, DeviceToken, EntryPhoto,
     ProjectBudgetedRole, ProjectNonWorkDate, PublicHoliday, CFMEUDate,
     EmployeeLeave, ScheduleDayOverride,
+    MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem, MachineDailyCheck,
 )
 from utils.files import allowed_photo
 import storage
@@ -2490,10 +2491,23 @@ def send_reminders():
         if user.role != 'admin':
             return {'error': 'Access denied'}, 403
 
-    from utils.notifications import send_entry_reminders
-    count = send_entry_reminders()
+    from utils.notifications import (send_entry_reminders, send_daily_check_reminders,
+                                      send_checklist_reminders, send_transfer_reminders,
+                                      send_expiry_alerts)
+    entry_count = send_entry_reminders()
+    check_count = send_daily_check_reminders()
+    checklist_count = send_checklist_reminders()
+    transfer_count = send_transfer_reminders()
+    expiry_count = send_expiry_alerts()
 
-    return {'message': 'Reminders sent', 'count': count}, 200
+    return {
+        'message': 'Reminders sent',
+        'entry_reminders': entry_count,
+        'daily_check_reminders': check_count,
+        'checklist_reminders': checklist_count,
+        'transfer_reminders': transfer_count,
+        'expiry_alerts': expiry_count,
+    }, 200
 
 
 @api_data_bp.route('/admin/send-travel-reminders', methods=['POST'])
@@ -2558,4 +2572,521 @@ def beta_metrics():
         'total_entries': total_entries,
         'entries_with_timing': len(timed),
         'avg_completion_seconds': round(avg, 1) if avg is not None else None,
+    }, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EQUIPMENT — extended API endpoints for mobile
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/equipment/machine/<int:machine_id>', methods=['GET'])
+@jwt_required()
+def equipment_machine_detail(machine_id):
+    """Full machine detail including new fields, daily checks, checklists, transfers."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    from models import (MachineTransfer, SiteEquipmentChecklistItem,
+                        MachineDailyCheck)
+
+    m = Machine.query.get(machine_id)
+    if not m:
+        return {'error': 'Machine not found'}, 404
+
+    # Last 7 days of daily checks
+    seven_days_ago = date.today() - timedelta(days=7)
+    daily_checks = MachineDailyCheck.query.filter(
+        MachineDailyCheck.machine_id == machine_id,
+        MachineDailyCheck.check_date >= seven_days_ago,
+    ).order_by(MachineDailyCheck.check_date.desc()).all()
+
+    # Open checklist items
+    open_checklist_items = SiteEquipmentChecklistItem.query.filter_by(
+        machine_id=machine_id, checked=False).all()
+
+    # Pending transfer
+    pending_transfer = MachineTransfer.query.filter(
+        MachineTransfer.machine_id == machine_id,
+        MachineTransfer.status.in_(['scheduled', 'in_transit']),
+    ).first()
+
+    # Breakdowns
+    breakdowns = MachineBreakdown.query.filter_by(machine_id=machine_id).order_by(
+        MachineBreakdown.incident_date.desc()).all()
+
+    return {
+        'id': m.id,
+        'name': m.name,
+        'plant_id': m.plant_id,
+        'type': m.machine_type,
+        'description': m.description,
+        'delay_rate': m.delay_rate,
+        'active': m.active,
+        'serial_number': m.serial_number,
+        'manufacturer': m.manufacturer,
+        'model_number': m.model_number,
+        'acquired_date': m.acquired_date.isoformat() if m.acquired_date else None,
+        'dispose_by_date': m.dispose_by_date.isoformat() if m.dispose_by_date else None,
+        'next_inspection_date': m.next_inspection_date.isoformat() if m.next_inspection_date else None,
+        'inspection_interval_days': m.inspection_interval_days,
+        'storage_instructions': m.storage_instructions,
+        'service_instructions': m.service_instructions,
+        'spare_parts_notes': m.spare_parts_notes,
+        'disposal_procedure': m.disposal_procedure,
+        'breakdowns': [{
+            'id': b.id,
+            'date': b.incident_date.isoformat() if b.incident_date else None,
+            'incident_time': b.incident_time,
+            'description': b.description,
+            'repair_status': b.repair_status,
+            'repairing_by': b.repairing_by,
+            'anticipated_return': b.anticipated_return.isoformat() if b.anticipated_return else None,
+            'resolved_date': b.resolved_date.isoformat() if b.resolved_date else None,
+            'photos': [{'id': p.id, 'url': f'/api/equipment/breakdowns/photos/{p.filename}', 'filename': p.original_name}
+                       for p in b.photos],
+        } for b in breakdowns],
+        'daily_checks': [{
+            'id': dc.id,
+            'check_date': dc.check_date.isoformat(),
+            'condition': dc.condition,
+            'notes': dc.notes,
+            'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+            'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
+        } for dc in daily_checks],
+        'open_checklists': [{
+            'checklist_id': item.checklist_id,
+            'checklist_name': item.checklist.checklist_name if item.checklist else None,
+            'item_id': item.id,
+            'machine_label': item.machine_label,
+        } for item in open_checklist_items],
+        'pending_transfer': {
+            'id': pending_transfer.id,
+            'from_project': pending_transfer.from_project.name if pending_transfer.from_project else None,
+            'to_project': pending_transfer.to_project.name if pending_transfer.to_project else None,
+            'scheduled_date': pending_transfer.scheduled_date.isoformat(),
+            'status': pending_transfer.status,
+            'travel_notes': pending_transfer.travel_notes,
+            'transport_contact': pending_transfer.transport_contact,
+        } if pending_transfer else None,
+    }, 200
+
+
+@api_data_bp.route('/equipment/machine/<int:machine_id>', methods=['PATCH'])
+@jwt_required()
+def equipment_machine_update(machine_id):
+    """Update machine fields. Admin only."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role != 'admin':
+        return {'error': 'Admin only'}, 403
+
+    m = Machine.query.get(machine_id)
+    if not m:
+        return {'error': 'Machine not found'}, 404
+
+    data = request.get_json(silent=True) or {}
+
+    # Basic fields
+    for field in ('name', 'plant_id', 'description', 'serial_number',
+                  'manufacturer', 'model_number', 'storage_instructions',
+                  'service_instructions', 'spare_parts_notes', 'disposal_procedure'):
+        if field in data:
+            setattr(m, field, data[field] or None)
+
+    if 'type' in data:
+        m.machine_type = data['type'] or None
+    if 'delay_rate' in data:
+        m.delay_rate = float(data['delay_rate']) if data['delay_rate'] is not None else None
+    if 'active' in data:
+        m.active = bool(data['active'])
+    if 'inspection_interval_days' in data:
+        m.inspection_interval_days = int(data['inspection_interval_days']) if data['inspection_interval_days'] else None
+
+    for date_field in ('acquired_date', 'dispose_by_date', 'next_inspection_date'):
+        if date_field in data:
+            val = data[date_field]
+            if val:
+                try:
+                    setattr(m, date_field, datetime.strptime(val, '%Y-%m-%d').date())
+                except (ValueError, TypeError):
+                    pass
+            else:
+                setattr(m, date_field, None)
+
+    db.session.commit()
+    return {'id': m.id, 'name': m.name}, 200
+
+
+@api_data_bp.route('/equipment/checklist/<int:checklist_id>', methods=['GET'])
+@jwt_required()
+def equipment_checklist_detail(checklist_id):
+    """Full checklist with all items for mobile."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    from models import SiteEquipmentChecklist, SiteEquipmentChecklistItem
+
+    cl = SiteEquipmentChecklist.query.get(checklist_id)
+    if not cl:
+        return {'error': 'Checklist not found'}, 404
+
+    allowed = _accessible_ids(user)
+    if not _has_project_access(user, cl.project_id, allowed):
+        return {'error': 'Access denied'}, 403
+
+    items = SiteEquipmentChecklistItem.query.filter_by(checklist_id=checklist_id).all()
+    total = len(items)
+    checked_count = sum(1 for i in items if i.checked)
+
+    return {
+        'id': cl.id,
+        'checklist_name': cl.checklist_name,
+        'project_id': cl.project_id,
+        'project_name': cl.project.name if cl.project else None,
+        'due_date': cl.due_date.isoformat(),
+        'completed_at': cl.completed_at.isoformat() if cl.completed_at else None,
+        'notes': cl.notes,
+        'total': total,
+        'checked': checked_count,
+        'items': [{
+            'id': item.id,
+            'machine_id': item.machine_id,
+            'hired_machine_id': item.hired_machine_id,
+            'machine_label': item.machine_label,
+            'checked': item.checked,
+            'checked_by': (item.checked_by_user.display_name or item.checked_by_user.username) if item.checked_by_user else None,
+            'checked_at': item.checked_at.isoformat() if item.checked_at else None,
+            'condition': item.condition,
+            'notes': item.notes,
+            'photo_url': f'/api/equipment/checklist-photo/{item.photo_filename}' if item.photo_filename else None,
+        } for item in items],
+    }, 200
+
+
+@api_data_bp.route('/equipment/checklist/<int:checklist_id>/item/<int:item_id>/check', methods=['POST'])
+@jwt_required()
+def equipment_checklist_item_check_api(checklist_id, item_id):
+    """Mark a checklist item as checked (mobile API)."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    from models import SiteEquipmentChecklist, SiteEquipmentChecklistItem
+
+    item = SiteEquipmentChecklistItem.query.get(item_id)
+    if not item or item.checklist_id != checklist_id:
+        return {'error': 'Item not found'}, 404
+
+    cl = SiteEquipmentChecklist.query.get(checklist_id)
+    allowed = _accessible_ids(user)
+    if cl and not _has_project_access(user, cl.project_id, allowed):
+        return {'error': 'Access denied'}, 403
+
+    condition = request.form.get('condition', 'good')
+    notes = request.form.get('notes', '').strip() or None
+
+    item.checked = True
+    item.checked_by_user_id = user.id
+    item.checked_at = datetime.utcnow()
+    item.condition = condition
+    item.notes = notes
+
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower()
+        stored = f"{uuid.uuid4()}{ext}"
+        local_path = os.path.join(UPLOAD_FOLDER, 'checklists', stored)
+        storage.upload_file(photo, f'checklists/{stored}', local_path)
+        item.photo_filename = stored
+        item.photo_original_name = photo.filename
+
+    if condition in ('poor', 'broken_down'):
+        bd = MachineBreakdown(
+            machine_id=item.machine_id,
+            hired_machine_id=item.hired_machine_id,
+            incident_date=date.today(),
+            description=f'Flagged during checklist: {cl.checklist_name}. Condition: {condition}. {notes or ""}',
+            repair_status='pending',
+        )
+        db.session.add(bd)
+        db.session.flush()
+
+        try:
+            from utils.notifications import notify_breakdown_to_admin
+            notify_breakdown_to_admin(bd, item.machine_label, cl.project.name if cl.project else 'Unknown')
+        except Exception:
+            pass
+
+    # Check if all items are now done
+    unchecked = SiteEquipmentChecklistItem.query.filter_by(
+        checklist_id=checklist_id, checked=False).count()
+    if unchecked == 0 and cl:
+        cl.completed_at = datetime.utcnow()
+
+    db.session.commit()
+    return {'message': 'Item checked', 'item_id': item.id}, 200
+
+
+@api_data_bp.route('/equipment/project/<int:project_id>/daily-checks', methods=['GET'])
+@jwt_required()
+def equipment_project_daily_checks(project_id):
+    """For a given project and date, returns every assigned machine with its daily check."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    allowed = _accessible_ids(user)
+    if not _has_project_access(user, project_id, allowed):
+        return {'error': 'Access denied'}, 403
+
+    from models import MachineDailyCheck
+
+    check_date_str = request.args.get('date')
+    if check_date_str:
+        try:
+            check_date = datetime.strptime(check_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            check_date = date.today()
+    else:
+        check_date = date.today()
+
+    # All machines assigned to this project
+    own_assignments = ProjectMachine.query.filter_by(project_id=project_id).all()
+    hired_machines = HiredMachine.query.filter_by(project_id=project_id, active=True).all()
+
+    # Daily checks already done
+    checks = MachineDailyCheck.query.filter_by(
+        project_id=project_id, check_date=check_date).all()
+    check_by_machine = {c.machine_id: c for c in checks if c.machine_id}
+    check_by_hired = {c.hired_machine_id: c for c in checks if c.hired_machine_id}
+
+    machines_list = []
+    for pm in own_assignments:
+        m = pm.machine
+        dc = check_by_machine.get(m.id)
+        machines_list.append({
+            'machine_id': m.id,
+            'hired_machine_id': None,
+            'name': m.name,
+            'plant_id': m.plant_id,
+            'type': m.machine_type,
+            'source': 'fleet',
+            'check': {
+                'id': dc.id,
+                'condition': dc.condition,
+                'notes': dc.notes,
+                'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
+            } if dc else None,
+        })
+
+    for hm in hired_machines:
+        dc = check_by_hired.get(hm.id)
+        machines_list.append({
+            'machine_id': None,
+            'hired_machine_id': hm.id,
+            'name': hm.machine_name,
+            'plant_id': hm.plant_id,
+            'type': hm.machine_type,
+            'source': 'hired',
+            'check': {
+                'id': dc.id,
+                'condition': dc.condition,
+                'notes': dc.notes,
+                'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
+            } if dc else None,
+        })
+
+    total = len(machines_list)
+    checked_count = sum(1 for m in machines_list if m['check'])
+
+    return {
+        'project_id': project_id,
+        'date': check_date.isoformat(),
+        'total': total,
+        'checked': checked_count,
+        'machines': machines_list,
+    }, 200
+
+
+@api_data_bp.route('/equipment/daily-check', methods=['POST'])
+@jwt_required()
+def equipment_daily_check_submit_api():
+    """Submit a daily check from mobile."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    from models import MachineDailyCheck
+
+    machine_id = request.form.get('machine_id', type=int)
+    hired_machine_id = request.form.get('hired_machine_id', type=int)
+    project_id = request.form.get('project_id', type=int)
+    condition = request.form.get('condition', 'good')
+    notes = request.form.get('notes', '').strip() or None
+
+    if not project_id or (not machine_id and not hired_machine_id):
+        return {'error': 'project_id and machine_id or hired_machine_id required'}, 400
+
+    allowed = _accessible_ids(user)
+    if not _has_project_access(user, project_id, allowed):
+        return {'error': 'Access denied'}, 403
+
+    check = MachineDailyCheck(
+        machine_id=machine_id or None,
+        hired_machine_id=hired_machine_id or None,
+        project_id=project_id,
+        check_date=date.today(),
+        checked_by_user_id=user.id,
+        condition=condition,
+        notes=notes,
+    )
+
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower()
+        stored = f"{uuid.uuid4()}{ext}"
+        local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
+        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        check.photo_filename = stored
+        check.photo_original_name = photo.filename
+
+    breakdown_id = None
+    if condition == 'broken_down':
+        machine_name = ''
+        if machine_id:
+            m = Machine.query.get(machine_id)
+            machine_name = m.name if m else ''
+        elif hired_machine_id:
+            hm = HiredMachine.query.get(hired_machine_id)
+            machine_name = hm.machine_name if hm else ''
+
+        bd = MachineBreakdown(
+            machine_id=machine_id or None,
+            hired_machine_id=hired_machine_id or None,
+            incident_date=date.today(),
+            description=f'Flagged as broken down during daily check. {notes or ""}',
+            repair_status='pending',
+        )
+        db.session.add(bd)
+        db.session.flush()
+        check.breakdown_id = bd.id
+        breakdown_id = bd.id
+
+        try:
+            from utils.notifications import notify_breakdown_to_admin
+            project = Project.query.get(project_id)
+            notify_breakdown_to_admin(bd, machine_name, project.name if project else 'Unknown')
+        except Exception:
+            pass
+
+    db.session.add(check)
+    db.session.commit()
+
+    result = {'message': 'Daily check recorded', 'check_id': check.id}
+    if breakdown_id:
+        result['breakdown_id'] = breakdown_id
+    return result, 201
+
+
+@api_data_bp.route('/equipment/daily-check-photo/<filename>')
+def serve_daily_check_photo_api(filename):
+    """Serve daily check photos (UUID-obscured, no JWT)."""
+    return storage.serve_file(
+        f'daily_checks/{filename}',
+        os.path.join(UPLOAD_FOLDER, 'daily_checks', filename)
+    )
+
+
+@api_data_bp.route('/equipment/checklist-photo/<filename>')
+def serve_checklist_photo_api(filename):
+    """Serve checklist photos (UUID-obscured, no JWT)."""
+    return storage.serve_file(
+        f'checklists/{filename}',
+        os.path.join(UPLOAD_FOLDER, 'checklists', filename)
+    )
+
+
+@api_data_bp.route('/equipment/admin/dashboard', methods=['GET'])
+@jwt_required()
+def equipment_admin_dashboard_api():
+    """JSON version of admin dashboard data."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role != 'admin':
+        return {'error': 'Admin only'}, 403
+
+    from models import (MachineTransfer, SiteEquipmentChecklist,
+                        SiteEquipmentChecklistItem, MachineDailyCheck)
+    from sqlalchemy import func
+
+    today_date = date.today()
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    project_data = []
+    for p in projects:
+        own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
+        hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
+        total_machines = own_count + hired_count
+        checks_today = MachineDailyCheck.query.filter_by(
+            project_id=p.id, check_date=today_date).count()
+        entry_today = DailyEntry.query.filter_by(
+            project_id=p.id).filter(
+            func.date(DailyEntry.entry_date) == today_date).first()
+
+        own_machine_ids = {pm.machine_id for pm in ProjectMachine.query.filter_by(project_id=p.id).all()}
+        hired_ids = {hm.id for hm in HiredMachine.query.filter_by(project_id=p.id).all()}
+        open_bds = MachineBreakdown.query.filter(
+            MachineBreakdown.repair_status != 'completed',
+            db.or_(
+                MachineBreakdown.machine_id.in_(own_machine_ids) if own_machine_ids else db.false(),
+                MachineBreakdown.hired_machine_id.in_(hired_ids) if hired_ids else db.false(),
+            )
+        ).count()
+
+        project_data.append({
+            'project_id': p.id,
+            'project_name': p.name,
+            'site_manager': (p.site_manager.display_name or p.site_manager.username) if p.site_manager else None,
+            'total_machines': total_machines,
+            'checks_today': checks_today,
+            'entry_submitted': entry_today is not None,
+            'open_breakdowns': open_bds,
+        })
+
+    alert_machines = Machine.query.filter(
+        Machine.active == True,
+        db.or_(
+            db.and_(Machine.dispose_by_date.isnot(None),
+                    Machine.dispose_by_date <= today_date + timedelta(days=30)),
+            db.and_(Machine.next_inspection_date.isnot(None),
+                    Machine.next_inspection_date <= today_date + timedelta(days=14)),
+        )
+    ).all()
+
+    pending_transfers = MachineTransfer.query.filter(
+        MachineTransfer.status.in_(['scheduled', 'in_transit'])
+    ).order_by(MachineTransfer.scheduled_date).all()
+
+    return {
+        'projects': project_data,
+        'alert_machines': [{
+            'id': m.id,
+            'name': m.name,
+            'dispose_by_date': m.dispose_by_date.isoformat() if m.dispose_by_date else None,
+            'next_inspection_date': m.next_inspection_date.isoformat() if m.next_inspection_date else None,
+        } for m in alert_machines],
+        'pending_transfers': [{
+            'id': t.id,
+            'machine_name': t.machine.name if t.machine else None,
+            'from_project': t.from_project.name if t.from_project else None,
+            'to_project': t.to_project.name if t.to_project else None,
+            'scheduled_date': t.scheduled_date.isoformat(),
+            'status': t.status,
+        } for t in pending_transfers],
     }, 200

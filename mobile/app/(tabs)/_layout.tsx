@@ -16,11 +16,12 @@ const tabs: Array<{
   icon: IoniconName
   iconActive: IoniconName
 }> = [
-  { name: 'index',     title: 'Dashboard', icon: 'home-outline',      iconActive: 'home' },
-  { name: 'entries',   title: 'Entries',   icon: 'clipboard-outline',  iconActive: 'clipboard' },
-  { name: 'equipment', title: 'Equipment', icon: 'construct-outline',  iconActive: 'construct' },
-  { name: 'documents', title: 'Documents', icon: 'folder-outline',     iconActive: 'folder' },
-  { name: 'roster',    title: 'Roster',    icon: 'calendar-outline',   iconActive: 'calendar' },
+  { name: 'index',            title: 'Dashboard', icon: 'home-outline',           iconActive: 'home' },
+  { name: 'entries',          title: 'Entries',   icon: 'clipboard-outline',       iconActive: 'clipboard' },
+  { name: 'equipment',        title: 'Equipment', icon: 'construct-outline',       iconActive: 'construct' },
+  { name: 'equipment-checks', title: 'Checks',    icon: 'checkbox-outline',        iconActive: 'checkbox' },
+  { name: 'documents',        title: 'Docs',      icon: 'folder-outline',          iconActive: 'folder' },
+  { name: 'roster',           title: 'Roster',    icon: 'calendar-outline',        iconActive: 'calendar' },
 ]
 
 export default function TabsLayout() {

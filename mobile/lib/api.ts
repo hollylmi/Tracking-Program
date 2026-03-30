@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { API_BASE_URL } from '../constants/api'
 import { useAuthStore } from '../store/auth'
-import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine } from '../types'
+import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine, DailyChecksResponse, EquipmentChecklist } from '../types'
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -163,6 +163,71 @@ export const api = {
       if (!res.ok) throw new Error(`Photo upload failed: ${res.status}`)
       return res.json()
     },
+
+    // Daily checks
+    projectDailyChecks: (projectId: number, date?: string) =>
+      apiClient.get<DailyChecksResponse>(`/equipment/project/${projectId}/daily-checks`, date ? { params: { date } } : undefined),
+
+    submitDailyCheck: async (data: {
+      machine_id?: number
+      hired_machine_id?: number
+      project_id: number
+      condition: string
+      notes?: string
+      photo_uri?: string
+      photo_filename?: string
+    }) => {
+      const token = useAuthStore.getState().accessToken
+      const formData = new FormData()
+      if (data.machine_id) formData.append('machine_id', String(data.machine_id))
+      if (data.hired_machine_id) formData.append('hired_machine_id', String(data.hired_machine_id))
+      formData.append('project_id', String(data.project_id))
+      formData.append('condition', data.condition)
+      if (data.notes) formData.append('notes', data.notes)
+      if (data.photo_uri && data.photo_filename) {
+        formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
+      }
+      const res = await fetch(`${API_BASE_URL}/api/equipment/daily-check`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      if (!res.ok) throw new Error(`Daily check failed: ${res.status}`)
+      return res.json()
+    },
+
+    // Checklists
+    checklist: (checklistId: number) =>
+      apiClient.get<EquipmentChecklist>(`/equipment/checklist/${checklistId}`),
+
+    checkChecklistItem: async (checklistId: number, itemId: number, data: {
+      condition: string
+      notes?: string
+      photo_uri?: string
+      photo_filename?: string
+    }) => {
+      const token = useAuthStore.getState().accessToken
+      const formData = new FormData()
+      formData.append('condition', data.condition)
+      if (data.notes) formData.append('notes', data.notes)
+      if (data.photo_uri && data.photo_filename) {
+        formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
+      }
+      const res = await fetch(`${API_BASE_URL}/api/equipment/checklist/${checklistId}/item/${itemId}/check`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      if (!res.ok) throw new Error(`Checklist check failed: ${res.status}`)
+      return res.json()
+    },
+
+    // Machine detail (extended)
+    machineDetail: (machineId: number) =>
+      apiClient.get<MachineDetail>(`/equipment/machine/${machineId}`),
+
+    updateMachine: (machineId: number, data: Partial<MachineDetail>) =>
+      apiClient.patch<{ id: number; name: string }>(`/equipment/machine/${machineId}`, data),
   },
 
   hire: {

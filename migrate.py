@@ -137,10 +137,28 @@ else:
         cur.execute("UPDATE cfmeu_date SET states = state WHERE states IS NULL AND state IS NOT NULL")
         changes += 1
 
+    # ── machine — extended equipment tracking fields ──────────────────────────
+    changes += add_column('machine', 'acquired_date', 'DATE')
+    changes += add_column('machine', 'dispose_by_date', 'DATE')
+    changes += add_column('machine', 'next_inspection_date', 'DATE')
+    changes += add_column('machine', 'inspection_interval_days', 'INTEGER')
+    changes += add_column('machine', 'storage_instructions', 'TEXT')
+    changes += add_column('machine', 'service_instructions', 'TEXT')
+    changes += add_column('machine', 'spare_parts_notes', 'TEXT')
+    changes += add_column('machine', 'disposal_procedure', 'TEXT')
+    changes += add_column('machine', 'serial_number', 'VARCHAR(200)')
+    changes += add_column('machine', 'manufacturer', 'VARCHAR(200)')
+    changes += add_column('machine', 'model_number', 'VARCHAR(200)')
+
+    # ── project — site manager ──────────────────────────────────────────────
+    changes += add_column('project', 'site_manager_user_id', 'INTEGER')
+
     for t in ('entry_photo', 'planned_data', 'project_non_work_date', 'project_budgeted_role',
               'project_machine', 'project_worked_sunday', 'project_document',
               'project_equipment_requirement', 'project_equipment_assignment',
-              'machine_breakdown', 'breakdown_photo', 'public_holiday', 'cfmeu_date'):
+              'machine_breakdown', 'breakdown_photo', 'public_holiday', 'cfmeu_date',
+              'machine_transfer', 'site_equipment_checklist', 'site_equipment_checklist_item',
+              'machine_daily_check'):
         if table_exists(t):
             print(f"OK:     {t} table exists")
         else:

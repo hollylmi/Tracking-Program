@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -194,4 +194,243 @@ def send_upcoming_checkin_reminders():
                 sent_count += 1
 
     logger.info(f'Accommodation check-in reminders sent: {sent_count}')
+    return sent_count
+
+
+# ---------------------------------------------------------------------------
+# Equipment notification functions
+# ---------------------------------------------------------------------------
+
+def notify_breakdown_to_admin(breakdown, machine_name, project_name):
+    """Fire immediately when a breakdown is created from a daily check or checklist.
+    Sends push to all admin users and emails the site manager."""
+    from models import User, DeviceToken, Project
+
+    title = f'Breakdown: {machine_name}'
+    body = f'{machine_name} reported broken down at {project_name}.'
+
+    # Push to all admin users
+    admin_users = (
+        User.query
+        .join(DeviceToken)
+        .filter(User.active == True, User.role == 'admin')
+        .all()
+    )
+    sent_count = 0
+    for user in admin_users:
+        for device in user.device_tokens:
+            success = send_notification(
+                token=device.token,
+                title=title,
+                body=body,
+                data={'type': 'breakdown_alert',
+                      'breakdown_id': str(breakdown.id),
+                      'machine_name': machine_name,
+                      'project_name': project_name},
+            )
+            if success:
+                sent_count += 1
+
+    # Also notify the site manager if the project has one
+    if breakdown.machine_id:
+        from models import ProjectMachine
+        pm = ProjectMachine.query.filter_by(machine_id=breakdown.machine_id).first()
+        if pm and pm.project and pm.project.site_manager_user_id:
+            mgr = User.query.get(pm.project.site_manager_user_id)
+            if mgr and mgr.active:
+                tokens = DeviceToken.query.filter_by(user_id=mgr.id).all()
+                for device in tokens:
+                    send_notification(
+                        token=device.token,
+                        title=title,
+                        body=body,
+                        data={'type': 'breakdown_alert',
+                              'breakdown_id': str(breakdown.id)},
+                    )
+
+    logger.info(f'Breakdown notification sent to {sent_count} admin devices for {machine_name}')
+    return sent_count
+
+
+def send_daily_check_reminders():
+    """7am daily — for each project where daily checks are incomplete, notify site manager."""
+    from models import (User, DeviceToken, Project, ProjectMachine, HiredMachine,
+                        MachineDailyCheck, UserProjectAccess)
+
+    today_date = date.today()
+    projects = Project.query.filter_by(active=True).all()
+    sent_count = 0
+
+    for p in projects:
+        own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
+        hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
+        total = own_count + hired_count
+        if total == 0:
+            continue
+
+        checks_done = MachineDailyCheck.query.filter_by(
+            project_id=p.id, check_date=today_date).count()
+        if checks_done >= total:
+            continue
+
+        # Notify site manager
+        notify_user_ids = set()
+        if p.site_manager_user_id:
+            notify_user_ids.add(p.site_manager_user_id)
+
+        # Also notify supervisors with access
+        supervisor_access = (
+            UserProjectAccess.query
+            .join(User, UserProjectAccess.user_id == User.id)
+            .filter(UserProjectAccess.project_id == p.id,
+                    User.role == 'supervisor', User.active == True)
+            .all()
+        )
+        for a in supervisor_access:
+            notify_user_ids.add(a.user_id)
+
+        for uid in notify_user_ids:
+            tokens = DeviceToken.query.filter_by(user_id=uid).all()
+            for device in tokens:
+                success = send_notification(
+                    token=device.token,
+                    title='Daily equipment check reminder',
+                    body=f'{p.name}: {checks_done}/{total} machines checked. Please complete morning checks.',
+                    data={'type': 'daily_check_reminder', 'project_id': str(p.id)},
+                )
+                if success:
+                    sent_count += 1
+
+    logger.info(f'Daily check reminders sent: {sent_count}')
+    return sent_count
+
+
+def send_checklist_reminders():
+    """Daily — notify for checklists due within 7 days that are incomplete."""
+    from models import (User, DeviceToken, SiteEquipmentChecklist, Project)
+
+    today_date = date.today()
+    upcoming = SiteEquipmentChecklist.query.filter(
+        SiteEquipmentChecklist.completed_at.is_(None),
+        SiteEquipmentChecklist.due_date <= today_date + timedelta(days=7),
+    ).all()
+
+    sent_count = 0
+    for cl in upcoming:
+        if not cl.project or not cl.project.site_manager_user_id:
+            continue
+
+        mgr = User.query.get(cl.project.site_manager_user_id)
+        if not mgr or not mgr.active:
+            continue
+
+        tokens = DeviceToken.query.filter_by(user_id=mgr.id).all()
+        days_left = (cl.due_date - today_date).days
+        urgency = 'OVERDUE' if days_left < 0 else f'{days_left} days left'
+
+        for device in tokens:
+            success = send_notification(
+                token=device.token,
+                title=f'Equipment checklist: {urgency}',
+                body=f'"{cl.checklist_name}" for {cl.project.name} is due {cl.due_date.strftime("%d/%m/%Y")}.',
+                data={'type': 'checklist_reminder', 'checklist_id': str(cl.id)},
+            )
+            if success:
+                sent_count += 1
+
+    logger.info(f'Checklist reminders sent: {sent_count}')
+    return sent_count
+
+
+def send_transfer_reminders():
+    """Daily — notify for transfers scheduled within 3 days."""
+    from models import (User, DeviceToken, MachineTransfer, Project)
+
+    today_date = date.today()
+    upcoming = MachineTransfer.query.filter(
+        MachineTransfer.status == 'scheduled',
+        MachineTransfer.reminder_sent == False,
+        MachineTransfer.scheduled_date <= today_date + timedelta(days=3),
+    ).all()
+
+    sent_count = 0
+    from models import db
+
+    for t in upcoming:
+        machine_name = t.machine.name if t.machine else 'Unknown'
+        notify_user_ids = set()
+
+        if t.from_project and t.from_project.site_manager_user_id:
+            notify_user_ids.add(t.from_project.site_manager_user_id)
+        if t.to_project and t.to_project.site_manager_user_id:
+            notify_user_ids.add(t.to_project.site_manager_user_id)
+
+        for uid in notify_user_ids:
+            tokens = DeviceToken.query.filter_by(user_id=uid).all()
+            for device in tokens:
+                success = send_notification(
+                    token=device.token,
+                    title='Machine transfer reminder',
+                    body=f'{machine_name} transfer scheduled for {t.scheduled_date.strftime("%d/%m/%Y")}.',
+                    data={'type': 'transfer_reminder', 'transfer_id': str(t.id)},
+                )
+                if success:
+                    sent_count += 1
+
+        t.reminder_sent = True
+
+    db.session.commit()
+    logger.info(f'Transfer reminders sent: {sent_count}')
+    return sent_count
+
+
+def send_expiry_alerts():
+    """Daily — email/push admins about machines with disposal/inspection within 14 days."""
+    from models import User, DeviceToken, Machine
+
+    today_date = date.today()
+    from models import db
+    flagged = Machine.query.filter(
+        Machine.active == True,
+        db.or_(
+            db.and_(Machine.dispose_by_date.isnot(None),
+                    Machine.dispose_by_date <= today_date + timedelta(days=14)),
+            db.and_(Machine.next_inspection_date.isnot(None),
+                    Machine.next_inspection_date <= today_date + timedelta(days=14)),
+        )
+    ).all()
+
+    if not flagged:
+        return 0
+
+    admin_users = (
+        User.query
+        .join(DeviceToken)
+        .filter(User.active == True, User.role == 'admin')
+        .all()
+    )
+
+    sent_count = 0
+    for m in flagged:
+        parts = []
+        if m.dispose_by_date:
+            days = (m.dispose_by_date - today_date).days
+            parts.append(f'disposal in {days}d')
+        if m.next_inspection_date:
+            days = (m.next_inspection_date - today_date).days
+            parts.append(f'inspection in {days}d')
+        detail = ', '.join(parts)
+
+        for user in admin_users:
+            for device in user.device_tokens:
+                success = send_notification(
+                    token=device.token,
+                    title=f'Equipment alert: {m.name}',
+                    body=f'{m.name}: {detail}',
+                    data={'type': 'expiry_alert', 'machine_id': str(m.id)},
+                )
+                if success:
+                    sent_count += 1
+
+    logger.info(f'Expiry alerts sent: {sent_count}')
     return sent_count

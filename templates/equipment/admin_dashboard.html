@@ -1,0 +1,414 @@
+{% extends 'base.html' %}
+{% block title %}Equipment Admin Dashboard — Plytrack{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-clipboard2-data me-2"></i>Equipment Dashboard</h2>
+  <div class="d-flex gap-2">
+    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#newChecklistModal">
+      <i class="bi bi-plus-circle me-1"></i>New Checklist
+    </button>
+    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#scheduleTransferModal">
+      <i class="bi bi-arrow-left-right me-1"></i>Schedule Transfer
+    </button>
+  </div>
+</div>
+
+<!-- ── Top summary strip ──────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold {% if total_incomplete_checks > 0 %}text-danger{% else %}text-success{% endif %}">
+          {{ total_incomplete_checks }}
+        </div>
+        <div class="small text-muted">Sites with incomplete daily checks</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold {% if total_open_breakdowns > 0 %}text-warning{% else %}text-success{% endif %}">
+          {{ total_open_breakdowns }}
+        </div>
+        <div class="small text-muted">Open breakdowns across all sites</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold {% if total_overdue_checklists > 0 %}text-danger{% else %}text-success{% endif %}">
+          {{ total_overdue_checklists }}
+        </div>
+        <div class="small text-muted">Checklists due within 7 days</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold {% if flagged_machines > 0 %}text-warning{% else %}text-success{% endif %}">
+          {{ flagged_machines }}
+        </div>
+        <div class="small text-muted">Machines flagged (disposal/inspection)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Per-site cards ─────────────────────────────────────────────────────── -->
+<h5 class="fw-bold mb-3"><i class="bi bi-buildings me-2"></i>Site Overview</h5>
+<div class="row g-3 mb-4">
+  {% for pd in project_data %}
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+        <div>
+          <span class="fw-bold">{{ pd.project.name }}</span>
+          {% if pd.site_manager %}
+          <span class="text-muted small ms-2"><i class="bi bi-person me-1"></i>{{ pd.site_manager }}</span>
+          {% endif %}
+        </div>
+        <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-tools me-1"></i>Equipment
+        </a>
+      </div>
+      <div class="card-body">
+        <!-- Daily entry -->
+        <div class="d-flex align-items-center gap-2 mb-2">
+          {% if pd.entry_submitted %}
+          <i class="bi bi-check-circle-fill text-success"></i>
+          <span class="small">Daily entry submitted</span>
+          {% else %}
+          <i class="bi bi-x-circle-fill text-danger"></i>
+          <span class="small text-danger fw-semibold">Daily entry not submitted</span>
+          {% endif %}
+        </div>
+
+        <!-- Daily check progress -->
+        {% set pct = ((pd.checks_today / pd.total_machines * 100) | int) if pd.total_machines > 0 else 0 %}
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small mb-1">
+            <span>Equipment checks today</span>
+            <span class="fw-semibold">{{ pd.checks_today }} / {{ pd.total_machines }}</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar {% if pct == 100 %}bg-success{% elif pct > 0 %}bg-warning{% else %}bg-danger{% endif %}"
+                 style="width: {{ pct }}%"></div>
+          </div>
+        </div>
+
+        <!-- Open breakdowns -->
+        {% if pd.open_breakdowns > 0 %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+          <span class="small text-warning fw-semibold">{{ pd.open_breakdowns }} open breakdown{{ 's' if pd.open_breakdowns != 1 }}</span>
+        </div>
+        {% endif %}
+
+        <!-- Checklists -->
+        {% for cl in pd.checklists %}
+        <div class="border rounded p-2 mb-2 {% if cl.overdue %}border-danger{% endif %}">
+          <div class="d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('equipment.checklist_view', checklist_id=cl.id) }}" class="small fw-semibold text-decoration-none">
+              {{ cl.name }}
+            </a>
+            {% if cl.overdue %}
+            <span class="badge bg-danger">OVERDUE</span>
+            {% else %}
+            <span class="small text-muted">Due {{ cl.due_date.strftime('%d/%m/%Y') }}</span>
+            {% endif %}
+          </div>
+          {% set cl_pct = ((cl.checked / cl.total * 100) | int) if cl.total > 0 else 0 %}
+          <div class="progress mt-1" style="height: 4px;">
+            <div class="progress-bar bg-primary" style="width: {{ cl_pct }}%"></div>
+          </div>
+          <div class="small text-muted mt-1">{{ cl.checked }} / {{ cl.total }} items checked</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── Equipment alert table ──────────────────────────────────────────────── -->
+{% if alert_machines %}
+<h5 class="fw-bold mb-3"><i class="bi bi-exclamation-diamond me-2"></i>Equipment Alerts</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Machine</th>
+          <th>Dispose By</th>
+          <th>Next Inspection</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in alert_machines %}
+        <tr>
+          <td class="fw-semibold">{{ m.name }}{% if m.plant_id %} <span class="text-muted small">({{ m.plant_id }})</span>{% endif %}</td>
+          <td>
+            {% if m.dispose_by_date %}
+            {% set days_left = (m.dispose_by_date - today).days %}
+            <span class="{% if days_left <= 7 %}text-danger fw-bold{% elif days_left <= 14 %}text-warning{% endif %}">
+              {{ m.dispose_by_date.strftime('%d/%m/%Y') }}
+              <small>({{ days_left }}d)</small>
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if m.next_inspection_date %}
+            {% set days_left = (m.next_inspection_date - today).days %}
+            <span class="{% if days_left <= 3 %}text-danger fw-bold{% elif days_left <= 7 %}text-warning{% endif %}">
+              {{ m.next_inspection_date.strftime('%d/%m/%Y') }}
+              <small>({{ days_left }}d)</small>
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editMachineModal{{ m.id }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Pending transfers table ────────────────────────────────────────────── -->
+{% if pending_transfers %}
+<h5 class="fw-bold mb-3"><i class="bi bi-arrow-left-right me-2"></i>Pending Transfers</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Machine</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Scheduled</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in pending_transfers %}
+        <tr>
+          <td class="fw-semibold">{{ t.machine.name if t.machine else '—' }}</td>
+          <td>{{ t.from_project.name if t.from_project else '— Unassigned —' }}</td>
+          <td>{{ t.to_project.name if t.to_project else '— Unassigned —' }}</td>
+          <td>{{ t.scheduled_date.strftime('%d/%m/%Y') }}</td>
+          <td>
+            <span class="badge {% if t.status == 'scheduled' %}bg-info{% elif t.status == 'in_transit' %}bg-warning{% endif %}">
+              {{ t.status | replace('_', ' ') | title }}
+            </span>
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('equipment.transfer_update', transfer_id=t.id) }}" class="d-inline">
+              {% if t.status == 'scheduled' %}
+              <input type="hidden" name="status" value="in_transit">
+              <button class="btn btn-sm btn-outline-warning" title="Mark In Transit">
+                <i class="bi bi-truck"></i>
+              </button>
+              {% elif t.status == 'in_transit' %}
+              <input type="hidden" name="status" value="completed">
+              <button class="btn btn-sm btn-outline-success" title="Mark Completed">
+                <i class="bi bi-check-lg"></i>
+              </button>
+              {% endif %}
+            </form>
+            <form method="POST" action="{{ url_for('equipment.transfer_update', transfer_id=t.id) }}" class="d-inline">
+              <input type="hidden" name="status" value="cancelled">
+              <button class="btn btn-sm btn-outline-danger" title="Cancel Transfer">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── New Checklist Modal ────────────────────────────────────────────────── -->
+<div class="modal fade" id="newChecklistModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('equipment.checklist_create') }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">New Equipment Checklist</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Project <span class="text-danger">*</span></label>
+            <select name="project_id" class="form-select" required>
+              <option value="">— Select —</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Checklist Name <span class="text-danger">*</span></label>
+            <input type="text" name="checklist_name" class="form-control" required
+                   placeholder="e.g. Site mobilisation check — April 2026">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Due Date <span class="text-danger">*</span></label>
+            <input type="date" name="due_date" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea name="notes" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Checklist</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Schedule Transfer Modal ────────────────────────────────────────────── -->
+<div class="modal fade" id="scheduleTransferModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('equipment.transfer_schedule') }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Schedule Machine Transfer</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Machine <span class="text-danger">*</span></label>
+            <select name="machine_id" class="form-select" required>
+              <option value="">— Select —</option>
+              {% for pd in project_data %}
+                {% for pm in pd.project.project_machines %}
+                <option value="{{ pm.machine_id }}">{{ pm.machine.name }}{% if pm.machine.plant_id %} ({{ pm.machine.plant_id }}){% endif %} — {{ pd.project.name }}</option>
+                {% endfor %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">From Project</label>
+            <select name="from_project_id" class="form-select">
+              <option value="">— Unassigned —</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">To Project</label>
+            <select name="to_project_id" class="form-select">
+              <option value="">— Unassigned —</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Scheduled Date <span class="text-danger">*</span></label>
+            <input type="date" name="scheduled_date" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Transport Contact</label>
+            <input type="text" name="transport_contact" class="form-control" placeholder="Name / phone">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Travel Notes</label>
+            <textarea name="travel_notes" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Schedule Transfer</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Machine Edit Modals (for alert machines) ───────────────────────────── -->
+{% for m in alert_machines %}
+<div class="modal fade" id="editMachineModal{{ m.id }}" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <form method="POST" action="{{ url_for('equipment.machine_edit_details', machine_id=m.id) }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Details — {{ m.name }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Serial Number</label>
+              <input type="text" name="serial_number" class="form-control" value="{{ m.serial_number or '' }}">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Manufacturer</label>
+              <input type="text" name="manufacturer" class="form-control" value="{{ m.manufacturer or '' }}">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Model Number</label>
+              <input type="text" name="model_number" class="form-control" value="{{ m.model_number or '' }}">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Acquired Date</label>
+              <input type="date" name="acquired_date" class="form-control" value="{{ m.acquired_date.isoformat() if m.acquired_date else '' }}">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Dispose By Date</label>
+              <input type="date" name="dispose_by_date" class="form-control" value="{{ m.dispose_by_date.isoformat() if m.dispose_by_date else '' }}">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Next Inspection Date</label>
+              <input type="date" name="next_inspection_date" class="form-control" value="{{ m.next_inspection_date.isoformat() if m.next_inspection_date else '' }}">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Inspection Interval (days)</label>
+              <input type="number" name="inspection_interval_days" class="form-control" value="{{ m.inspection_interval_days or '' }}">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Storage Instructions</label>
+              <textarea name="storage_instructions" class="form-control" rows="2">{{ m.storage_instructions or '' }}</textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Service Instructions</label>
+              <textarea name="service_instructions" class="form-control" rows="2">{{ m.service_instructions or '' }}</textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Spare Parts Notes</label>
+              <textarea name="spare_parts_notes" class="form-control" rows="2">{{ m.spare_parts_notes or '' }}</textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Disposal Procedure</label>
+              <textarea name="disposal_procedure" class="form-control" rows="2">{{ m.disposal_procedure or '' }}</textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}
