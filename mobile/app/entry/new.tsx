@@ -52,15 +52,15 @@ const DELAY_REASONS = [
 ]
 
 // Step indicator labels (short, for dots)
-const STEP_INDICATOR_LABELS = ['Details', 'Production', 'Crew', 'Equipment', 'Delays']
+const STEP_INDICATOR_LABELS = ['Details', 'Crew', 'Production', 'Delays', 'Equipment']
 
 // Internal header titles per step
 const STEP_HEADER_TITLES: Record<number, string> = {
   1: 'Entry Details',
-  2: 'Production',
-  3: 'Crew',
-  4: 'Equipment',
-  5: 'Delays & Notes',
+  2: 'Crew',
+  3: 'Production',
+  4: 'Delays & Notes',
+  5: 'Equipment',
 }
 
 const TOTAL_STEPS = 5
@@ -643,6 +643,7 @@ export default function NewEntryScreen() {
   const [selectedMachineIds, setSelectedMachineIds] = useState<number[]>([])
 
   // Step 5 — Delays & Notes
+  const [variationLines, setVariationLines] = useState<{ number: string; description: string; hours: string; employee_ids: number[] }[]>([])
   const [delayLines, setDelayLines] = useState<{ reason: string; hours: string; description: string }[]>([])
   const [selectedStanddownIds, setSelectedStanddownIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
@@ -699,6 +700,29 @@ export default function NewEntryScreen() {
 
   function removeDelayLine(index: number) {
     setDelayLines(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Variation line helpers
+  function addVariationLine() {
+    setVariationLines(prev => [...prev, { number: '', description: '', hours: '', employee_ids: [] }])
+  }
+
+  function updateVariationLine(index: number, field: 'number' | 'description' | 'hours', value: string) {
+    setVariationLines(prev => prev.map((line, i) => i === index ? { ...line, [field]: value } : line))
+  }
+
+  function toggleVariationEmployee(lineIndex: number, empId: number) {
+    setVariationLines(prev => prev.map((line, i) => {
+      if (i !== lineIndex) return line
+      const ids = line.employee_ids.includes(empId)
+        ? line.employee_ids.filter(x => x !== empId)
+        : [...line.employee_ids, empId]
+      return { ...line, employee_ids: ids }
+    }))
+  }
+
+  function removeVariationLine(index: number) {
+    setVariationLines(prev => prev.filter((_, i) => i !== index))
   }
 
   // Other activity line helpers
@@ -784,7 +808,7 @@ export default function NewEntryScreen() {
   function validateStep(): boolean {
     const errs: Record<string, string> = {}
     if (step === 1 && !date) errs.date = 'Date is required'
-    if (step === 5) {
+    if (step === 4) {
       delayLines.forEach((dl, i) => {
         if (!dl.hours) errs[`delayHours_${i}`] = 'Hours required'
         if (!dl.reason) errs[`delayReason_${i}`] = 'Reason required'
@@ -846,6 +870,15 @@ export default function NewEntryScreen() {
       description: dl.description || undefined,
     }))
 
+    const apiVariationLines = variationLines
+      .filter(vl => vl.number || vl.description || vl.hours)
+      .map(vl => ({
+        variation_number: vl.number || undefined,
+        description: vl.description || undefined,
+        hours: parseFloat(vl.hours) || 0,
+        employee_ids_json: vl.employee_ids.length > 0 ? JSON.stringify(vl.employee_ids) : undefined,
+      }))
+
     const apiOtherActivityLines: OtherActivityLine[] = otherActivityLines
       .filter(ol => ol.description || ol.hours)
       .map(ol => ({
@@ -895,6 +928,7 @@ export default function NewEntryScreen() {
           machine_ids: selectedMachineIds,
           standdown_machine_ids: selectedStanddownIds,
           production_lines: apiProductionLines,
+          variation_lines: apiVariationLines.length > 0 ? apiVariationLines : undefined,
           delay_lines: apiDelayLines.length > 0 ? apiDelayLines : undefined,
           other_activity_lines: apiOtherActivityLines.length > 0 ? apiOtherActivityLines : undefined,
         } as any)
@@ -1028,8 +1062,8 @@ export default function NewEntryScreen() {
             </View>
           )}
 
-          {/* ── Step 2: Production ── */}
-          {step === 2 && (
+          {/* ── Step 3: Production ── */}
+          {step === 3 && (
             <View>
               {/* Production lines header */}
               <View style={styles.prodHeader}>
@@ -1130,7 +1164,7 @@ export default function NewEntryScreen() {
                   <View style={styles.lineCrewSection}>
                     <Text style={sf.label}>Line Crew</Text>
                     {selectedEmployeeIds.length === 0 ? (
-                      <Text style={styles.lineCrewHint}>Select crew in Step 3 first</Text>
+                      <Text style={styles.lineCrewHint}>Select crew in Step 2 first</Text>
                     ) : (
                       <View style={styles.lineCrewChips}>
                         {allEmployees
@@ -1163,8 +1197,8 @@ export default function NewEntryScreen() {
             </View>
           )}
 
-          {/* ── Step 3: Crew ── */}
-          {step === 3 && (
+          {/* ── Step 2: Crew ── */}
+          {step === 2 && (
             <ChecklistSection
               title="Crew Members"
               items={employeeItems}
@@ -1174,8 +1208,8 @@ export default function NewEntryScreen() {
             />
           )}
 
-          {/* ── Step 4: Equipment ── */}
-          {step === 4 && (
+          {/* ── Step 5: Equipment ── */}
+          {step === 5 && (
             <ChecklistSection
               title="Machines Used"
               items={machineItems}
@@ -1185,11 +1219,91 @@ export default function NewEntryScreen() {
             />
           )}
 
-          {/* ── Step 5: Delays & Notes ── */}
-          {step === 5 && (
+          {/* ── Step 4: Variations, Delays & Notes ── */}
+          {step === 4 && (
             <View>
-              {/* ── Delay Lines ── */}
+              {/* ── Variation Lines ── */}
               <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Variations (Client Work)</Text>
+                {variationLines.length > 0 && (
+                  <Text style={styles.sectionSubtitle}>
+                    {variationLines.reduce((s, vl) => s + (parseFloat(vl.hours) || 0), 0)}h total
+                  </Text>
+                )}
+              </View>
+
+              {variationLines.map((vl, index) => (
+                <View key={index} style={styles.prodLine}>
+                  <View style={styles.prodLineHeader}>
+                    <Text style={styles.prodLineNum}>Variation {index + 1}</Text>
+                    <TouchableOpacity onPress={() => removeVariationLine(index)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close-circle" size={20} color={Colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                    <View style={{ flex: 1 }}>
+                      <FieldInput
+                        label="Number"
+                        value={vl.number}
+                        onChangeText={(v) => updateVariationLine(index, 'number', v)}
+                        placeholder="V001"
+                        optional
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <FieldInput
+                        label="Hours"
+                        value={vl.hours}
+                        onChangeText={(v) => updateVariationLine(index, 'hours', v)}
+                        placeholder="0.0"
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                  </View>
+                  <FieldInput
+                    label="Description"
+                    value={vl.description}
+                    onChangeText={(v) => updateVariationLine(index, 'description', v)}
+                    placeholder="Description of variation work..."
+                    multiline
+                  />
+                  {/* Crew selector */}
+                  <View style={styles.lineCrewSection}>
+                    <Text style={sf.label}>Crew</Text>
+                    {selectedEmployeeIds.length === 0 ? (
+                      <Text style={styles.lineCrewHint}>Select crew in Step 2 first</Text>
+                    ) : (
+                      <View style={styles.lineCrewChips}>
+                        {allEmployees
+                          .filter(e => selectedEmployeeIds.includes(e.id))
+                          .map(emp => {
+                            const selected = vl.employee_ids.includes(emp.id)
+                            return (
+                              <TouchableOpacity
+                                key={emp.id}
+                                style={[styles.crewChip, selected && styles.crewChipSelected]}
+                                onPress={() => toggleVariationEmployee(index, emp.id)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
+                                  {emp.name}
+                                </Text>
+                              </TouchableOpacity>
+                            )
+                          })}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              ))}
+
+              <TouchableOpacity style={styles.addLineBtn} onPress={addVariationLine} activeOpacity={0.7}>
+                <Ionicons name="add-circle-outline" size={20} color={Colors.warning} />
+                <Text style={[styles.addLineBtnText, { color: Colors.warning }]}>Add Variation</Text>
+              </TouchableOpacity>
+
+              {/* ── Delay Lines ── */}
+              <View style={[styles.sectionHeader, { marginTop: Spacing.md }]}>
                 <Text style={styles.sectionTitle}>Delays</Text>
                 {delayLines.length > 0 && (
                   <Text style={styles.sectionSubtitle}>
@@ -1293,7 +1407,7 @@ export default function NewEntryScreen() {
                   <View style={styles.lineCrewSection}>
                     <Text style={sf.label}>Crew</Text>
                     {selectedEmployeeIds.length === 0 ? (
-                      <Text style={styles.lineCrewHint}>Select crew in Step 3 first</Text>
+                      <Text style={styles.lineCrewHint}>Select crew in Step 2 first</Text>
                     ) : (
                       <View style={styles.lineCrewChips}>
                         {allEmployees
