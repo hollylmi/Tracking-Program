@@ -22,7 +22,7 @@ import ScreenHeader from '../../components/layout/ScreenHeader'
 import { api } from '../../lib/api'
 import { saveReferenceData, getReferenceData } from '../../lib/db'
 import { cachedQuery } from '../../lib/cachedQuery'
-import { Entry, ProgressTask, ProjectCosts, MaterialProductivity, ProjectProgress, GanttData, DelayEvent } from '../../types'
+import { Entry, ProgressTask, ProjectCosts, MaterialProductivity, ProjectProgress, GanttData, DelayEvent, TodoItem, AdminProjectTask } from '../../types'
 import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { useProject } from '../../hooks/useProject'
@@ -1647,6 +1647,132 @@ function ErrorCard({ onRetry }: { onRetry: () => void }) {
   )
 }
 
+// ─── To-Do / Admin Task Overview ──────────────────────────────────────────────
+
+function TodoSection({ router, userRole }: { router: any; userRole?: string }) {
+  const { data: todoData } = useQuery({
+    queryKey: ['my-todos'],
+    queryFn: () => api.tasks.myTodos().then((r) => r.data),
+    staleTime: 60 * 1000,
+    enabled: userRole === 'supervisor' || userRole === 'site',
+  })
+
+  const { data: adminData } = useQuery({
+    queryKey: ['admin-overview'],
+    queryFn: () => api.tasks.adminOverview().then((r) => r.data),
+    staleTime: 60 * 1000,
+    enabled: userRole === 'admin',
+  })
+
+  // Supervisor to-do list
+  if (userRole === 'supervisor' || userRole === 'site') {
+    const todos = todoData?.todos ?? []
+    if (todos.length === 0) return null
+    const pending = todos.filter((t) => !t.completed)
+    if (pending.length === 0) return (
+      <Card style={{ backgroundColor: 'rgba(61,139,65,0.1)', borderWidth: 1, borderColor: 'rgba(61,139,65,0.2)' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+          <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
+          <Text style={{ ...Typography.bodySmall, color: Colors.success, fontWeight: '600' }}>All tasks complete for today</Text>
+        </View>
+      </Card>
+    )
+    return (
+      <Card padding="none" style={{ borderLeftWidth: 4, borderLeftColor: Colors.primary, overflow: 'hidden' }}>
+        <View style={{ paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.sm }}>
+          <Text style={{ ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>Your Tasks Today</Text>
+        </View>
+        {todos.map((todo, i) => (
+          <TouchableOpacity
+            key={`${todo.project_id}-${todo.task_type}`}
+            onPress={() => {
+              if (todo.task_type === 'daily_entry' && !todo.completed) router.push('/entry/new')
+              if (todo.task_type === 'machine_startup' && !todo.completed) router.push('/(tabs)/equipment')
+            }}
+            activeOpacity={todo.completed ? 1 : 0.7}
+            style={{
+              flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+              paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2,
+              borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0,
+              borderTopColor: Colors.border,
+            }}
+          >
+            <Ionicons
+              name={todo.completed ? 'checkmark-circle' : 'ellipse-outline'}
+              size={22}
+              color={todo.completed ? Colors.success : Colors.textLight}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={{
+                ...Typography.body, color: todo.completed ? Colors.textLight : Colors.textPrimary,
+                fontWeight: todo.completed ? '400' : '600',
+                textDecorationLine: todo.completed ? 'line-through' : 'none',
+              }}>{todo.label}</Text>
+              <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>{todo.project_name}</Text>
+            </View>
+            {todo.progress && !todo.completed && (
+              <Text style={{ ...Typography.caption, color: Colors.warning, fontWeight: '700' }}>
+                {todo.progress.done}/{todo.progress.total}
+              </Text>
+            )}
+            {!todo.completed && <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />}
+          </TouchableOpacity>
+        ))}
+      </Card>
+    )
+  }
+
+  // Admin overview
+  if (userRole === 'admin') {
+    const projects = adminData?.projects ?? []
+    if (projects.length === 0) return null
+    return (
+      <Card padding="none" style={{ overflow: 'hidden' }}>
+        <View style={{ paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.sm }}>
+          <Text style={{ ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>Daily Task Status</Text>
+        </View>
+        {projects.map((p, i) => (
+          <View key={p.project_id} style={{
+            paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+            borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0,
+            borderTopColor: Colors.border,
+          }}>
+            <Text style={{ ...Typography.bodySmall, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 }}>{p.project_name}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name={p.daily_entry.completed ? 'checkmark-circle' : 'close-circle'} size={14}
+                  color={p.daily_entry.completed ? Colors.success : Colors.error} />
+                <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>Entry</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name={p.machine_startup.completed ? 'checkmark-circle' : 'close-circle'} size={14}
+                  color={p.machine_startup.completed ? Colors.success : p.machine_startup.done > 0 ? Colors.warning : Colors.error} />
+                <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>
+                  Machines {p.machine_startup.done}/{p.machine_startup.total}
+                </Text>
+              </View>
+              {p.standdown_email_needed && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="mail" size={14} color={Colors.warning} />
+                  <Text style={{ ...Typography.caption, color: Colors.warning, fontWeight: '600' }}>Standdown</Text>
+                </View>
+              )}
+              {p.open_breakdowns > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="warning" size={14} color={Colors.error} />
+                  <Text style={{ ...Typography.caption, color: Colors.error }}>{p.open_breakdowns} BD</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        ))}
+      </Card>
+    )
+  }
+
+  return null
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function DashboardScreen() {
@@ -1860,6 +1986,9 @@ export default function DashboardScreen() {
           <Ionicons name="add-circle-outline" size={20} color={Colors.dark} style={{ marginRight: Spacing.sm }} />
           <Text style={st.newEntryText}>+ NEW DAILY ENTRY</Text>
         </TouchableOpacity>
+
+        {/* ── To-Do / Task Overview ── */}
+        <TodoSection router={router} userRole={user?.role} />
 
         {/* Sync status bar */}
         <SyncStatusBar
