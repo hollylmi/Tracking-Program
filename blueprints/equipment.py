@@ -1384,6 +1384,8 @@ def operations_dashboard():
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
     all_machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
     all_users = User.query.filter_by(active=True).order_by(User.display_name).all()
+    # Machine → project mapping for transfer modal filtering
+    machine_project_map = {pm.machine_id: pm.project_id for pm in ProjectMachine.query.all()}
 
     return render_template('equipment/operations.html',
                            today=today_date,
@@ -1400,7 +1402,8 @@ def operations_dashboard():
                            project_colour_map=project_colour_map,
                            projects=projects,
                            all_machines=all_machines,
-                           all_users=all_users)
+                           all_users=all_users,
+                           machine_project_map=machine_project_map)
 
 
 @equipment_bp.route('/equipment/daily-checks/view')

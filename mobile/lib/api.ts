@@ -231,6 +231,12 @@ export const api = {
     updateMachine: (machineId: number, data: Partial<MachineDetail>) =>
       apiClient.patch<{ id: number; name: string }>(`/equipment/machine/${machineId}`, data),
 
+    // Daily check edit/delete
+    editDailyCheck: (checkId: number, data: { condition?: string; notes?: string; hours_reading?: number | null }) =>
+      apiClient.patch(`/equipment/daily-check/${checkId}`, data),
+    deleteDailyCheck: (checkId: number) =>
+      apiClient.delete(`/equipment/daily-check/${checkId}`),
+
     // Machine documents
     machineDocuments: (machineId: number) =>
       apiClient.get<{ documents: MachineDocumentInfo[] }>(`/equipment/machine/${machineId}/documents`),

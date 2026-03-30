@@ -3047,6 +3047,61 @@ def equipment_daily_check_submit_api():
     return result, 201
 
 
+@api_data_bp.route('/equipment/daily-check/<int:check_id>', methods=['PATCH'])
+@jwt_required()
+def equipment_daily_check_edit_api(check_id):
+    """Edit a daily check from mobile."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role not in ('admin', 'supervisor'):
+        return {'error': 'Forbidden'}, 403
+
+    check = MachineDailyCheck.query.get(check_id)
+    if not check:
+        return {'error': 'Not found'}, 404
+
+    data = request.get_json(silent=True) or {}
+    if 'condition' in data:
+        check.condition = data['condition']
+    if 'notes' in data:
+        check.notes = data['notes'] or None
+    if 'hours_reading' in data:
+        val = data['hours_reading']
+        check.hours_reading = float(val) if val is not None else None
+        for hl in (check.hours_log or []):
+            hl.hours_reading = float(val) if val is not None else hl.hours_reading
+
+    db.session.commit()
+    return {
+        'id': check.id,
+        'condition': check.condition,
+        'hours_reading': check.hours_reading,
+        'notes': check.notes,
+    }, 200
+
+
+@api_data_bp.route('/equipment/daily-check/<int:check_id>', methods=['DELETE'])
+@jwt_required()
+def equipment_daily_check_delete_api(check_id):
+    """Delete a daily check from mobile."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role not in ('admin', 'supervisor'):
+        return {'error': 'Forbidden'}, 403
+
+    check = MachineDailyCheck.query.get(check_id)
+    if not check:
+        return {'error': 'Not found'}, 404
+
+    for hl in (check.hours_log or []):
+        db.session.delete(hl)
+    db.session.delete(check)
+    db.session.commit()
+    return {'message': 'Deleted'}, 200
+
+
 @api_data_bp.route('/equipment/daily-check-photo/<filename>')
 def serve_daily_check_photo_api(filename):
     """Serve daily check photos (UUID-obscured, no JWT)."""

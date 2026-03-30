@@ -24,6 +24,7 @@ import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme
 import { api } from '../../lib/api'
 import { cachedQuery } from '../../lib/cachedQuery'
 import { compressImage } from '../../lib/compressImage'
+import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
 import { useHire } from '../../hooks/useHire'
@@ -192,12 +193,19 @@ const CONDITION_OPTIONS: { value: string; label: string; color: string; bg: stri
 
 // ── Daily check machine card ─────────────────────────────────────────────────
 
-function MachineCheckCard({ machine, onCheck }: { machine: DailyCheckMachine; onCheck: () => void }) {
+function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyCheckMachine; onCheck: () => void; onViewCheck?: () => void }) {
   const checked = !!machine.check
   const condOpt = CONDITION_OPTIONS.find((c) => c.value === machine.check?.condition)
   const hasAlerts = machine.alerts && machine.alerts.length > 0
   const hasTransfer = !!machine.pending_transfer
+
+  const handlePress = () => {
+    if (checked && onViewCheck) onViewCheck()
+    else if (!checked) onCheck()
+  }
+
   return (
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
     <Card padding="none" style={{ overflow: 'hidden' }}>
       <View style={[styles.accentBar, { backgroundColor: checked ? Colors.success : hasAlerts ? Colors.warning : Colors.border }]} />
       <View style={styles.row}>
@@ -215,8 +223,11 @@ function MachineCheckCard({ machine, onCheck }: { machine: DailyCheckMachine; on
         </View>
         <View style={styles.right}>
           {checked && condOpt ? (
-            <View style={[styles.statusPill, { backgroundColor: condOpt.bg }]}>
-              <Text style={[styles.statusText, { color: condOpt.color }]}>{condOpt.label}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
+              <View style={[styles.statusPill, { backgroundColor: condOpt.bg }]}>
+                <Text style={[styles.statusText, { color: condOpt.color }]}>{condOpt.label}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color={Colors.textLight} />
             </View>
           ) : (
             <TouchableOpacity style={checkStyles.checkBtn} onPress={onCheck} activeOpacity={0.8}>
@@ -254,6 +265,7 @@ function MachineCheckCard({ machine, onCheck }: { machine: DailyCheckMachine; on
         </View>
       ) : null}
     </Card>
+    </TouchableOpacity>
   )
 }
 
@@ -370,15 +382,122 @@ const tabStyles = StyleSheet.create({
   },
 })
 
+// ── Check detail/edit modal (view completed check, edit, delete) ─────────────
+
+function CheckDetailModal({ visible, machine, userRole, onClose, onSaved, onDeleted }: {
+  visible: boolean; machine: DailyCheckMachine; userRole?: string
+  onClose: () => void; onSaved: () => void; onDeleted: () => void
+}) {
+  const check = machine.check
+  if (!check) return null
+  const canEdit = userRole === 'admin' || userRole === 'supervisor'
+  const [editing, setEditing] = useState(false)
+  const [condition, setCondition] = useState(check.condition)
+  const [notes, setNotes] = useState(check.notes || '')
+  const [hoursReading, setHoursReading] = useState(check.hours_reading != null ? String(check.hours_reading) : '')
+  const [saving, setSaving] = useState(false)
+  const { show } = useToastStore()
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await api.equipment.editDailyCheck(check.id, {
+        condition,
+        notes: notes || undefined,
+        hours_reading: hoursReading ? Number(hoursReading) : null,
+      })
+      show('Check updated', 'success')
+      setEditing(false)
+      onSaved()
+    } catch { show('Failed to update', 'error') }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = () => {
+    Alert.alert('Delete Check', 'Are you sure? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await api.equipment.deleteDailyCheck(check.id)
+          show('Check deleted', 'success')
+          onDeleted()
+        } catch { show('Failed to delete', 'error') }
+      }},
+    ])
+  }
+
+  const condOpt = CONDITION_OPTIONS.find((c) => c.value === (editing ? condition : check.condition))
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={modalStyles.root} edges={['top', 'bottom']}>
+        <View style={modalStyles.header}>
+          <TouchableOpacity onPress={onClose}><Text style={modalStyles.cancel}>Close</Text></TouchableOpacity>
+          <Text style={modalStyles.title} numberOfLines={1}>{machine.name}</Text>
+          {canEdit && !editing ? (
+            <TouchableOpacity onPress={() => setEditing(true)}><Text style={modalStyles.save}>Edit</Text></TouchableOpacity>
+          ) : editing ? (
+            <TouchableOpacity onPress={handleSave} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color={Colors.primary} /> : <Text style={modalStyles.save}>Save</Text>}
+            </TouchableOpacity>
+          ) : <View style={{ width: 40 }} />}
+        </View>
+        <View style={modalStyles.body}>
+          {!editing ? (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md }}>
+                {condOpt && <View style={[styles.statusPill, { backgroundColor: condOpt.bg }]}><Text style={[styles.statusText, { color: condOpt.color }]}>{condOpt.label}</Text></View>}
+                {check.hours_reading != null && <Text style={{ ...Typography.body, color: Colors.textPrimary, fontWeight: '600' }}>{check.hours_reading} hrs</Text>}
+              </View>
+              {check.checked_by && <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, marginBottom: Spacing.xs }}>Checked by {check.checked_by}</Text>}
+              {check.notes ? <Text style={{ ...Typography.body, color: Colors.textPrimary, marginBottom: Spacing.md }}>{check.notes}</Text> : null}
+              {check.photo_url ? (
+                <Image source={{ uri: check.photo_url }} style={{ width: '100%', height: 200, borderRadius: BorderRadius.md, marginBottom: Spacing.md }} resizeMode="cover" />
+              ) : null}
+              {canEdit && (
+                <TouchableOpacity onPress={handleDelete} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm, borderWidth: 1, borderColor: Colors.error, marginTop: Spacing.lg }}>
+                  <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                  <Text style={{ ...Typography.body, color: Colors.error, fontWeight: '600' }}>Delete Check</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={modalStyles.label}>Condition</Text>
+              <View style={modalStyles.conditionRow}>
+                {CONDITION_OPTIONS.map((opt) => (
+                  <TouchableOpacity key={opt.value}
+                    style={[modalStyles.conditionBtn, condition === opt.value && { backgroundColor: opt.bg, borderColor: opt.color }]}
+                    onPress={() => setCondition(opt.value)} activeOpacity={0.8}>
+                    <Text style={[modalStyles.conditionBtnText, condition === opt.value && { color: opt.color, fontWeight: '700' }]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Machine Hours</Text>
+              <TextInput style={[modalStyles.input, { minHeight: 0 }]} value={hoursReading} onChangeText={setHoursReading}
+                placeholder="Hours reading" placeholderTextColor={Colors.textLight} keyboardType="decimal-pad" />
+              <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Notes</Text>
+              <TextInput style={modalStyles.input} value={notes} onChangeText={setNotes} placeholder="Notes"
+                placeholderTextColor={Colors.textLight} multiline numberOfLines={3} textAlignVertical="top" />
+            </>
+          )}
+        </View>
+      </SafeAreaView>
+    </Modal>
+  )
+}
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function EquipmentScreen() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const user = useAuthStore((s) => s.user)
   const { show } = useToastStore()
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>('fleet')
   const [checkingMachine, setCheckingMachine] = useState<DailyCheckMachine | null>(null)
+  const [viewingCheck, setViewingCheck] = useState<DailyCheckMachine | null>(null)
   const activeProject = useProjectStore((s) => s.activeProject)
   const projectId = activeProject?.id
 
@@ -576,7 +695,7 @@ export default function EquipmentScreen() {
           <FlatList
             data={sortedChecks}
             keyExtractor={(item) => item.machine_id ? `m-${item.machine_id}` : `h-${item.hired_machine_id}`}
-            renderItem={({ item }) => <MachineCheckCard machine={item} onCheck={() => setCheckingMachine(item)} />}
+            renderItem={({ item }) => <MachineCheckCard machine={item} onCheck={() => setCheckingMachine(item)} onViewCheck={() => setViewingCheck(item)} />}
             contentContainerStyle={styles.list}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
             showsVerticalScrollIndicator={false}
@@ -584,11 +703,19 @@ export default function EquipmentScreen() {
         )
       )}
 
-      {/* Check Modal */}
+      {/* Check Modal — new check */}
       {checkingMachine && (
         <CheckModal visible={!!checkingMachine} machineName={checkingMachine.name}
           isFleetMachine={checkingMachine.source === 'fleet'}
           onClose={() => setCheckingMachine(null)} onSubmit={handleSubmitCheck} />
+      )}
+
+      {/* Check Detail Modal — view/edit/delete completed check */}
+      {viewingCheck && (
+        <CheckDetailModal visible={!!viewingCheck} machine={viewingCheck} userRole={user?.role}
+          onClose={() => setViewingCheck(null)}
+          onSaved={() => { setViewingCheck(null); queryClient.invalidateQueries({ queryKey: ['daily-checks'] }) }}
+          onDeleted={() => { setViewingCheck(null); queryClient.invalidateQueries({ queryKey: ['daily-checks'] }) }} />
       )}
     </SafeAreaView>
   )

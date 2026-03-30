@@ -297,10 +297,10 @@
             </div>
             <!-- Machines (multi-select) -->
             <div class="col-12">
-              <label class="form-label fw-semibold">Machines * <small class="text-muted fw-normal">(select all that are being moved)</small></label>
-              <div class="border rounded p-2" style="max-height: 180px; overflow-y: auto;">
+              <label class="form-label fw-semibold">Machines * <small class="text-muted fw-normal">(shows machines assigned to source project)</small></label>
+              <div class="border rounded p-2" style="max-height: 180px; overflow-y: auto;" id="transferMachineList">
                 {% for m in all_machines %}
-                <div class="form-check">
+                <div class="form-check transfer-machine-item" data-project-id="{{ machine_project_map.get(m.id, '') }}">
                   <input class="form-check-input" type="checkbox" name="machine_ids" value="{{ m.id }}" id="tm{{ m.id }}">
                   <label class="form-check-label small" for="tm{{ m.id }}">{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}{% if m.machine_type %} — {{ m.machine_type }}{% endif %}</label>
                 </div>
@@ -365,6 +365,15 @@
 function autoFillPickup(sel) {
   var opt = sel.options[sel.selectedIndex];
   document.getElementById('pickupLocation').value = opt.dataset.address || '';
+  // Filter machines to only show those assigned to the selected source project
+  var pid = sel.value;
+  document.querySelectorAll('.transfer-machine-item').forEach(function(el) {
+    var mpid = el.dataset.projectId;
+    if (!pid) { el.style.display = ''; }
+    else { el.style.display = (mpid === pid) ? '' : 'none'; }
+    // Uncheck hidden items
+    if (el.style.display === 'none') { el.querySelector('input').checked = false; }
+  });
 }
 function autoFillDropoff(sel) {
   var opt = sel.options[sel.selectedIndex];
