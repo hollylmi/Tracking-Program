@@ -153,12 +153,17 @@ else:
     # ── project — site manager ──────────────────────────────────────────────
     changes += add_column('project', 'site_manager_user_id', 'INTEGER')
 
+    # ── machine_daily_check — hours reading ─────────────────────────────────
+    if table_exists('machine_daily_check'):
+        changes += add_column('machine_daily_check', 'hours_reading', 'REAL')
+
     for t in ('entry_photo', 'planned_data', 'project_non_work_date', 'project_budgeted_role',
               'project_machine', 'project_worked_sunday', 'project_document',
               'project_equipment_requirement', 'project_equipment_assignment',
               'machine_breakdown', 'breakdown_photo', 'public_holiday', 'cfmeu_date',
               'machine_transfer', 'site_equipment_checklist', 'site_equipment_checklist_item',
-              'machine_daily_check'):
+              'machine_daily_check', 'machine_document', 'machine_hours_log',
+              'project_daily_task_assignment'):
         if table_exists(t):
             print(f"OK:     {t} table exists")
         else:

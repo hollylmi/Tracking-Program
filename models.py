@@ -888,6 +888,7 @@ class MachineDailyCheck(db.Model):
     check_date = db.Column(db.Date, nullable=False)
     checked_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     condition = db.Column(db.String(20), nullable=False)  # good / fair / poor / broken_down
+    hours_reading = db.Column(db.Float, nullable=True)    # current machine hours meter reading
     notes = db.Column(db.Text, nullable=True)
     photo_filename = db.Column(db.String(500), nullable=True)
     photo_original_name = db.Column(db.String(500), nullable=True)
@@ -909,6 +910,65 @@ class MachineDailyCheck(db.Model):
 
     def __repr__(self):
         return f'<MachineDailyCheck project={self.project_id} date={self.check_date}>'
+
+
+class MachineDocument(db.Model):
+    """Documentation attached to a machine (manuals, certs, service records, photos)."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False)
+    filename = db.Column(db.String(500), nullable=False)
+    original_name = db.Column(db.String(500))
+    doc_type = db.Column(db.String(50), default='other')  # manual / certificate / service_record / photo / other
+    title = db.Column(db.String(300))
+    notes = db.Column(db.Text)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    machine = db.relationship('Machine', backref='documents')
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_user_id])
+
+    def __repr__(self):
+        return f'<MachineDocument machine={self.machine_id} {self.original_name}>'
+
+
+class MachineHoursLog(db.Model):
+    """Tracks machine hours over time — recorded during daily checks."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    log_date = db.Column(db.Date, nullable=False)
+    hours_reading = db.Column(db.Float, nullable=False)
+    recorded_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    daily_check_id = db.Column(db.Integer, db.ForeignKey('machine_daily_check.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    machine = db.relationship('Machine', backref='hours_logs')
+    project = db.relationship('Project')
+    recorded_by = db.relationship('User', foreign_keys=[recorded_by_user_id])
+    daily_check = db.relationship('MachineDailyCheck', backref='hours_log')
+
+    def __repr__(self):
+        return f'<MachineHoursLog machine={self.machine_id} {self.log_date} {self.hours_reading}h>'
+
+
+class ProjectDailyTaskAssignment(db.Model):
+    """Assigns who is responsible for daily tasks per project."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    task_type = db.Column(db.String(50), nullable=False)  # daily_entry / machine_startup
+    assigned_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref='daily_task_assignments')
+    assigned_user = db.relationship('User', foreign_keys=[assigned_user_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('project_id', 'task_type', name='uq_project_task_type'),
+    )
+
+    def __repr__(self):
+        return f'<ProjectDailyTaskAssignment project={self.project_id} task={self.task_type}>'
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,8 @@ from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBre
                     BreakdownPhoto, ProjectEquipmentAssignment, ProjectEquipmentRequirement,
                     ProjectMachine, EquipmentAssignmentHistory, User, DailyEntry,
                     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem,
-                    MachineDailyCheck)
+                    MachineDailyCheck, MachineDocument, MachineHoursLog,
+                    ProjectDailyTaskAssignment)
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -783,3 +784,127 @@ def serve_daily_check_photo(filename):
         f'daily_checks/{filename}',
         os.path.join(UPLOAD_FOLDER, 'daily_checks', filename)
     )
+
+
+# ---------------------------------------------------------------------------
+# Machine detail page (comprehensive single-machine view)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/machine/<int:machine_id>')
+@require_role('admin', 'supervisor', 'site')
+def machine_detail(machine_id):
+    """Full machine detail page with documents, hours, lifecycle, checks."""
+    m = Machine.query.get_or_404(machine_id)
+    docs = MachineDocument.query.filter_by(machine_id=machine_id).order_by(MachineDocument.uploaded_at.desc()).all()
+    hours_logs = MachineHoursLog.query.filter_by(machine_id=machine_id).order_by(MachineHoursLog.log_date.desc()).limit(30).all()
+    recent_checks = MachineDailyCheck.query.filter_by(machine_id=machine_id).order_by(MachineDailyCheck.check_date.desc()).limit(14).all()
+    breakdowns = MachineBreakdown.query.filter_by(machine_id=machine_id).order_by(MachineBreakdown.incident_date.desc()).all()
+    assignment = ProjectMachine.query.filter_by(machine_id=machine_id).first()
+    transfers = MachineTransfer.query.filter(
+        MachineTransfer.machine_id == machine_id,
+        MachineTransfer.status.in_(['scheduled', 'in_transit'])
+    ).all()
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    return render_template('equipment/machine_detail.html',
+                           machine=m, docs=docs, hours_logs=hours_logs,
+                           recent_checks=recent_checks, breakdowns=breakdowns,
+                           assignment=assignment, transfers=transfers,
+                           projects=projects, today=date.today())
+
+
+# ---------------------------------------------------------------------------
+# Machine document management
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/machine/<int:machine_id>/document/upload', methods=['POST'])
+@require_role('admin', 'supervisor')
+def machine_document_upload(machine_id):
+    """Upload a document or photo to a machine."""
+    m = Machine.query.get_or_404(machine_id)
+    file = request.files.get('file')
+    if not file or not file.filename:
+        flash('No file selected.', 'danger')
+        return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
+
+    doc_type = request.form.get('doc_type', 'other')
+    title = request.form.get('title', '').strip() or file.filename
+    notes = request.form.get('notes', '').strip() or None
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    stored = f"{uuid.uuid4()}{ext}"
+    local_path = os.path.join(UPLOAD_FOLDER, 'machine_docs', stored)
+    storage.upload_file(file, f'machine_docs/{stored}', local_path)
+
+    doc = MachineDocument(
+        machine_id=machine_id,
+        filename=stored,
+        original_name=file.filename,
+        doc_type=doc_type,
+        title=title,
+        notes=notes,
+        uploaded_by_user_id=current_user.id,
+    )
+    db.session.add(doc)
+    db.session.commit()
+    flash(f'Document "{title}" uploaded.', 'success')
+    return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
+
+
+@equipment_bp.route('/equipment/machine-doc/<filename>')
+@require_role('admin', 'supervisor', 'site')
+def serve_machine_doc(filename):
+    return storage.serve_file(
+        f'machine_docs/{filename}',
+        os.path.join(UPLOAD_FOLDER, 'machine_docs', filename)
+    )
+
+
+@equipment_bp.route('/equipment/machine/<int:machine_id>/document/<int:doc_id>/delete', methods=['POST'])
+@require_role('admin')
+def machine_document_delete(machine_id, doc_id):
+    doc = MachineDocument.query.get_or_404(doc_id)
+    if doc.machine_id != machine_id:
+        flash('Invalid document.', 'danger')
+        return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
+    storage.delete_file(f'machine_docs/{doc.filename}',
+                        os.path.join(UPLOAD_FOLDER, 'machine_docs', doc.filename))
+    db.session.delete(doc)
+    db.session.commit()
+    flash('Document deleted.', 'info')
+    return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
+
+
+# ---------------------------------------------------------------------------
+# Task assignments (admin assigns who does daily entry / machine startup)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/task-assignment/save', methods=['POST'])
+@require_role('admin')
+def task_assignment_save():
+    """Save or update daily task assignments for a project."""
+    project_id = request.form.get('project_id', type=int)
+    if not project_id:
+        flash('Project is required.', 'danger')
+        return redirect(request.referrer or url_for('main.index'))
+
+    for task_type in ('daily_entry', 'machine_startup'):
+        user_id = request.form.get(f'{task_type}_user_id', type=int)
+        existing = ProjectDailyTaskAssignment.query.filter_by(
+            project_id=project_id, task_type=task_type).first()
+        if user_id:
+            if existing:
+                existing.assigned_user_id = user_id
+                existing.active = True
+            else:
+                db.session.add(ProjectDailyTaskAssignment(
+                    project_id=project_id,
+                    task_type=task_type,
+                    assigned_user_id=user_id,
+                ))
+        elif existing:
+            existing.active = False
+
+    db.session.commit()
+    flash('Task assignments updated.', 'success')
+    return redirect(request.referrer or url_for('main.index'))

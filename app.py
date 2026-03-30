@@ -263,6 +263,8 @@ with app.app_context():
         "ALTER TABLE machine ADD COLUMN model_number VARCHAR(200)",
         # Project — site manager
         'ALTER TABLE project ADD COLUMN site_manager_user_id INTEGER REFERENCES "user"(id)',
+        # ── 2026-03-30: Machine daily check — hours reading ──
+        "ALTER TABLE machine_daily_check ADD COLUMN hours_reading FLOAT",
     ]:
         try:
             db.session.execute(db.text(stmt))

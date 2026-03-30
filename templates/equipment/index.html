@@ -8,15 +8,8 @@
 
 <!-- Tabs -->
 <ul class="nav nav-tabs mb-4" id="equipTabs">
-  {% if current_user.role == 'admin' and dashboard %}
   <li class="nav-item">
-    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-dashboard">
-      <i class="bi bi-clipboard2-data me-1"></i>Dashboard
-    </button>
-  </li>
-  {% endif %}
-  <li class="nav-item">
-    <button class="nav-link {% if not dashboard %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-own">
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-own">
       <i class="bi bi-wrench me-1"></i>Own Fleet
       <span class="badge bg-secondary ms-1">{{ own_machines | selectattr('active') | list | length }}</span>
     </button>
@@ -31,9 +24,9 @@
 
 <div class="tab-content">
 
-  <!-- ===== ADMIN DASHBOARD TAB ===== -->
-  {% if current_user.role == 'admin' and dashboard %}
-  <div class="tab-pane fade show active" id="tab-dashboard">
+  <!-- Dashboard tab removed — task overview lives on main dashboard now -->
+  {% if false and current_user.role == 'admin' and dashboard %}
+  <div class="tab-pane fade" id="tab-dashboard-removed">
 
     <!-- Top summary strip -->
     <div class="row g-3 mb-4">
@@ -248,7 +241,7 @@
   {% endif %}
 
   <!-- ===== OWN FLEET TAB ===== -->
-  <div class="tab-pane fade {% if not dashboard %}show active{% endif %}" id="tab-own">
+  <div class="tab-pane fade show active" id="tab-own">
 
     <!-- Add Machine form -->
     <div class="card border-0 shadow-sm mb-3">

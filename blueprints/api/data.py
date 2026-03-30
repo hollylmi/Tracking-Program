@@ -16,6 +16,7 @@ from models import (
     ProjectBudgetedRole, ProjectNonWorkDate, PublicHoliday, CFMEUDate,
     EmployeeLeave, ScheduleDayOverride,
     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem, MachineDailyCheck,
+    MachineDocument, MachineHoursLog, ProjectDailyTaskAssignment,
 )
 from utils.files import allowed_photo
 import storage
@@ -2928,6 +2929,8 @@ def equipment_daily_check_submit_api():
     project_id = request.form.get('project_id', type=int)
     condition = request.form.get('condition', 'good')
     notes = request.form.get('notes', '').strip() or None
+    hours_reading_str = request.form.get('hours_reading', '').strip()
+    hours_reading = float(hours_reading_str) if hours_reading_str else None
 
     if not project_id or (not machine_id and not hired_machine_id):
         return {'error': 'project_id and machine_id or hired_machine_id required'}, 400
@@ -2943,6 +2946,7 @@ def equipment_daily_check_submit_api():
         check_date=date.today(),
         checked_by_user_id=user.id,
         condition=condition,
+        hours_reading=hours_reading,
         notes=notes,
     )
 
@@ -2985,6 +2989,20 @@ def equipment_daily_check_submit_api():
             pass
 
     db.session.add(check)
+    db.session.flush()
+
+    # Auto-log machine hours if reading was provided
+    if hours_reading is not None and machine_id:
+        hours_log = MachineHoursLog(
+            machine_id=machine_id,
+            project_id=project_id,
+            log_date=date.today(),
+            hours_reading=hours_reading,
+            recorded_by_user_id=user.id,
+            daily_check_id=check.id,
+        )
+        db.session.add(hours_log)
+
     db.session.commit()
 
     result = {'message': 'Daily check recorded', 'check_id': check.id}
@@ -3090,3 +3108,274 @@ def equipment_admin_dashboard_api():
             'status': t.status,
         } for t in pending_transfers],
     }, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MACHINE DOCUMENTS API
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/equipment/machine/<int:machine_id>/documents', methods=['GET'])
+@jwt_required()
+def equipment_machine_documents(machine_id):
+    """List documents for a machine."""
+    user, err = _get_user()
+    if err:
+        return err
+    docs = MachineDocument.query.filter_by(machine_id=machine_id).order_by(
+        MachineDocument.uploaded_at.desc()).all()
+    return {'documents': [{
+        'id': d.id,
+        'filename': d.filename,
+        'original_name': d.original_name,
+        'doc_type': d.doc_type,
+        'title': d.title,
+        'notes': d.notes,
+        'uploaded_by': (d.uploaded_by.display_name or d.uploaded_by.username) if d.uploaded_by else None,
+        'uploaded_at': d.uploaded_at.isoformat() if d.uploaded_at else None,
+        'url': f'/api/equipment/machine-doc/{d.filename}',
+    } for d in docs]}, 200
+
+
+@api_data_bp.route('/equipment/machine/<int:machine_id>/documents', methods=['POST'])
+@jwt_required()
+def equipment_machine_document_upload(machine_id):
+    """Upload a document to a machine."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role not in ('admin', 'supervisor'):
+        return {'error': 'Forbidden'}, 403
+
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return {'error': 'No file provided'}, 400
+
+    doc_type = request.form.get('doc_type', 'other')
+    title = request.form.get('title', '').strip() or file.filename
+    notes = request.form.get('notes', '').strip() or None
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    stored = f"{uuid.uuid4()}{ext}"
+    local_path = os.path.join(UPLOAD_FOLDER, 'machine_docs', stored)
+    storage.upload_file(file, f'machine_docs/{stored}', local_path)
+
+    doc = MachineDocument(
+        machine_id=machine_id, filename=stored, original_name=file.filename,
+        doc_type=doc_type, title=title, notes=notes, uploaded_by_user_id=user.id,
+    )
+    db.session.add(doc)
+    db.session.commit()
+    return {'id': doc.id, 'message': 'Document uploaded'}, 201
+
+
+@api_data_bp.route('/equipment/machine-doc/<filename>')
+def serve_machine_doc_api(filename):
+    """Serve machine documents (UUID-obscured, no JWT)."""
+    return storage.serve_file(
+        f'machine_docs/{filename}',
+        os.path.join(UPLOAD_FOLDER, 'machine_docs', filename)
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MACHINE HOURS LOG API
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/equipment/machine/<int:machine_id>/hours', methods=['GET'])
+@jwt_required()
+def equipment_machine_hours(machine_id):
+    """Get hours log for a machine."""
+    user, err = _get_user()
+    if err:
+        return err
+    logs = MachineHoursLog.query.filter_by(machine_id=machine_id).order_by(
+        MachineHoursLog.log_date.desc()).limit(60).all()
+    return {'hours_logs': [{
+        'id': l.id,
+        'log_date': l.log_date.isoformat(),
+        'hours_reading': l.hours_reading,
+        'recorded_by': (l.recorded_by.display_name or l.recorded_by.username) if l.recorded_by else None,
+        'project_name': l.project.name if l.project else None,
+    } for l in logs]}, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DAILY TASKS / TO-DO API
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/tasks/my-todos', methods=['GET'])
+@jwt_required()
+def my_todos():
+    """Get the current user's to-do items for today."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    from sqlalchemy import func
+    today_date = date.today()
+    todos = []
+
+    # Find task assignments for this user
+    assignments = ProjectDailyTaskAssignment.query.filter_by(
+        assigned_user_id=user.id, active=True).all()
+
+    for a in assignments:
+        project = a.project
+        if not project or not project.active:
+            continue
+
+        if a.task_type == 'daily_entry':
+            entry_exists = DailyEntry.query.filter_by(
+                project_id=project.id).filter(
+                func.date(DailyEntry.entry_date) == today_date).first()
+            todos.append({
+                'project_id': project.id,
+                'project_name': project.name,
+                'task_type': 'daily_entry',
+                'label': 'Submit daily entry',
+                'completed': entry_exists is not None,
+            })
+
+        elif a.task_type == 'machine_startup':
+            own_count = ProjectMachine.query.filter_by(project_id=project.id).count()
+            hired_count = HiredMachine.query.filter_by(project_id=project.id, active=True).count()
+            total_machines = own_count + hired_count
+            checks_done = MachineDailyCheck.query.filter_by(
+                project_id=project.id, check_date=today_date).count()
+            todos.append({
+                'project_id': project.id,
+                'project_name': project.name,
+                'task_type': 'machine_startup',
+                'label': 'Complete machine startup checks',
+                'completed': checks_done >= total_machines and total_machines > 0,
+                'progress': {'done': checks_done, 'total': total_machines},
+            })
+
+    return {'date': today_date.isoformat(), 'todos': todos}, 200
+
+
+@api_data_bp.route('/tasks/admin-overview', methods=['GET'])
+@jwt_required()
+def admin_task_overview():
+    """Admin overview: all projects, task assignments, completion status, standdown emails."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role != 'admin':
+        return {'error': 'Admin only'}, 403
+
+    from sqlalchemy import func
+    today_date = date.today()
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    project_tasks = []
+    for p in projects:
+        # Task assignments
+        assignments = ProjectDailyTaskAssignment.query.filter_by(
+            project_id=p.id, active=True).all()
+
+        entry_assignment = next((a for a in assignments if a.task_type == 'daily_entry'), None)
+        startup_assignment = next((a for a in assignments if a.task_type == 'machine_startup'), None)
+
+        # Daily entry status
+        entry_today = DailyEntry.query.filter_by(
+            project_id=p.id).filter(
+            func.date(DailyEntry.entry_date) == today_date).first()
+
+        # Machine startup status
+        own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
+        hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
+        total_machines = own_count + hired_count
+        checks_done = MachineDailyCheck.query.filter_by(
+            project_id=p.id, check_date=today_date).count()
+
+        # Standdown email needed: if today's entry has delays and hired machines exist
+        standdown_needed = False
+        if entry_today and hired_count > 0:
+            has_delays = (entry_today.delay_hours or 0) > 0
+            if not has_delays:
+                from models import EntryDelayLine
+                has_delays = EntryDelayLine.query.filter_by(entry_id=entry_today.id).count() > 0
+            standdown_needed = has_delays
+
+        # Open breakdowns
+        own_machine_ids = {pm.machine_id for pm in ProjectMachine.query.filter_by(project_id=p.id).all()}
+        hired_ids = {hm.id for hm in HiredMachine.query.filter_by(project_id=p.id).all()}
+        open_breakdowns = MachineBreakdown.query.filter(
+            MachineBreakdown.repair_status != 'completed',
+            db.or_(
+                MachineBreakdown.machine_id.in_(own_machine_ids) if own_machine_ids else db.false(),
+                MachineBreakdown.hired_machine_id.in_(hired_ids) if hired_ids else db.false(),
+            )
+        ).count()
+
+        project_tasks.append({
+            'project_id': p.id,
+            'project_name': p.name,
+            'site_manager': (p.site_manager.display_name or p.site_manager.username) if p.site_manager else None,
+            'daily_entry': {
+                'assigned_to': (entry_assignment.assigned_user.display_name or entry_assignment.assigned_user.username) if entry_assignment else None,
+                'completed': entry_today is not None,
+            },
+            'machine_startup': {
+                'assigned_to': (startup_assignment.assigned_user.display_name or startup_assignment.assigned_user.username) if startup_assignment else None,
+                'done': checks_done,
+                'total': total_machines,
+                'completed': checks_done >= total_machines and total_machines > 0,
+            },
+            'standdown_email_needed': standdown_needed,
+            'open_breakdowns': open_breakdowns,
+        })
+
+    return {'date': today_date.isoformat(), 'projects': project_tasks}, 200
+
+
+@api_data_bp.route('/tasks/assignments', methods=['GET'])
+@jwt_required()
+def task_assignments_list():
+    """List all task assignments (admin)."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role != 'admin':
+        return {'error': 'Admin only'}, 403
+
+    assignments = ProjectDailyTaskAssignment.query.filter_by(active=True).all()
+    return {'assignments': [{
+        'id': a.id,
+        'project_id': a.project_id,
+        'project_name': a.project.name if a.project else None,
+        'task_type': a.task_type,
+        'assigned_user_id': a.assigned_user_id,
+        'assigned_user_name': (a.assigned_user.display_name or a.assigned_user.username) if a.assigned_user else None,
+    } for a in assignments]}, 200
+
+
+@api_data_bp.route('/tasks/assignments', methods=['POST'])
+@jwt_required()
+def task_assignment_save_api():
+    """Save a task assignment (admin)."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role != 'admin':
+        return {'error': 'Admin only'}, 403
+
+    data = request.get_json(silent=True) or {}
+    project_id = data.get('project_id')
+    task_type = data.get('task_type')
+    assigned_user_id = data.get('assigned_user_id')
+
+    if not project_id or not task_type or not assigned_user_id:
+        return {'error': 'project_id, task_type, and assigned_user_id required'}, 400
+
+    existing = ProjectDailyTaskAssignment.query.filter_by(
+        project_id=project_id, task_type=task_type).first()
+    if existing:
+        existing.assigned_user_id = assigned_user_id
+        existing.active = True
+    else:
+        db.session.add(ProjectDailyTaskAssignment(
+            project_id=project_id, task_type=task_type, assigned_user_id=assigned_user_id))
+    db.session.commit()
+    return {'message': 'Assignment saved'}, 200

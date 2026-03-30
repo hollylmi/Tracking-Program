@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+{% block title %}{{ machine.name }} — Equipment{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="fw-bold mb-1">{{ machine.name }}{% if machine.plant_id %} <span class="text-muted">({{ machine.plant_id }})</span>{% endif %}</h3>
+    <div class="small text-muted">
+      {% if machine.machine_type %}{{ machine.machine_type }} | {% endif %}
+      {% if machine.manufacturer %}{{ machine.manufacturer }}{% endif %}
+      {% if machine.model_number %} {{ machine.model_number }}{% endif %}
+      {% if machine.serial_number %} | S/N: {{ machine.serial_number }}{% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back
+  </a>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-info"><i class="bi bi-info-circle me-1"></i>Details</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-docs"><i class="bi bi-file-earmark me-1"></i>Documents <span class="badge bg-secondary ms-1">{{ docs | length }}</span></button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hours"><i class="bi bi-clock-history me-1"></i>Hours</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-checks"><i class="bi bi-check2-square me-1"></i>Daily Checks</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-breakdowns"><i class="bi bi-exclamation-triangle me-1"></i>Breakdowns <span class="badge bg-secondary ms-1">{{ breakdowns | selectattr('is_active') | list | length }}</span></button></li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- ===== DETAILS TAB ===== -->
+  <div class="tab-pane fade show active" id="tab-info">
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white py-2 fw-semibold small">Machine Information</div>
+          <div class="card-body">
+            <form method="POST" action="{{ url_for('equipment.machine_edit_details', machine_id=machine.id) }}">
+              <div class="row g-3">
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Serial Number</label><input type="text" name="serial_number" class="form-control form-control-sm" value="{{ machine.serial_number or '' }}"></div>
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Manufacturer</label><input type="text" name="manufacturer" class="form-control form-control-sm" value="{{ machine.manufacturer or '' }}"></div>
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Model Number</label><input type="text" name="model_number" class="form-control form-control-sm" value="{{ machine.model_number or '' }}"></div>
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Acquired Date</label><input type="date" name="acquired_date" class="form-control form-control-sm" value="{{ machine.acquired_date.isoformat() if machine.acquired_date else '' }}"></div>
+              </div>
+              <hr>
+              <h6 class="fw-semibold small text-muted">Lifecycle</h6>
+              <div class="row g-3">
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Dispose By Date</label><input type="date" name="dispose_by_date" class="form-control form-control-sm" value="{{ machine.dispose_by_date.isoformat() if machine.dispose_by_date else '' }}"></div>
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Next Inspection Date</label><input type="date" name="next_inspection_date" class="form-control form-control-sm" value="{{ machine.next_inspection_date.isoformat() if machine.next_inspection_date else '' }}"></div>
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Inspection Interval (days)</label><input type="number" name="inspection_interval_days" class="form-control form-control-sm" value="{{ machine.inspection_interval_days or '' }}"></div>
+              </div>
+              {% if machine.dispose_by_date %}
+              {% set days_left = (machine.dispose_by_date - today).days %}
+              <div class="alert {% if days_left <= 7 %}alert-danger{% elif days_left <= 30 %}alert-warning{% else %}alert-info{% endif %} mt-3 mb-0 py-2 small">
+                <i class="bi bi-exclamation-triangle me-1"></i>Disposal in {{ days_left }} days ({{ machine.dispose_by_date.strftime('%d/%m/%Y') }})
+              </div>
+              {% endif %}
+              {% if machine.next_inspection_date %}
+              {% set days_left = (machine.next_inspection_date - today).days %}
+              <div class="alert {% if days_left <= 3 %}alert-danger{% elif days_left <= 14 %}alert-warning{% else %}alert-info{% endif %} mt-2 mb-0 py-2 small">
+                <i class="bi bi-search me-1"></i>Inspection in {{ days_left }} days ({{ machine.next_inspection_date.strftime('%d/%m/%Y') }})
+              </div>
+              {% endif %}
+              <hr>
+              <h6 class="fw-semibold small text-muted">Instructions & Notes</h6>
+              <div class="row g-3">
+                <div class="col-12"><label class="form-label small fw-semibold">Storage Instructions</label><textarea name="storage_instructions" class="form-control form-control-sm" rows="2">{{ machine.storage_instructions or '' }}</textarea></div>
+                <div class="col-12"><label class="form-label small fw-semibold">Service Instructions</label><textarea name="service_instructions" class="form-control form-control-sm" rows="2">{{ machine.service_instructions or '' }}</textarea></div>
+                <div class="col-12"><label class="form-label small fw-semibold">Spare Parts Notes</label><textarea name="spare_parts_notes" class="form-control form-control-sm" rows="2">{{ machine.spare_parts_notes or '' }}</textarea></div>
+                <div class="col-12"><label class="form-label small fw-semibold">Disposal Procedure</label><textarea name="disposal_procedure" class="form-control form-control-sm" rows="2">{{ machine.disposal_procedure or '' }}</textarea></div>
+              </div>
+              {% if current_user.role == 'admin' %}
+              <div class="mt-3"><button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg me-1"></i>Save Details</button></div>
+              {% endif %}
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <!-- Assignment & Status -->
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white py-2 fw-semibold small">Assignment</div>
+          <div class="card-body">
+            {% if assignment %}
+            <span class="badge bg-success">Assigned to {{ assignment.project.name }}</span>
+            {% else %}
+            <span class="badge bg-secondary">Unassigned</span>
+            {% endif %}
+            <span class="badge {% if machine.active %}bg-success{% else %}bg-secondary{% endif %} ms-2">{{ 'Active' if machine.active else 'Inactive' }}</span>
+          </div>
+        </div>
+        {% if transfers %}
+        <div class="card border-0 shadow-sm mb-3 border-start border-warning border-3">
+          <div class="card-header bg-white py-2 fw-semibold small">Pending Transfers</div>
+          <div class="card-body">
+            {% for t in transfers %}
+            <div class="small mb-2">
+              {{ t.from_project.name if t.from_project else '—' }} → {{ t.to_project.name if t.to_project else '—' }}
+              <br><span class="text-muted">{{ t.scheduled_date.strftime('%d/%m/%Y') }} — {{ t.status | replace('_', ' ') | title }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% if hours_logs %}
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white py-2 fw-semibold small">Latest Hours Reading</div>
+          <div class="card-body">
+            <div class="fs-3 fw-bold">{{ hours_logs[0].hours_reading }} hrs</div>
+            <div class="small text-muted">{{ hours_logs[0].log_date.strftime('%d/%m/%Y') }} — {{ hours_logs[0].recorded_by.display_name if hours_logs[0].recorded_by else '—' }}</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DOCUMENTS TAB ===== -->
+  <div class="tab-pane fade" id="tab-docs">
+    {% if current_user.role in ('admin', 'supervisor') %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white py-2 fw-semibold small">Upload Document</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('equipment.machine_document_upload', machine_id=machine.id) }}" enctype="multipart/form-data">
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-3"><label class="form-label small fw-semibold">Type</label>
+              <select name="doc_type" class="form-select form-select-sm">
+                <option value="manual">Manual</option>
+                <option value="certificate">Certificate</option>
+                <option value="service_record">Service Record</option>
+                <option value="photo">Photo</option>
+                <option value="other" selected>Other</option>
+              </select>
+            </div>
+            <div class="col-sm-3"><label class="form-label small fw-semibold">Title</label><input type="text" name="title" class="form-control form-control-sm" placeholder="Document title"></div>
+            <div class="col-sm-3"><label class="form-label small fw-semibold">File</label><input type="file" name="file" class="form-control form-control-sm" required></div>
+            <div class="col-sm-2"><label class="form-label small fw-semibold">Notes</label><input type="text" name="notes" class="form-control form-control-sm" placeholder="Optional"></div>
+            <div class="col-sm-1"><button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-upload"></i></button></div>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if docs %}
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light"><tr><th>Type</th><th>Title</th><th>Notes</th><th>Uploaded By</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for d in docs %}
+            <tr>
+              <td><span class="badge bg-{% if d.doc_type == 'manual' %}primary{% elif d.doc_type == 'certificate' %}success{% elif d.doc_type == 'service_record' %}info{% elif d.doc_type == 'photo' %}warning{% else %}secondary{% endif %}">{{ d.doc_type | replace('_', ' ') | title }}</span></td>
+              <td class="fw-semibold">{{ d.title or d.original_name }}</td>
+              <td class="small text-muted">{{ d.notes or '—' }}</td>
+              <td class="small">{{ d.uploaded_by.display_name if d.uploaded_by else '—' }}</td>
+              <td class="small">{{ d.uploaded_at.strftime('%d/%m/%Y') if d.uploaded_at else '—' }}</td>
+              <td>
+                <a href="{{ url_for('equipment.serve_machine_doc', filename=d.filename) }}" class="btn btn-sm btn-outline-primary" target="_blank"><i class="bi bi-download"></i></a>
+                {% if current_user.role == 'admin' %}
+                <form method="POST" action="{{ url_for('equipment.machine_document_delete', machine_id=machine.id, doc_id=d.id) }}" class="d-inline" onsubmit="return confirm('Delete this document?')">
+                  <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-muted text-center py-4">No documents uploaded yet.</div>
+    {% endif %}
+  </div>
+
+  <!-- ===== HOURS TAB ===== -->
+  <div class="tab-pane fade" id="tab-hours">
+    {% if hours_logs %}
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light"><tr><th>Date</th><th>Hours Reading</th><th>Recorded By</th><th>Project</th></tr></thead>
+          <tbody>
+            {% for l in hours_logs %}
+            <tr>
+              <td>{{ l.log_date.strftime('%d/%m/%Y') }}</td>
+              <td class="fw-bold">{{ l.hours_reading }} hrs</td>
+              <td class="small">{{ l.recorded_by.display_name if l.recorded_by else '—' }}</td>
+              <td class="small">{{ l.project.name if l.project else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-muted text-center py-4">No hours recorded yet. Hours are logged during daily machine checks.</div>
+    {% endif %}
+  </div>
+
+  <!-- ===== DAILY CHECKS TAB ===== -->
+  <div class="tab-pane fade" id="tab-checks">
+    {% if recent_checks %}
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light"><tr><th>Date</th><th>Condition</th><th>Hours</th><th>Checked By</th><th>Notes</th><th>Photo</th></tr></thead>
+          <tbody>
+            {% for dc in recent_checks %}
+            <tr>
+              <td>{{ dc.check_date.strftime('%d/%m/%Y') }}</td>
+              <td><span class="badge {% if dc.condition == 'good' %}bg-success{% elif dc.condition == 'fair' %}bg-warning{% elif dc.condition == 'poor' %}bg-danger{% else %}bg-dark{% endif %}">{{ dc.condition | replace('_', ' ') | title }}</span></td>
+              <td>{{ dc.hours_reading if dc.hours_reading else '—' }}</td>
+              <td class="small">{{ dc.checked_by_user.display_name if dc.checked_by_user else '—' }}</td>
+              <td class="small">{{ dc.notes or '—' }}</td>
+              <td>{% if dc.photo_filename %}<a href="{{ url_for('equipment.serve_daily_check_photo', filename=dc.photo_filename) }}" target="_blank"><i class="bi bi-image text-primary"></i></a>{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-muted text-center py-4">No daily checks recorded for this machine.</div>
+    {% endif %}
+  </div>
+
+  <!-- ===== BREAKDOWNS TAB ===== -->
+  <div class="tab-pane fade" id="tab-breakdowns">
+    {% if breakdowns %}
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light"><tr><th>Date</th><th>Status</th><th>Description</th><th>Repairing By</th><th>Anticipated Return</th><th>Resolved</th></tr></thead>
+          <tbody>
+            {% for b in breakdowns %}
+            <tr>
+              <td>{{ b.incident_date.strftime('%d/%m/%Y') }}</td>
+              <td><span class="badge {% if b.repair_status == 'pending' %}bg-warning{% elif b.repair_status == 'in_progress' %}bg-info{% else %}bg-success{% endif %}">{{ b.repair_status | replace('_', ' ') | title }}</span></td>
+              <td class="small" style="max-width: 300px;">{{ b.description or '—' }}</td>
+              <td class="small">{{ b.repairing_by or '—' }}</td>
+              <td class="small">{{ b.anticipated_return.strftime('%d/%m/%Y') if b.anticipated_return else '—' }}</td>
+              <td class="small">{{ b.resolved_date.strftime('%d/%m/%Y') if b.resolved_date else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-muted text-center py-4">No breakdown history.</div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
