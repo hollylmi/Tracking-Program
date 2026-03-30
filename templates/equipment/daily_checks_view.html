@@ -97,7 +97,7 @@
           <th>Time</th>
           <th>Notes</th>
           <th>Photo</th>
-          {% if current_user.role == 'admin' %}
+          {% if current_user.role in ('admin', 'supervisor') %}
           <th>Actions</th>
           {% endif %}
         </tr>
@@ -134,7 +134,7 @@
             </a>
             {% else %}—{% endif %}
           </td>
-          {% if current_user.role == 'admin' %}
+          {% if current_user.role in ('admin', 'supervisor') %}
           <td>
             <button class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editCheck{{ dc.id }}"><i class="bi bi-pencil"></i></button>
             <form method="POST" action="{{ url_for('equipment.daily_check_delete', check_id=dc.id) }}" class="d-inline" onsubmit="return confirm('Delete this check?')">
@@ -176,7 +176,7 @@
 {% endif %}
 
 <!-- Edit check modals (admin) -->
-{% if current_user.role == 'admin' %}
+{% if current_user.role in ('admin', 'supervisor') %}
 {% for dc in checks %}
 <div class="modal fade" id="editCheck{{ dc.id }}" tabindex="-1">
   <div class="modal-dialog">

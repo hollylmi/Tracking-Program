@@ -631,7 +631,7 @@ def transfer_schedule():
 @equipment_bp.route('/equipment/transfer/<int:transfer_id>/update', methods=['POST'])
 @require_role('admin', 'supervisor')
 def transfer_update(transfer_id):
-    """Update transfer status. When completed, update ProjectMachine and log history."""
+    """Update transfer status."""
     transfer = MachineTransfer.query.get_or_404(transfer_id)
     new_status = request.form.get('status', transfer.status)
     transfer.status = new_status
@@ -662,7 +662,142 @@ def transfer_update(transfer_id):
 
     db.session.commit()
     flash(f'Transfer updated to {new_status}.', 'success')
-    return redirect(url_for('equipment.equipment_overview'))
+    return redirect(request.referrer or url_for('equipment.operations_dashboard'))
+
+
+@equipment_bp.route('/equipment/transfer/<int:transfer_id>/pre-check', methods=['POST'])
+@require_role('admin', 'supervisor', 'site')
+def transfer_pre_check(transfer_id):
+    """Record pre-move check before transport."""
+    transfer = MachineTransfer.query.get_or_404(transfer_id)
+    condition = request.form.get('condition', 'good')
+    notes = request.form.get('notes', '').strip() or None
+    hours_str = request.form.get('hours_reading', '').strip()
+    hours_reading = float(hours_str) if hours_str else None
+
+    # Create a daily check record for this machine
+    check = MachineDailyCheck(
+        machine_id=transfer.machine_id,
+        project_id=transfer.from_project_id or transfer.to_project_id,
+        check_date=date.today(),
+        checked_by_user_id=current_user.id,
+        condition=condition,
+        hours_reading=hours_reading,
+        notes=f'Pre-transfer check. {notes or ""}',
+    )
+
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower()
+        stored = f"{uuid.uuid4()}{ext}"
+        local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
+        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        check.photo_filename = stored
+        check.photo_original_name = photo.filename
+
+    db.session.add(check)
+    db.session.flush()
+
+    transfer.pre_check_id = check.id
+    transfer.pre_check_notes = notes
+    transfer.status = 'in_transit'
+
+    # Log hours
+    if hours_reading is not None:
+        db.session.add(MachineHoursLog(
+            machine_id=transfer.machine_id,
+            project_id=transfer.from_project_id,
+            log_date=date.today(),
+            hours_reading=hours_reading,
+            recorded_by_user_id=current_user.id,
+            daily_check_id=check.id,
+        ))
+
+    db.session.commit()
+    flash(f'Pre-transfer check recorded. Machine is now in transit.', 'success')
+    return redirect(request.referrer or url_for('equipment.operations_dashboard'))
+
+
+@equipment_bp.route('/equipment/transfer/<int:transfer_id>/arrive', methods=['POST'])
+@require_role('admin', 'supervisor', 'site')
+def transfer_arrive(transfer_id):
+    """Mark machine as arrived at destination and record arrival check."""
+    transfer = MachineTransfer.query.get_or_404(transfer_id)
+    condition = request.form.get('condition', 'good')
+    notes = request.form.get('notes', '').strip() or None
+    hours_str = request.form.get('hours_reading', '').strip()
+    hours_reading = float(hours_str) if hours_str else None
+
+    check = MachineDailyCheck(
+        machine_id=transfer.machine_id,
+        project_id=transfer.to_project_id or transfer.from_project_id,
+        check_date=date.today(),
+        checked_by_user_id=current_user.id,
+        condition=condition,
+        hours_reading=hours_reading,
+        notes=f'Arrival check after transfer. {notes or ""}',
+    )
+
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower()
+        stored = f"{uuid.uuid4()}{ext}"
+        local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
+        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        check.photo_filename = stored
+        check.photo_original_name = photo.filename
+
+    db.session.add(check)
+    db.session.flush()
+
+    transfer.arrival_check_id = check.id
+    transfer.arrival_check_notes = notes
+    transfer.arrived_by_user_id = current_user.id
+    transfer.arrived_at = datetime.utcnow()
+    transfer.status = 'completed'
+    transfer.completed_at = datetime.utcnow()
+
+    # Update ProjectMachine assignment
+    existing = ProjectMachine.query.filter_by(machine_id=transfer.machine_id).first()
+    if transfer.to_project_id:
+        if existing:
+            existing.project_id = transfer.to_project_id
+        else:
+            db.session.add(ProjectMachine(
+                project_id=transfer.to_project_id,
+                machine_id=transfer.machine_id,
+            ))
+    elif existing:
+        db.session.delete(existing)
+
+    db.session.add(EquipmentAssignmentHistory(
+        machine_id=transfer.machine_id,
+        from_project_id=transfer.from_project_id,
+        to_project_id=transfer.to_project_id,
+        moved_by=current_user.display_name or current_user.username,
+    ))
+
+    if hours_reading is not None:
+        db.session.add(MachineHoursLog(
+            machine_id=transfer.machine_id,
+            project_id=transfer.to_project_id,
+            log_date=date.today(),
+            hours_reading=hours_reading,
+            recorded_by_user_id=current_user.id,
+            daily_check_id=check.id,
+        ))
+
+    db.session.commit()
+    flash(f'Machine arrived and checked. Transfer complete.', 'success')
+    return redirect(request.referrer or url_for('equipment.operations_dashboard'))
+
+
+@equipment_bp.route('/equipment/transfer/<int:transfer_id>')
+@require_role('admin', 'supervisor', 'site')
+def transfer_detail(transfer_id):
+    """View transfer details including pre/post checks."""
+    transfer = MachineTransfer.query.get_or_404(transfer_id)
+    return render_template('equipment/transfer_detail.html', transfer=transfer, today=date.today())
 
 
 # ---------------------------------------------------------------------------
@@ -934,7 +1069,7 @@ def task_assignment_save():
 # ---------------------------------------------------------------------------
 
 @equipment_bp.route('/equipment/daily-check/<int:check_id>/delete', methods=['POST'])
-@require_role('admin')
+@require_role('admin', 'supervisor')
 def daily_check_delete(check_id):
     """Admin deletes a daily check record."""
     check = MachineDailyCheck.query.get_or_404(check_id)
@@ -952,7 +1087,7 @@ def daily_check_delete(check_id):
 
 
 @equipment_bp.route('/equipment/daily-check/<int:check_id>/edit', methods=['POST'])
-@require_role('admin')
+@require_role('admin', 'supervisor')
 def daily_check_edit(check_id):
     """Admin edits a daily check record."""
     check = MachineDailyCheck.query.get_or_404(check_id)

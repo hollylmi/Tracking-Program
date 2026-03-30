@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block title %}Transfer — {{ transfer.machine.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="fw-bold mb-1">Transfer: {{ transfer.machine.name }}</h3>
+    <div class="small text-muted">
+      {{ transfer.from_project.name if transfer.from_project else 'Unassigned' }} → {{ transfer.to_project.name if transfer.to_project else 'Unassigned' }}
+      | Scheduled {{ transfer.scheduled_date.strftime('%d/%m/%Y') }}
+      | <span class="badge {% if transfer.status == 'scheduled' %}bg-info{% elif transfer.status == 'in_transit' %}bg-warning{% elif transfer.status == 'completed' %}bg-success{% else %}bg-secondary{% endif %}">{{ transfer.status | replace('_', ' ') | title }}</span>
+    </div>
+  </div>
+  <a href="{{ url_for('equipment.operations_dashboard') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Operations</a>
+</div>
+
+<!-- Transfer timeline -->
+<div class="row g-4">
+  <div class="col-lg-8">
+    <!-- Step 1: Pre-move check -->
+    <div class="card border-0 shadow-sm mb-3 {% if transfer.pre_check %}border-start border-3 border-success{% else %}border-start border-3 border-secondary{% endif %}">
+      <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold"><i class="bi bi-1-circle me-2"></i>Pre-Move Check</span>
+        {% if transfer.pre_check %}<span class="badge bg-success">Done</span>{% else %}<span class="badge bg-secondary">Pending</span>{% endif %}
+      </div>
+      <div class="card-body">
+        {% if transfer.pre_check %}
+        <div class="row g-2">
+          <div class="col-sm-3"><span class="small text-muted">Condition</span><br><span class="badge {% if transfer.pre_check.condition == 'good' %}bg-success{% elif transfer.pre_check.condition == 'fair' %}bg-warning{% else %}bg-danger{% endif %}">{{ transfer.pre_check.condition | replace('_', ' ') | title }}</span></div>
+          <div class="col-sm-3"><span class="small text-muted">Hours</span><br><span class="fw-bold">{{ transfer.pre_check.hours_reading or '—' }}</span></div>
+          <div class="col-sm-3"><span class="small text-muted">Checked By</span><br><span class="small">{{ transfer.pre_check.checked_by_user.display_name if transfer.pre_check.checked_by_user else '—' }}</span></div>
+          <div class="col-sm-3"><span class="small text-muted">Date</span><br><span class="small">{{ transfer.pre_check.check_date.strftime('%d/%m/%Y') }}</span></div>
+          {% if transfer.pre_check.notes %}<div class="col-12"><span class="small text-muted">Notes</span><br><span class="small">{{ transfer.pre_check.notes }}</span></div>{% endif %}
+          {% if transfer.pre_check.photo_filename %}<div class="col-12"><a href="{{ url_for('equipment.serve_daily_check_photo', filename=transfer.pre_check.photo_filename) }}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-image me-1"></i>View Photo</a></div>{% endif %}
+        </div>
+        {% elif transfer.status == 'scheduled' %}
+        <p class="small text-muted mb-2">Check the machine before it leaves site.</p>
+        <form method="POST" action="{{ url_for('equipment.transfer_pre_check', transfer_id=transfer.id) }}" enctype="multipart/form-data">
+          <div class="row g-2">
+            <div class="col-sm-4"><label class="form-label small fw-semibold">Condition</label><select name="condition" class="form-select form-select-sm"><option value="good">Good</option><option value="fair">Fair</option><option value="poor">Poor</option><option value="broken_down">Broken Down</option></select></div>
+            <div class="col-sm-4"><label class="form-label small fw-semibold">Hours Reading</label><input type="number" step="0.1" name="hours_reading" class="form-control form-control-sm"></div>
+            <div class="col-sm-4"><label class="form-label small fw-semibold">Photo</label><input type="file" name="photo" class="form-control form-control-sm" accept="image/*"></div>
+            <div class="col-12"><label class="form-label small fw-semibold">Notes</label><textarea name="notes" class="form-control form-control-sm" rows="2"></textarea></div>
+            <div class="col-12"><button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg me-1"></i>Complete Pre-Check & Mark In Transit</button></div>
+          </div>
+        </form>
+        {% else %}
+        <span class="small text-muted">Skipped — machine already in transit.</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Step 2: In Transit -->
+    <div class="card border-0 shadow-sm mb-3 {% if transfer.status in ('in_transit', 'completed') %}border-start border-3 border-warning{% else %}border-start border-3 border-secondary{% endif %}">
+      <div class="card-header bg-white py-2">
+        <span class="fw-semibold"><i class="bi bi-2-circle me-2"></i>In Transit</span>
+        {% if transfer.status == 'in_transit' %}<span class="badge bg-warning ms-2">Current</span>{% elif transfer.status == 'completed' %}<span class="badge bg-success ms-2">Done</span>{% endif %}
+      </div>
+      <div class="card-body small">
+        {% if transfer.transport_contact %}<strong>Contact:</strong> {{ transfer.transport_contact }}<br>{% endif %}
+        {% if transfer.travel_notes %}<strong>Notes:</strong> {{ transfer.travel_notes }}{% endif %}
+        {% if not transfer.transport_contact and not transfer.travel_notes %}<span class="text-muted">No transport details.</span>{% endif %}
+      </div>
+    </div>
+
+    <!-- Step 3: Arrival check -->
+    <div class="card border-0 shadow-sm mb-3 {% if transfer.arrival_check %}border-start border-3 border-success{% elif transfer.status == 'in_transit' %}border-start border-3 border-primary{% else %}border-start border-3 border-secondary{% endif %}">
+      <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold"><i class="bi bi-3-circle me-2"></i>Arrival Check</span>
+        {% if transfer.arrival_check %}<span class="badge bg-success">Done</span>{% elif transfer.status == 'in_transit' %}<span class="badge bg-primary">Action Required</span>{% else %}<span class="badge bg-secondary">Waiting</span>{% endif %}
+      </div>
+      <div class="card-body">
+        {% if transfer.arrival_check %}
+        <div class="row g-2">
+          <div class="col-sm-3"><span class="small text-muted">Condition</span><br><span class="badge {% if transfer.arrival_check.condition == 'good' %}bg-success{% elif transfer.arrival_check.condition == 'fair' %}bg-warning{% else %}bg-danger{% endif %}">{{ transfer.arrival_check.condition | replace('_', ' ') | title }}</span></div>
+          <div class="col-sm-3"><span class="small text-muted">Hours</span><br><span class="fw-bold">{{ transfer.arrival_check.hours_reading or '—' }}</span></div>
+          <div class="col-sm-3"><span class="small text-muted">Received By</span><br><span class="small">{{ transfer.arrived_by.display_name if transfer.arrived_by else '—' }}</span></div>
+          <div class="col-sm-3"><span class="small text-muted">Date</span><br><span class="small">{{ transfer.arrived_at.strftime('%d/%m/%Y %H:%M') if transfer.arrived_at else '—' }}</span></div>
+          {% if transfer.arrival_check.notes %}<div class="col-12"><span class="small text-muted">Notes</span><br><span class="small">{{ transfer.arrival_check.notes }}</span></div>{% endif %}
+          {% if transfer.arrival_check.photo_filename %}<div class="col-12"><a href="{{ url_for('equipment.serve_daily_check_photo', filename=transfer.arrival_check.photo_filename) }}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-image me-1"></i>View Photo</a></div>{% endif %}
+        </div>
+        {% elif transfer.status == 'in_transit' %}
+        <p class="small text-muted mb-2">Check the machine on arrival at the new site.</p>
+        <form method="POST" action="{{ url_for('equipment.transfer_arrive', transfer_id=transfer.id) }}" enctype="multipart/form-data">
+          <div class="row g-2">
+            <div class="col-sm-4"><label class="form-label small fw-semibold">Condition</label><select name="condition" class="form-select form-select-sm"><option value="good">Good</option><option value="fair">Fair</option><option value="poor">Poor</option><option value="broken_down">Broken Down</option></select></div>
+            <div class="col-sm-4"><label class="form-label small fw-semibold">Hours Reading</label><input type="number" step="0.1" name="hours_reading" class="form-control form-control-sm"></div>
+            <div class="col-sm-4"><label class="form-label small fw-semibold">Photo</label><input type="file" name="photo" class="form-control form-control-sm" accept="image/*"></div>
+            <div class="col-12"><label class="form-label small fw-semibold">Notes</label><textarea name="notes" class="form-control form-control-sm" rows="2"></textarea></div>
+            <div class="col-12"><button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg me-1"></i>Mark Arrived & Complete Transfer</button></div>
+          </div>
+        </form>
+        {% else %}
+        <span class="small text-muted">Waiting for transit.</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white py-2 fw-semibold small">Machine Info</div>
+      <div class="card-body small">
+        <strong>{{ transfer.machine.name }}</strong>{% if transfer.machine.plant_id %} ({{ transfer.machine.plant_id }}){% endif %}<br>
+        {% if transfer.machine.machine_type %}Type: {{ transfer.machine.machine_type }}<br>{% endif %}
+        {% if transfer.machine.serial_number %}Serial: {{ transfer.machine.serial_number }}<br>{% endif %}
+        <a href="{{ url_for('equipment.machine_detail', machine_id=transfer.machine.id) }}" class="btn btn-sm btn-outline-primary mt-2"><i class="bi bi-box-arrow-up-right me-1"></i>Full Details</a>
+      </div>
+    </div>
+
+    {% if current_user.role == 'admin' %}
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header bg-white py-2 fw-semibold small">Admin Actions</div>
+      <div class="card-body">
+        {% if transfer.status != 'completed' and transfer.status != 'cancelled' %}
+        <form method="POST" action="{{ url_for('equipment.transfer_update', transfer_id=transfer.id) }}" class="mb-2">
+          <input type="hidden" name="status" value="cancelled">
+          <button class="btn btn-sm btn-outline-danger w-100" onclick="return confirm('Cancel this transfer?')"><i class="bi bi-x-lg me-1"></i>Cancel Transfer</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

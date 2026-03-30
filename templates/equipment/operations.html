@@ -9,7 +9,7 @@
   </a>
 </div>
 
-<!-- ── Summary strip ──────────────────────────────────────────────────── -->
+<!-- ── Summary strip ────────────────────────────────────���─────────────── -->
 <div class="row g-3 mb-4">
   <div class="col-sm-6 col-lg-3">
     <div class="card border-0 shadow-sm h-100">
@@ -31,7 +31,7 @@
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body text-center">
         <div class="fs-2 fw-bold {% if inspection_due %}text-warning{% else %}text-success{% endif %}">{{ inspection_due | length }}</div>
-        <div class="small text-muted">Inspections Due (30 days)</div>
+        <div class="small text-muted">Inspections Due (30d)</div>
       </div>
     </div>
   </div>
@@ -53,26 +53,18 @@
     <table class="table table-sm table-hover mb-0 align-middle">
       <thead class="table-light"><tr><th>Check</th><th>Project</th><th>Assigned To</th><th>Due Date</th><th>Machines</th><th>Frequency</th><th>Status</th></tr></thead>
       <tbody>
-        {% for sc in overdue_checks %}
-        <tr class="table-danger">
+        {% for sc in overdue_checks + upcoming_checks %}
+        {% set is_overdue = sc.next_due_date <= today %}
+        <tr class="{% if is_overdue %}table-danger{% else %}table-warning{% endif %}" style="cursor:pointer;"
+            onclick="window.location='{{ url_for('equipment.daily_checks_view', date=sc.next_due_date.isoformat()) }}'">
           <td class="fw-semibold">{{ sc.name }}</td>
-          <td class="small">{{ sc.project.name if sc.project else '—' }}</td>
+          {% set pc = project_colour_map.get(sc.project_id) if sc.project_id else None %}
+          <td class="small">{% if pc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.7rem;">{{ sc.project.name }}</span>{% else %}{{ sc.project.name if sc.project else '—' }}{% endif %}</td>
           <td class="small">{{ sc.assigned_user.display_name or sc.assigned_user.username }}</td>
-          <td class="small text-danger fw-bold">{{ sc.next_due_date.strftime('%d/%m/%Y') }}</td>
+          <td class="small {% if is_overdue %}text-danger fw-bold{% endif %}">{{ sc.next_due_date.strftime('%d/%m/%Y') }}{% if not is_overdue %} <small class="text-muted">({{ (sc.next_due_date - today).days }}d)</small>{% endif %}</td>
           <td class="small">{{ sc.machines | length }}</td>
           <td><span class="badge bg-secondary">{{ sc.frequency | replace('_', ' ') | title }}</span></td>
-          <td><span class="badge bg-danger">OVERDUE</span></td>
-        </tr>
-        {% endfor %}
-        {% for sc in upcoming_checks %}
-        <tr class="table-warning">
-          <td class="fw-semibold">{{ sc.name }}</td>
-          <td class="small">{{ sc.project.name if sc.project else '—' }}</td>
-          <td class="small">{{ sc.assigned_user.display_name or sc.assigned_user.username }}</td>
-          <td class="small">{{ sc.next_due_date.strftime('%d/%m/%Y') }} <small class="text-muted">({{ (sc.next_due_date - today).days }}d)</small></td>
-          <td class="small">{{ sc.machines | length }}</td>
-          <td><span class="badge bg-secondary">{{ sc.frequency | replace('_', ' ') | title }}</span></td>
-          <td><span class="badge bg-warning">Due Soon</span></td>
+          <td><span class="badge {% if is_overdue %}bg-danger{% else %}bg-warning{% endif %}">{% if is_overdue %}OVERDUE{% else %}Due Soon{% endif %}</span></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -81,33 +73,35 @@
 </div>
 {% endif %}
 
-<!-- ── Inspections & Disposal Due ──────────────────────────────────────── -->
+<!-- ── Inspections & Disposal Due ──────────────────────────��───────────── -->
 {% if inspection_due or disposal_due %}
 <h5 class="fw-bold mb-3"><i class="bi bi-search me-2 text-warning"></i>Inspections & Disposal Due</h5>
 <div class="card border-0 shadow-sm mb-4">
   <div class="table-responsive">
     <table class="table table-sm table-hover mb-0 align-middle">
-      <thead class="table-light"><tr><th>Machine</th><th>Plant ID</th><th>Alert Type</th><th>Due Date</th><th>Days Left</th><th>Details</th></tr></thead>
+      <thead class="table-light"><tr><th>Machine</th><th>Plant ID</th><th>Alert Type</th><th>Due Date</th><th>Days Left</th><th>Location / Storage</th><th>Details</th></tr></thead>
       <tbody>
         {% for m in inspection_due %}
         {% set days = (m.next_inspection_date - today).days %}
-        <tr class="{% if days <= 0 %}table-danger{% elif days <= 7 %}table-warning{% endif %}">
-          <td class="fw-semibold"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="text-decoration-none">{{ m.name }}</a></td>
+        <tr class="{% if days <= 0 %}table-danger{% elif days <= 7 %}table-warning{% endif %}" style="cursor:pointer;" onclick="window.location='{{ url_for('equipment.machine_detail', machine_id=m.id) }}'">
+          <td class="fw-semibold">{{ m.name }}</td>
           <td class="small text-muted">{{ m.plant_id or '—' }}</td>
           <td><span class="badge bg-info">Inspection</span></td>
           <td class="small">{{ m.next_inspection_date.strftime('%d/%m/%Y') }}</td>
           <td class="fw-bold {% if days <= 0 %}text-danger{% elif days <= 7 %}text-warning{% endif %}">{{ days }}d{% if days <= 0 %} OVERDUE{% endif %}</td>
+          <td class="small">{{ m.storage_instructions or '—' }}</td>
           <td class="small">{% if m.inspection_interval_days %}Every {{ m.inspection_interval_days }}d{% endif %}</td>
         </tr>
         {% endfor %}
         {% for m in disposal_due %}
         {% set days = (m.dispose_by_date - today).days %}
-        <tr class="{% if days <= 0 %}table-danger{% elif days <= 14 %}table-warning{% endif %}">
-          <td class="fw-semibold"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="text-decoration-none">{{ m.name }}</a></td>
+        <tr class="{% if days <= 0 %}table-danger{% elif days <= 14 %}table-warning{% endif %}" style="cursor:pointer;" onclick="window.location='{{ url_for('equipment.machine_detail', machine_id=m.id) }}'">
+          <td class="fw-semibold">{{ m.name }}</td>
           <td class="small text-muted">{{ m.plant_id or '—' }}</td>
           <td><span class="badge bg-danger">Disposal</span></td>
           <td class="small">{{ m.dispose_by_date.strftime('%d/%m/%Y') }}</td>
           <td class="fw-bold {% if days <= 0 %}text-danger{% elif days <= 14 %}text-warning{% endif %}">{{ days }}d{% if days <= 0 %} OVERDUE{% endif %}</td>
+          <td class="small">{{ m.storage_instructions or '—' }}</td>
           <td class="small">{{ m.disposal_procedure or '—' }}</td>
         </tr>
         {% endfor %}
@@ -117,7 +111,7 @@
 </div>
 {% endif %}
 
-<!-- ── Open Breakdowns ────────────────────────────────────────────────── -->
+<!-- ── Open Breakdowns ────────────────────────────────��───────────────── -->
 {% if open_breakdowns %}
 <h5 class="fw-bold mb-3"><i class="bi bi-exclamation-diamond me-2 text-danger"></i>Open Breakdowns ({{ open_breakdowns | length }})</h5>
 <div class="card border-0 shadow-sm mb-4">
@@ -128,10 +122,8 @@
         {% for b in open_breakdowns %}
         <tr>
           <td class="fw-semibold">
-            {% if b.machine %}
-            <a href="{{ url_for('equipment.machine_detail', machine_id=b.machine.id) }}" class="text-decoration-none">{{ b.machine.name }}</a>
-            {% elif b.hired_machine %}{{ b.hired_machine.machine_name }} <span class="badge bg-secondary">Hired</span>
-            {% else %}—{% endif %}
+            {% if b.machine %}<a href="{{ url_for('equipment.machine_detail', machine_id=b.machine.id) }}" class="text-decoration-none">{{ b.machine.name }}</a>
+            {% elif b.hired_machine %}{{ b.hired_machine.machine_name }} <span class="badge bg-secondary">Hired</span>{% else %}—{% endif %}
           </td>
           <td class="small">{{ b.incident_date.strftime('%d/%m/%Y') }}</td>
           <td class="small" style="max-width: 250px;">{{ b.description or '—' }}</td>
@@ -140,13 +132,8 @@
           <td class="small">{{ b.anticipated_return.strftime('%d/%m/%Y') if b.anticipated_return else '—' }}</td>
           <td>
             <form method="POST" action="{{ url_for('equipment.breakdown_update', bd_id=b.id) }}" class="d-inline">
-              {% if b.repair_status == 'pending' %}
-              <input type="hidden" name="repair_status" value="in_progress">
-              <button class="btn btn-sm btn-outline-info py-0" title="Mark In Progress"><i class="bi bi-wrench"></i></button>
-              {% else %}
-              <input type="hidden" name="repair_status" value="completed">
-              <button class="btn btn-sm btn-outline-success py-0" title="Mark Resolved"><i class="bi bi-check-lg"></i></button>
-              {% endif %}
+              {% if b.repair_status == 'pending' %}<input type="hidden" name="repair_status" value="in_progress"><button class="btn btn-sm btn-outline-info py-0" title="In Progress"><i class="bi bi-wrench"></i></button>
+              {% else %}<input type="hidden" name="repair_status" value="completed"><button class="btn btn-sm btn-outline-success py-0" title="Resolve"><i class="bi bi-check-lg"></i></button>{% endif %}
             </form>
           </td>
         </tr>
@@ -157,8 +144,8 @@
 </div>
 {% endif %}
 
-<!-- ── Recent Check Results ───────────────────────────────────────────── -->
-<h5 class="fw-bold mb-3"><i class="bi bi-check2-square me-2 text-primary"></i>Recent Check Results (7 days)</h5>
+<!-- ── Recent Daily Check Results ────────────────────────���────────────── -->
+<h5 class="fw-bold mb-3"><i class="bi bi-check2-square me-2 text-primary"></i>Recent Daily Checks (7 days)</h5>
 {% if checks_by_date %}
 {% for check_date, checks in checks_by_date | dictsort(reverse=true) %}
 <div class="card border-0 shadow-sm mb-3">
@@ -178,8 +165,7 @@
         {% for dc in checks %}
         <tr>
           <td class="fw-semibold">
-            {% if dc.machine %}
-            <a href="{{ url_for('equipment.machine_detail', machine_id=dc.machine.id) }}" class="text-decoration-none">{{ dc.machine.name }}</a>
+            {% if dc.machine %}<a href="{{ url_for('equipment.machine_detail', machine_id=dc.machine.id) }}" class="text-decoration-none">{{ dc.machine.name }}</a>
             {% elif dc.hired_machine %}{{ dc.hired_machine.machine_name }}{% else %}—{% endif %}
           </td>
           {% set pc = project_colour_map.get(dc.project_id) if dc.project_id else None %}
@@ -197,9 +183,7 @@
 </div>
 {% endfor %}
 {% else %}
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-body text-muted text-center py-4">No checks recorded in the last 7 days.</div>
-</div>
+<div class="card border-0 shadow-sm mb-4"><div class="card-body text-muted text-center py-4">No checks recorded in the last 7 days.</div></div>
 {% endif %}
 
 <!-- ── Recent Scheduled Check Completions ─────────────────────────────── -->
@@ -213,7 +197,8 @@
         {% for comp in recent_completions %}
         <tr>
           <td class="fw-semibold">{{ comp.scheduled_check.name if comp.scheduled_check else '—' }}</td>
-          <td class="small">{{ comp.scheduled_check.project.name if comp.scheduled_check and comp.scheduled_check.project else '—' }}</td>
+          {% set pc = project_colour_map.get(comp.scheduled_check.project_id) if comp.scheduled_check else None %}
+          <td class="small">{% if pc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.7rem;">{{ comp.scheduled_check.project.name }}</span>{% else %}{{ comp.scheduled_check.project.name if comp.scheduled_check and comp.scheduled_check.project else '—' }}{% endif %}</td>
           <td class="small">{{ comp.completed_date.strftime('%d/%m/%Y') }}</td>
           <td class="small">{{ comp.completed_by.display_name if comp.completed_by else '—' }}</td>
           <td class="small">{{ comp.notes or '—' }}</td>
@@ -231,27 +216,21 @@
 <div class="card border-0 shadow-sm mb-4">
   <div class="table-responsive">
     <table class="table table-sm table-hover mb-0 align-middle">
-      <thead class="table-light"><tr><th>Machine</th><th>From</th><th>To</th><th>Scheduled</th><th>Status</th><th>Contact</th><th>Actions</th></tr></thead>
+      <thead class="table-light"><tr><th>Machine</th><th>From</th><th>To</th><th>Scheduled</th><th>Status</th><th>Pre-Check</th><th>Arrival</th><th>Actions</th></tr></thead>
       <tbody>
         {% for t in pending_transfers %}
         <tr>
-          <td class="fw-semibold">{{ t.machine.name if t.machine else '—' }}</td>
-          <td class="small">{{ t.from_project.name if t.from_project else '—' }}</td>
-          <td class="small">{{ t.to_project.name if t.to_project else '—' }}</td>
+          <td class="fw-semibold"><a href="{{ url_for('equipment.transfer_detail', transfer_id=t.id) }}" class="text-decoration-none">{{ t.machine.name if t.machine else '—' }}</a></td>
+          {% set fpc = project_colour_map.get(t.from_project_id) if t.from_project_id else None %}
+          <td class="small">{% if fpc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ fpc[0] }};color:{{ fpc[1] }};font-size:.7rem;">{{ t.from_project.name }}</span>{% else %}{{ t.from_project.name if t.from_project else '—' }}{% endif %}</td>
+          {% set tpc = project_colour_map.get(t.to_project_id) if t.to_project_id else None %}
+          <td class="small">{% if tpc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ tpc[0] }};color:{{ tpc[1] }};font-size:.7rem;">{{ t.to_project.name }}</span>{% else %}{{ t.to_project.name if t.to_project else '—' }}{% endif %}</td>
           <td class="small">{{ t.scheduled_date.strftime('%d/%m/%Y') }}</td>
-          <td><span class="badge {% if t.status == 'scheduled' %}bg-info{% else %}bg-warning{% endif %}">{{ t.status | replace('_', ' ') | title }}</span></td>
-          <td class="small">{{ t.transport_contact or '—' }}</td>
+          <td><span class="badge {% if t.status == 'scheduled' %}bg-info{% elif t.status == 'in_transit' %}bg-warning{% else %}bg-success{% endif %}">{{ t.status | replace('_', ' ') | title }}</span></td>
+          <td>{% if t.pre_check %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-circle text-muted"></i>{% endif %}</td>
+          <td>{% if t.arrival_check %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-circle text-muted"></i>{% endif %}</td>
           <td>
-            <form method="POST" action="{{ url_for('equipment.transfer_update', transfer_id=t.id) }}" class="d-inline">
-              {% if t.status == 'scheduled' %}
-              <input type="hidden" name="status" value="in_transit"><button class="btn btn-sm btn-outline-warning py-0"><i class="bi bi-truck"></i></button>
-              {% elif t.status == 'in_transit' %}
-              <input type="hidden" name="status" value="completed"><button class="btn btn-sm btn-outline-success py-0"><i class="bi bi-check-lg"></i></button>
-              {% endif %}
-            </form>
-            <form method="POST" action="{{ url_for('equipment.transfer_update', transfer_id=t.id) }}" class="d-inline">
-              <input type="hidden" name="status" value="cancelled"><button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-lg"></i></button>
-            </form>
+            <a href="{{ url_for('equipment.transfer_detail', transfer_id=t.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i></a>
           </td>
         </tr>
         {% endfor %}

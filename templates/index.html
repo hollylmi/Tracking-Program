@@ -182,7 +182,9 @@
         <tr>
           <td class="fw-semibold">{{ tp.project.name }}</td>
           <td>
-            {% if tp.entry_done %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle-fill text-danger"></i>{% endif %}
+            <a href="{{ url_for('entries.entries', project_id=tp.project.id) }}" class="text-decoration-none">
+              {% if tp.entry_done %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle-fill text-danger"></i>{% endif %}
+            </a>
             {% if tp.entry_assigned %}<span class="small text-muted ms-1">{{ tp.entry_assigned.assigned_user.display_name or tp.entry_assigned.assigned_user.username }}</span>{% else %}<span class="small text-danger ms-1">Unassigned</span>{% endif %}
           </td>
           <td>

@@ -822,15 +822,26 @@ class MachineTransfer(db.Model):
     scheduled_date = db.Column(db.Date, nullable=False)
     travel_notes = db.Column(db.Text)
     transport_contact = db.Column(db.String(200))
-    status = db.Column(db.String(20), default='scheduled')  # scheduled / in_transit / completed / cancelled
+    status = db.Column(db.String(20), default='scheduled')  # scheduled / pre_check / in_transit / arrived / completed / cancelled
     reminder_sent = db.Column(db.Boolean, default=False)
     created_by = db.Column(db.String(200))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
+    # Pre-move check (done at source site before transport)
+    pre_check_id = db.Column(db.Integer, db.ForeignKey('machine_daily_check.id'), nullable=True)
+    pre_check_notes = db.Column(db.Text, nullable=True)
+    # Post-arrival check (done at destination site after arrival)
+    arrival_check_id = db.Column(db.Integer, db.ForeignKey('machine_daily_check.id'), nullable=True)
+    arrival_check_notes = db.Column(db.Text, nullable=True)
+    arrived_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    arrived_at = db.Column(db.DateTime, nullable=True)
 
     machine = db.relationship('Machine', backref='transfers')
     from_project = db.relationship('Project', foreign_keys=[from_project_id])
     to_project = db.relationship('Project', foreign_keys=[to_project_id])
+    pre_check = db.relationship('MachineDailyCheck', foreign_keys=[pre_check_id])
+    arrival_check = db.relationship('MachineDailyCheck', foreign_keys=[arrival_check_id])
+    arrived_by = db.relationship('User', foreign_keys=[arrived_by_user_id])
 
     def __repr__(self):
         return f'<MachineTransfer machine={self.machine_id} status={self.status}>'
