@@ -992,7 +992,15 @@ export default function NewEntryScreen() {
     id: e.id, label: e.name, sublabel: e.role || undefined,
   }))
 
-  const machineItems: ChecklistItem[] = [...allMachines]
+  // Only show machines that were started/checked today — if no checks exist, show all
+  const checkedMachineIds = new Set(
+    (dailyChecksData?.machines ?? []).filter((m) => m.check && m.machine_id).map((m) => m.machine_id!)
+  )
+  const filteredMachines = checkedMachineIds.size > 0
+    ? allMachines.filter((m) => checkedMachineIds.has(m.id))
+    : allMachines
+
+  const machineItems: ChecklistItem[] = [...filteredMachines]
     .sort((a, b) => (a.group_name || 'zzz').localeCompare(b.group_name || 'zzz') || a.name.localeCompare(b.name))
     .map((m) => ({
       id: m.id,

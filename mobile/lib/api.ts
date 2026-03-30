@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { API_BASE_URL } from '../constants/api'
 import { useAuthStore } from '../store/auth'
-import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine, DailyChecksResponse, EquipmentChecklist, MachineDocumentInfo, MachineHoursLogEntry, TodoItem, AdminProjectTask } from '../types'
+import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine, DailyChecksResponse, EquipmentChecklist, MachineDocumentInfo, MachineHoursLogEntry, TodoItem, AdminProjectTask, ScheduledCheckDetail } from '../types'
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -261,6 +261,10 @@ export const api = {
     assignments: () => apiClient.get<{ assignments: { id: number; project_id: number; project_name: string; task_type: string; assigned_user_id: number; assigned_user_name: string }[] }>('/tasks/assignments'),
     saveAssignment: (data: { project_id: number; task_type: string; assigned_user_id: number }) =>
       apiClient.post('/tasks/assignments', data),
+    scheduledCheck: (checkId: number) =>
+      apiClient.get<ScheduledCheckDetail>(`/tasks/scheduled-check/${checkId}`),
+    completeScheduledCheck: (checkId: number, notes?: string) =>
+      apiClient.post(`/tasks/scheduled-check/${checkId}/complete`, { notes }),
   },
 
   hire: {

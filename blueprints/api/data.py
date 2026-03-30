@@ -17,6 +17,7 @@ from models import (
     EmployeeLeave, ScheduleDayOverride,
     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem, MachineDailyCheck,
     MachineDocument, MachineHoursLog, ProjectDailyTaskAssignment,
+    ScheduledEquipmentCheck, ScheduledCheckCompletion,
 )
 from utils.files import allowed_photo
 import storage
@@ -3272,19 +3273,34 @@ def my_todos():
             })
 
         elif a.task_type == 'machine_startup':
-            own_count = ProjectMachine.query.filter_by(project_id=project.id).count()
-            hired_count = HiredMachine.query.filter_by(project_id=project.id, active=True).count()
-            total_machines = own_count + hired_count
             checks_done = MachineDailyCheck.query.filter_by(
                 project_id=project.id, check_date=today_date).count()
             todos.append({
                 'project_id': project.id,
                 'project_name': project.name,
                 'task_type': 'machine_startup',
-                'label': 'Complete machine startup checks',
-                'completed': checks_done >= total_machines and total_machines > 0,
-                'progress': {'done': checks_done, 'total': total_machines},
+                'label': 'Start machines for the day',
+                'completed': checks_done > 0,
+                'progress': {'done': checks_done, 'total': 0},
             })
+
+    # Scheduled equipment checks assigned to this user
+    my_scheduled = ScheduledEquipmentCheck.query.filter(
+        ScheduledEquipmentCheck.assigned_user_id == user.id,
+        ScheduledEquipmentCheck.active == True,
+        ScheduledEquipmentCheck.next_due_date <= today_date,
+    ).all()
+    for sc in my_scheduled:
+        already_done = any(c.completed_date == today_date for c in sc.completions)
+        todos.append({
+            'project_id': sc.project_id,
+            'project_name': sc.project.name if sc.project else None,
+            'task_type': 'scheduled_check',
+            'label': sc.name,
+            'completed': already_done,
+            'check_id': sc.id,
+            'machine_count': len(sc.machines),
+        })
 
     return {'date': today_date.isoformat(), 'todos': todos}, 200
 
@@ -3414,3 +3430,127 @@ def task_assignment_save_api():
             project_id=project_id, task_type=task_type, assigned_user_id=assigned_user_id))
     db.session.commit()
     return {'message': 'Assignment saved'}, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCHEDULED EQUIPMENT CHECK — detail + per-machine check flow
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/tasks/scheduled-check/<int:check_id>', methods=['GET'])
+@jwt_required()
+def scheduled_check_detail(check_id):
+    """Returns the scheduled check with its machines and today's check status per machine."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    sc = ScheduledEquipmentCheck.query.get(check_id)
+    if not sc:
+        return {'error': 'Not found'}, 404
+
+    today_date = date.today()
+
+    # Get today's daily checks for these machines on this project
+    machine_ids = [m.id for m in sc.machines]
+    existing_checks = {}
+    if machine_ids:
+        checks = MachineDailyCheck.query.filter(
+            MachineDailyCheck.machine_id.in_(machine_ids),
+            MachineDailyCheck.project_id == sc.project_id,
+            MachineDailyCheck.check_date == today_date,
+        ).all()
+        existing_checks = {c.machine_id: c for c in checks}
+
+    machines_list = []
+    for m in sc.machines:
+        dc = existing_checks.get(m.id)
+
+        # Alerts for this machine
+        alerts = []
+        if m.next_inspection_date:
+            days = (m.next_inspection_date - today_date).days
+            if days <= 14:
+                alerts.append({'type': 'inspection', 'message': f'Inspection due in {days} days' if days > 0 else 'Inspection overdue', 'urgency': 'danger' if days <= 3 else 'warning'})
+        if m.dispose_by_date:
+            days = (m.dispose_by_date - today_date).days
+            if days <= 30:
+                alerts.append({'type': 'disposal', 'message': f'Disposal in {days} days' if days > 0 else 'Disposal overdue', 'urgency': 'danger' if days <= 7 else 'warning'})
+
+        # Pending transfer
+        transfer = MachineTransfer.query.filter(
+            MachineTransfer.machine_id == m.id,
+            MachineTransfer.status.in_(['scheduled', 'in_transit']),
+        ).first()
+
+        machines_list.append({
+            'machine_id': m.id,
+            'name': m.name,
+            'plant_id': m.plant_id,
+            'type': m.machine_type,
+            'alerts': alerts,
+            'pending_transfer': {
+                'to_project': transfer.to_project.name if transfer and transfer.to_project else None,
+                'scheduled_date': transfer.scheduled_date.isoformat() if transfer else None,
+                'status': transfer.status if transfer else None,
+            } if transfer else None,
+            'check': {
+                'id': dc.id,
+                'condition': dc.condition,
+                'hours_reading': dc.hours_reading,
+                'notes': dc.notes,
+                'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
+            } if dc else None,
+        })
+
+    total = len(machines_list)
+    checked = sum(1 for m in machines_list if m['check'])
+    already_completed = any(c.completed_date == today_date for c in sc.completions)
+
+    return {
+        'id': sc.id,
+        'name': sc.name,
+        'project_id': sc.project_id,
+        'project_name': sc.project.name if sc.project else None,
+        'frequency': sc.frequency,
+        'next_due_date': sc.next_due_date.isoformat(),
+        'notes': sc.notes,
+        'total': total,
+        'checked': checked,
+        'completed_today': already_completed,
+        'machines': machines_list,
+    }, 200
+
+
+@api_data_bp.route('/tasks/scheduled-check/<int:check_id>/complete', methods=['POST'])
+@jwt_required()
+def scheduled_check_complete_api(check_id):
+    """Mark a scheduled check as completed."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    sc = ScheduledEquipmentCheck.query.get(check_id)
+    if not sc:
+        return {'error': 'Not found'}, 404
+
+    today_date = date.today()
+
+    # Check if already completed today
+    already = any(c.completed_date == today_date for c in sc.completions)
+    if already:
+        return {'error': 'Already completed today'}, 400
+
+    notes = request.form.get('notes', '').strip() or (request.get_json(silent=True) or {}).get('notes')
+
+    completion = ScheduledCheckCompletion(
+        scheduled_check_id=sc.id,
+        completed_date=today_date,
+        completed_by_user_id=user.id,
+        notes=notes,
+    )
+    db.session.add(completion)
+    sc.advance_due_date()
+    db.session.commit()
+
+    return {'message': 'Check completed', 'next_due_date': sc.next_due_date.isoformat() if sc.active else None}, 200

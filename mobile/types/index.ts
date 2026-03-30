@@ -315,10 +315,43 @@ export interface MachineHoursLogEntry {
 export interface TodoItem {
   project_id: number
   project_name: string
-  task_type: 'daily_entry' | 'machine_startup'
+  task_type: 'daily_entry' | 'machine_startup' | 'scheduled_check'
   label: string
   completed: boolean
   progress?: { done: number; total: number }
+  check_id?: number
+  machine_count?: number
+}
+
+export interface ScheduledCheckDetail {
+  id: number
+  name: string
+  project_id: number
+  project_name: string | null
+  frequency: string
+  next_due_date: string
+  notes: string | null
+  total: number
+  checked: number
+  completed_today: boolean
+  machines: ScheduledCheckMachine[]
+}
+
+export interface ScheduledCheckMachine {
+  machine_id: number
+  name: string
+  plant_id: string | null
+  type: string | null
+  alerts: MachineAlert[]
+  pending_transfer: MachineTransferBrief | null
+  check: {
+    id: number
+    condition: string
+    hours_reading: number | null
+    notes: string | null
+    checked_by: string | null
+    photo_url: string | null
+  } | null
 }
 
 export interface AdminProjectTask {

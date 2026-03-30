@@ -1686,8 +1686,10 @@ function TodoSection({ router, userRole }: { router: any; userRole?: string }) {
           <TouchableOpacity
             key={`${todo.project_id}-${todo.task_type}`}
             onPress={() => {
-              if (todo.task_type === 'daily_entry' && !todo.completed) router.push('/entry/new')
-              if (todo.task_type === 'machine_startup' && !todo.completed) router.push('/(tabs)/equipment')
+              if (todo.completed) return
+              if (todo.task_type === 'daily_entry') router.push('/entry/new')
+              else if (todo.task_type === 'machine_startup') router.push('/(tabs)/equipment')
+              else if (todo.task_type === 'scheduled_check' && todo.check_id) router.push({ pathname: '/scheduled-check/[id]', params: { id: todo.check_id } })
             }}
             activeOpacity={todo.completed ? 1 : 0.7}
             style={{
