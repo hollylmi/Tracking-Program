@@ -278,6 +278,9 @@ with app.app_context():
         "ALTER TABLE employee ADD COLUMN home_base VARCHAR(50)",
         "ALTER TABLE schedule_day_override ADD COLUMN office_location VARCHAR(50)",
         "ALTER TABLE accommodation_booking ADD COLUMN property_id INTEGER REFERENCES accommodation_property(id)",
+        "ALTER TABLE employee ADD COLUMN home_airport VARCHAR(10)",
+        "ALTER TABLE project ADD COLUMN city VARCHAR(100)",
+        "ALTER TABLE project ADD COLUMN nearest_airport VARCHAR(10)",
     ]:
         try:
             db.session.execute(db.text(stmt))
