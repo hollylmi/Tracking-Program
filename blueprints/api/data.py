@@ -2651,6 +2651,7 @@ def equipment_machine_detail(machine_id):
             'id': dc.id,
             'check_date': dc.check_date.isoformat(),
             'condition': dc.condition,
+            'hours_reading': dc.hours_reading,
             'notes': dc.notes,
             'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
             'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
@@ -2878,6 +2879,7 @@ def equipment_project_daily_checks(project_id):
             'check': {
                 'id': dc.id,
                 'condition': dc.condition,
+                'hours_reading': dc.hours_reading,
                 'notes': dc.notes,
                 'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
                 'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
@@ -2896,6 +2898,7 @@ def equipment_project_daily_checks(project_id):
             'check': {
                 'id': dc.id,
                 'condition': dc.condition,
+                'hours_reading': dc.hours_reading,
                 'notes': dc.notes,
                 'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
                 'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,

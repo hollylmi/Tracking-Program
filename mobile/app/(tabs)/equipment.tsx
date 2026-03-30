@@ -230,20 +230,21 @@ function MachineCheckCard({ machine, onCheck }: { machine: DailyCheckMachine; on
 
 // ── Check modal ──────────────────────────────────────────────────────────────
 
-function CheckModal({ visible, machineName, onClose, onSubmit }: {
-  visible: boolean; machineName: string; onClose: () => void
-  onSubmit: (condition: string, notes: string, photoUri?: string, photoFilename?: string) => Promise<void>
+function CheckModal({ visible, machineName, isFleetMachine, onClose, onSubmit }: {
+  visible: boolean; machineName: string; isFleetMachine: boolean; onClose: () => void
+  onSubmit: (condition: string, notes: string, hoursReading?: string, photoUri?: string, photoFilename?: string) => Promise<void>
 }) {
   const [condition, setCondition] = useState('good')
   const [notes, setNotes] = useState('')
+  const [hoursReading, setHoursReading] = useState('')
   const [photo, setPhoto] = useState<{ uri: string; filename: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
-      await onSubmit(condition, notes, photo?.uri, photo?.filename)
-      setCondition('good'); setNotes(''); setPhoto(null)
+      await onSubmit(condition, notes, hoursReading || undefined, photo?.uri, photo?.filename)
+      setCondition('good'); setNotes(''); setHoursReading(''); setPhoto(null)
     } finally { setSubmitting(false) }
   }
 
@@ -278,6 +279,14 @@ function CheckModal({ visible, machineName, onClose, onSubmit }: {
               </TouchableOpacity>
             ))}
           </View>
+          {isFleetMachine && (
+            <>
+              <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Machine Hours</Text>
+              <TextInput style={[modalStyles.input, { minHeight: 0 }]} value={hoursReading} onChangeText={setHoursReading}
+                placeholder="Current hours reading" placeholderTextColor={Colors.textLight}
+                keyboardType="decimal-pad" />
+            </>
+          )}
           <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Notes</Text>
           <TextInput style={modalStyles.input} value={notes} onChangeText={setNotes} placeholder="Optional notes"
             placeholderTextColor={Colors.textLight} multiline numberOfLines={3} textAlignVertical="top" />
@@ -434,7 +443,7 @@ export default function EquipmentScreen() {
   }
 
   const handleSubmitCheck = useCallback(
-    async (condition: string, notes: string, photoUri?: string, photoFilename?: string) => {
+    async (condition: string, notes: string, hoursReading?: string, photoUri?: string, photoFilename?: string) => {
       if (!checkingMachine || !projectId) return
       try {
         await api.equipment.submitDailyCheck({
@@ -443,6 +452,7 @@ export default function EquipmentScreen() {
           project_id: projectId,
           condition,
           notes: notes || undefined,
+          hours_reading: hoursReading,
           photo_uri: photoUri,
           photo_filename: photoFilename,
         })
@@ -548,6 +558,7 @@ export default function EquipmentScreen() {
       {/* Check Modal */}
       {checkingMachine && (
         <CheckModal visible={!!checkingMachine} machineName={checkingMachine.name}
+          isFleetMachine={checkingMachine.source === 'fleet'}
           onClose={() => setCheckingMachine(null)} onSubmit={handleSubmitCheck} />
       )}
     </SafeAreaView>

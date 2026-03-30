@@ -203,6 +203,7 @@ export interface DailyCheckRecord {
   id: number
   check_date: string
   condition: 'good' | 'fair' | 'poor' | 'broken_down'
+  hours_reading: number | null
   notes: string | null
   checked_by: string | null
   photo_url: string | null
@@ -273,6 +274,53 @@ export interface EquipmentChecklistItem {
   condition: string | null
   notes: string | null
   photo_url: string | null
+}
+
+export interface MachineDocumentInfo {
+  id: number
+  filename: string
+  original_name: string
+  doc_type: string
+  title: string | null
+  notes: string | null
+  uploaded_by: string | null
+  uploaded_at: string | null
+  url: string
+}
+
+export interface MachineHoursLogEntry {
+  id: number
+  log_date: string
+  hours_reading: number
+  recorded_by: string | null
+  project_name: string | null
+}
+
+export interface TodoItem {
+  project_id: number
+  project_name: string
+  task_type: 'daily_entry' | 'machine_startup'
+  label: string
+  completed: boolean
+  progress?: { done: number; total: number }
+}
+
+export interface AdminProjectTask {
+  project_id: number
+  project_name: string
+  site_manager: string | null
+  daily_entry: {
+    assigned_to: string | null
+    completed: boolean
+  }
+  machine_startup: {
+    assigned_to: string | null
+    done: number
+    total: number
+    completed: boolean
+  }
+  standdown_email_needed: boolean
+  open_breakdowns: number
 }
 
 export interface Document {

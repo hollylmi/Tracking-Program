@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { API_BASE_URL } from '../constants/api'
 import { useAuthStore } from '../store/auth'
-import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine, DailyChecksResponse, EquipmentChecklist } from '../types'
+import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine, DailyChecksResponse, EquipmentChecklist, MachineDocumentInfo, MachineHoursLogEntry, TodoItem, AdminProjectTask } from '../types'
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -174,6 +174,7 @@ export const api = {
       project_id: number
       condition: string
       notes?: string
+      hours_reading?: string
       photo_uri?: string
       photo_filename?: string
     }) => {
@@ -184,6 +185,7 @@ export const api = {
       formData.append('project_id', String(data.project_id))
       formData.append('condition', data.condition)
       if (data.notes) formData.append('notes', data.notes)
+      if (data.hours_reading) formData.append('hours_reading', data.hours_reading)
       if (data.photo_uri && data.photo_filename) {
         formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
       }
@@ -228,6 +230,37 @@ export const api = {
 
     updateMachine: (machineId: number, data: Partial<MachineDetail>) =>
       apiClient.patch<{ id: number; name: string }>(`/equipment/machine/${machineId}`, data),
+
+    // Machine documents
+    machineDocuments: (machineId: number) =>
+      apiClient.get<{ documents: MachineDocumentInfo[] }>(`/equipment/machine/${machineId}/documents`),
+
+    uploadMachineDocument: async (machineId: number, uri: string, filename: string, docType: string, title?: string) => {
+      const token = useAuthStore.getState().accessToken
+      const formData = new FormData()
+      formData.append('file', { uri, name: filename, type: 'application/octet-stream' } as any)
+      formData.append('doc_type', docType)
+      if (title) formData.append('title', title)
+      const res = await fetch(`${API_BASE_URL}/api/equipment/machine/${machineId}/documents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      if (!res.ok) throw new Error(`Document upload failed: ${res.status}`)
+      return res.json()
+    },
+
+    // Machine hours
+    machineHours: (machineId: number) =>
+      apiClient.get<{ hours_logs: MachineHoursLogEntry[] }>(`/equipment/machine/${machineId}/hours`),
+  },
+
+  tasks: {
+    myTodos: () => apiClient.get<{ date: string; todos: TodoItem[] }>('/tasks/my-todos'),
+    adminOverview: () => apiClient.get<{ date: string; projects: AdminProjectTask[] }>('/tasks/admin-overview'),
+    assignments: () => apiClient.get<{ assignments: { id: number; project_id: number; project_name: string; task_type: string; assigned_user_id: number; assigned_user_name: string }[] }>('/tasks/assignments'),
+    saveAssignment: (data: { project_id: number; task_type: string; assigned_user_id: number }) =>
+      apiClient.post('/tasks/assignments', data),
   },
 
   hire: {
