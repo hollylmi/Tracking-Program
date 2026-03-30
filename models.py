@@ -971,6 +971,69 @@ class ProjectDailyTaskAssignment(db.Model):
         return f'<ProjectDailyTaskAssignment project={self.project_id} task={self.task_type}>'
 
 
+# Association table for scheduled check ↔ machines
+scheduled_check_machines = db.Table(
+    'scheduled_check_machines',
+    db.Column('check_id', db.Integer, db.ForeignKey('scheduled_equipment_check.id'), primary_key=True),
+    db.Column('machine_id', db.Integer, db.ForeignKey('machine.id'), primary_key=True),
+)
+
+
+class ScheduledEquipmentCheck(db.Model):
+    """Admin-assigned equipment check — one-time or recurring, for specific machines."""
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    name = db.Column(db.String(300), nullable=False)          # e.g. "Initial mobilisation check", "Monthly inspection"
+    assigned_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    frequency = db.Column(db.String(20), nullable=False, default='one_time')  # one_time / daily / weekly / fortnightly / monthly / custom
+    interval_days = db.Column(db.Integer, nullable=True)      # for custom frequency
+    start_date = db.Column(db.Date, nullable=False)
+    next_due_date = db.Column(db.Date, nullable=False)
+    last_completed_date = db.Column(db.Date, nullable=True)
+    active = db.Column(db.Boolean, default=True)
+    notes = db.Column(db.Text)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref='scheduled_checks')
+    assigned_user = db.relationship('User', foreign_keys=[assigned_user_id], backref='assigned_checks')
+    created_by = db.relationship('User', foreign_keys=[created_by_user_id])
+    machines = db.relationship('Machine', secondary=scheduled_check_machines, backref='scheduled_checks')
+
+    def advance_due_date(self):
+        """After completion, advance next_due_date based on frequency."""
+        from datetime import timedelta
+        self.last_completed_date = self.next_due_date
+        freq_map = {
+            'daily': 1, 'weekly': 7, 'fortnightly': 14, 'monthly': 30,
+        }
+        if self.frequency == 'one_time':
+            self.active = False
+        elif self.frequency == 'custom' and self.interval_days:
+            self.next_due_date = self.next_due_date + timedelta(days=self.interval_days)
+        elif self.frequency in freq_map:
+            self.next_due_date = self.next_due_date + timedelta(days=freq_map[self.frequency])
+
+    def __repr__(self):
+        return f'<ScheduledEquipmentCheck {self.name} project={self.project_id}>'
+
+
+class ScheduledCheckCompletion(db.Model):
+    """Records each time a scheduled check is completed."""
+    id = db.Column(db.Integer, primary_key=True)
+    scheduled_check_id = db.Column(db.Integer, db.ForeignKey('scheduled_equipment_check.id'), nullable=False)
+    completed_date = db.Column(db.Date, nullable=False)
+    completed_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    scheduled_check = db.relationship('ScheduledEquipmentCheck', backref='completions')
+    completed_by = db.relationship('User', foreign_keys=[completed_by_user_id])
+
+    def __repr__(self):
+        return f'<ScheduledCheckCompletion check={self.scheduled_check_id} date={self.completed_date}>'
+
+
 # ---------------------------------------------------------------------------
 # Public holiday and CFMEU calendar models
 # ---------------------------------------------------------------------------

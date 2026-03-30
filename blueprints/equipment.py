@@ -15,7 +15,8 @@ from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBre
                     ProjectMachine, EquipmentAssignmentHistory, User, DailyEntry,
                     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem,
                     MachineDailyCheck, MachineDocument, MachineHoursLog,
-                    ProjectDailyTaskAssignment)
+                    ProjectDailyTaskAssignment, ScheduledEquipmentCheck,
+                    ScheduledCheckCompletion)
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -965,3 +966,118 @@ def hours_log_delete(log_id):
     db.session.commit()
     flash('Hours log entry deleted.', 'info')
     return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
+
+
+# ---------------------------------------------------------------------------
+# Scheduled equipment checks (admin creates, assigns to supervisor/site user)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/scheduled-check/create', methods=['POST'])
+@require_role('admin')
+def scheduled_check_create():
+    """Admin creates a scheduled equipment check."""
+    project_id = request.form.get('project_id', type=int)
+    name = request.form.get('name', '').strip()
+    assigned_user_id = request.form.get('assigned_user_id', type=int)
+    frequency = request.form.get('frequency', 'one_time')
+    interval_days = request.form.get('interval_days', type=int)
+    start_date_str = request.form.get('start_date', '').strip()
+    notes = request.form.get('notes', '').strip() or None
+    machine_ids = request.form.getlist('machine_ids', type=int)
+
+    if not project_id or not name or not assigned_user_id or not start_date_str:
+        flash('Project, name, assigned person, and start date are required.', 'danger')
+        return redirect(request.referrer or url_for('main.index'))
+
+    try:
+        start_dt = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid date.', 'danger')
+        return redirect(request.referrer or url_for('main.index'))
+
+    sc = ScheduledEquipmentCheck(
+        project_id=project_id,
+        name=name,
+        assigned_user_id=assigned_user_id,
+        frequency=frequency,
+        interval_days=interval_days if frequency == 'custom' else None,
+        start_date=start_dt,
+        next_due_date=start_dt,
+        notes=notes,
+        created_by_user_id=current_user.id,
+    )
+
+    # Attach machines
+    if machine_ids:
+        machines = Machine.query.filter(Machine.id.in_(machine_ids)).all()
+        sc.machines = machines
+
+    db.session.add(sc)
+    db.session.commit()
+    flash(f'Scheduled check "{name}" created with {len(sc.machines)} machines.', 'success')
+    return redirect(request.referrer or url_for('main.index'))
+
+
+@equipment_bp.route('/equipment/scheduled-check/<int:check_id>/complete', methods=['POST'])
+@require_role('admin', 'supervisor', 'site')
+def scheduled_check_complete(check_id):
+    """Mark a scheduled check as completed for today."""
+    sc = ScheduledEquipmentCheck.query.get_or_404(check_id)
+    notes = request.form.get('notes', '').strip() or None
+
+    completion = ScheduledCheckCompletion(
+        scheduled_check_id=sc.id,
+        completed_date=date.today(),
+        completed_by_user_id=current_user.id,
+        notes=notes,
+    )
+    db.session.add(completion)
+    sc.advance_due_date()
+    db.session.commit()
+    flash(f'Check "{sc.name}" completed.', 'success')
+    return redirect(request.referrer or url_for('main.index'))
+
+
+@equipment_bp.route('/equipment/scheduled-check/<int:check_id>/edit', methods=['POST'])
+@require_role('admin')
+def scheduled_check_edit(check_id):
+    """Admin edits a scheduled check."""
+    sc = ScheduledEquipmentCheck.query.get_or_404(check_id)
+    name = request.form.get('name', '').strip()
+    if name:
+        sc.name = name
+    assigned_user_id = request.form.get('assigned_user_id', type=int)
+    if assigned_user_id:
+        sc.assigned_user_id = assigned_user_id
+    frequency = request.form.get('frequency')
+    if frequency:
+        sc.frequency = frequency
+        if frequency == 'custom':
+            sc.interval_days = request.form.get('interval_days', type=int)
+    next_due = request.form.get('next_due_date', '').strip()
+    if next_due:
+        try:
+            sc.next_due_date = datetime.strptime(next_due, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    notes = request.form.get('notes', '').strip()
+    sc.notes = notes if notes else sc.notes
+
+    machine_ids = request.form.getlist('machine_ids', type=int)
+    if machine_ids:
+        sc.machines = Machine.query.filter(Machine.id.in_(machine_ids)).all()
+
+    db.session.commit()
+    flash(f'Check "{sc.name}" updated.', 'success')
+    return redirect(request.referrer or url_for('main.index'))
+
+
+@equipment_bp.route('/equipment/scheduled-check/<int:check_id>/delete', methods=['POST'])
+@require_role('admin')
+def scheduled_check_delete(check_id):
+    """Admin deletes a scheduled check."""
+    sc = ScheduledEquipmentCheck.query.get_or_404(check_id)
+    db.session.delete(sc)
+    db.session.commit()
+    flash('Scheduled check deleted.', 'info')
+    return redirect(request.referrer or url_for('main.index'))

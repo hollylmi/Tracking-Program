@@ -7,7 +7,7 @@ from sqlalchemy import func
 from blueprints.auth import require_role
 from models import (db, DailyEntry, Project, HiredMachine, User, ProjectMachine,
                     MachineDailyCheck, MachineBreakdown, ProjectDailyTaskAssignment,
-                    EntryDelayLine)
+                    EntryDelayLine, ScheduledEquipmentCheck)
 from utils.progress import compute_project_progress
 from utils.gantt import compute_gantt_data
 
@@ -45,7 +45,7 @@ def index():
     task_overview = None
     if current_user.role == 'admin':
         task_projects = []
-        supervisors = User.query.filter(User.active == True, User.role.in_(['admin', 'supervisor'])).order_by(User.display_name).all()
+        supervisors = User.query.filter(User.active == True, User.role.in_(['admin', 'supervisor', 'site'])).order_by(User.display_name).all()
 
         for p in projects:
             assignments = ProjectDailyTaskAssignment.query.filter_by(
@@ -88,7 +88,7 @@ def index():
                 'entry_done': entry_today is not None,
                 'checks_done': checks_done,
                 'total_machines': total_machines,
-                'startup_complete': checks_done >= total_machines and total_machines > 0,
+                'startup_complete': checks_done > 0,
                 'standdown_needed': standdown_needed,
                 'open_breakdowns': open_bds,
             })
@@ -98,7 +98,7 @@ def index():
             'supervisors': supervisors,
         }
 
-    # ── Supervisor to-do ────────────────────────────────────────────────
+    # ── Supervisor / site user to-do ──────────────────────────────────
     my_todos = None
     if current_user.role in ('supervisor', 'site'):
         todos = []
@@ -119,23 +119,47 @@ def index():
                     'completed': entry_exists is not None,
                 })
             elif a.task_type == 'machine_startup':
-                own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
-                hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
-                total = own_count + hired_count
+                # Machine startup = record machines you're using today
+                # Completed when at least one machine has been checked
                 done = MachineDailyCheck.query.filter_by(
                     project_id=p.id, check_date=today).count()
                 todos.append({
                     'project': p,
                     'task_type': 'machine_startup',
-                    'label': 'Complete machine startup checks',
-                    'completed': done >= total and total > 0,
+                    'label': 'Start machines for the day',
+                    'completed': done > 0,
                     'done': done,
-                    'total': total,
                 })
+
+        # Scheduled equipment checks assigned to this user
+        my_scheduled = ScheduledEquipmentCheck.query.filter(
+            ScheduledEquipmentCheck.assigned_user_id == current_user.id,
+            ScheduledEquipmentCheck.active == True,
+            ScheduledEquipmentCheck.next_due_date <= today,
+        ).all()
+        for sc in my_scheduled:
+            # Check if already completed today
+            already_done = any(c.completed_date == today for c in sc.completions)
+            todos.append({
+                'project': sc.project,
+                'task_type': 'scheduled_check',
+                'label': sc.name,
+                'completed': already_done,
+                'check_id': sc.id,
+                'machine_count': len(sc.machines),
+            })
+
         my_todos = todos
+
+    # ── Scheduled checks for admin overview ───────────────────────────
+    scheduled_checks = None
+    if current_user.role == 'admin':
+        scheduled_checks = ScheduledEquipmentCheck.query.filter_by(active=True).order_by(
+            ScheduledEquipmentCheck.next_due_date).all()
 
     return render_template('index.html', recent_entries=recent_entries,
                            total_entries=total_entries, entries_today=entries_today,
                            active_projects=len(projects), active_hired=active_hired,
                            project_data=project_data, today=today,
-                           task_overview=task_overview, my_todos=my_todos)
+                           task_overview=task_overview, my_todos=my_todos,
+                           scheduled_checks=scheduled_checks)
