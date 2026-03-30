@@ -1,6 +1,6 @@
 import 'react-native-get-random-values'
 import { v4 as uuidv4 } from 'uuid'
-import { useState, useRef, forwardRef } from 'react'
+import { useState, useRef, useEffect, forwardRef } from 'react'
 import {
   View,
   Text,
@@ -27,6 +27,7 @@ import { useHire } from '../../hooks/useHire'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { saveEntry, markEntrySynced, savePendingPhoto } from '../../lib/db'
 import { compressImage } from '../../lib/compressImage'
@@ -641,6 +642,25 @@ export default function NewEntryScreen() {
 
   // Step 4 — Equipment
   const [selectedMachineIds, setSelectedMachineIds] = useState<number[]>([])
+
+  // Pre-select machines that were checked today (from daily startup checks)
+  const { data: dailyChecksData } = useQuery({
+    queryKey: ['daily-checks-for-entry', activeProject?.id],
+    queryFn: () => api.equipment.projectDailyChecks(activeProject!.id).then((r) => r.data),
+    enabled: !!activeProject?.id,
+    staleTime: 2 * 60 * 1000,
+  })
+
+  useEffect(() => {
+    if (dailyChecksData?.machines && selectedMachineIds.length === 0) {
+      const checkedFleetIds = dailyChecksData.machines
+        .filter((m) => m.check && m.machine_id)
+        .map((m) => m.machine_id!)
+      if (checkedFleetIds.length > 0) {
+        setSelectedMachineIds(checkedFleetIds)
+      }
+    }
+  }, [dailyChecksData])
 
   // Step 5 — Delays & Notes
   const [variationLines, setVariationLines] = useState<{ number: string; description: string; hours: string; employee_ids: number[] }[]>([])

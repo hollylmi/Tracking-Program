@@ -908,3 +908,60 @@ def task_assignment_save():
     db.session.commit()
     flash('Task assignments updated.', 'success')
     return redirect(request.referrer or url_for('main.index'))
+
+
+# ---------------------------------------------------------------------------
+# Admin edit/delete for daily checks and hours logs
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/daily-check/<int:check_id>/delete', methods=['POST'])
+@require_role('admin')
+def daily_check_delete(check_id):
+    """Admin deletes a daily check record."""
+    check = MachineDailyCheck.query.get_or_404(check_id)
+    machine_id = check.machine_id
+    # Also delete linked hours log
+    if check.hours_log:
+        for hl in check.hours_log:
+            db.session.delete(hl)
+    db.session.delete(check)
+    db.session.commit()
+    flash('Daily check deleted.', 'info')
+    if machine_id:
+        return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
+    return redirect(url_for('equipment.equipment_overview'))
+
+
+@equipment_bp.route('/equipment/daily-check/<int:check_id>/edit', methods=['POST'])
+@require_role('admin')
+def daily_check_edit(check_id):
+    """Admin edits a daily check record."""
+    check = MachineDailyCheck.query.get_or_404(check_id)
+    condition = request.form.get('condition')
+    if condition:
+        check.condition = condition
+    notes = request.form.get('notes', '').strip()
+    check.notes = notes if notes else check.notes
+    hours_str = request.form.get('hours_reading', '').strip()
+    if hours_str:
+        check.hours_reading = float(hours_str)
+        # Update linked hours log if exists
+        for hl in (check.hours_log or []):
+            hl.hours_reading = float(hours_str)
+    db.session.commit()
+    flash('Daily check updated.', 'success')
+    if check.machine_id:
+        return redirect(url_for('equipment.machine_detail', machine_id=check.machine_id))
+    return redirect(url_for('equipment.equipment_overview'))
+
+
+@equipment_bp.route('/equipment/hours-log/<int:log_id>/delete', methods=['POST'])
+@require_role('admin')
+def hours_log_delete(log_id):
+    """Admin deletes a hours log entry."""
+    log = MachineHoursLog.query.get_or_404(log_id)
+    machine_id = log.machine_id
+    db.session.delete(log)
+    db.session.commit()
+    flash('Hours log entry deleted.', 'info')
+    return redirect(url_for('equipment.machine_detail', machine_id=machine_id))
