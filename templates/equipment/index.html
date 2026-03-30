@@ -27,6 +27,20 @@
   <!-- ===== OWN FLEET TAB ===== -->
   <div class="tab-pane fade show active" id="tab-own">
 
+    <!-- Project colour legend -->
+    {% if projects %}
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+      <span class="small text-muted fw-semibold me-1">Projects:</span>
+      {% for p in projects %}
+      {% set pc = project_colour_map.get(p.id) %}
+      {% if pc %}
+      <span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.75rem;">{{ p.name }}</span>
+      {% endif %}
+      {% endfor %}
+      <span class="badge rounded-pill px-2 py-1 bg-light text-muted border" style="font-size:.75rem;">Unassigned</span>
+    </div>
+    {% endif %}
+
     <!-- Add Machine form -->
     <div class="card border-0 shadow-sm mb-3">
       <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
@@ -284,7 +298,10 @@
             {% endfor %}
             {% set projs = own_machine_projects.get(m.id, []) %}
             {% set proj_ids = projs | map(attribute=0) | map(attribute='id') | list %}
+            {% set row_proj = machine_assigned_project.get(m.id) %}
+            {% set row_colours = project_colour_map.get(row_proj.id) if row_proj else None %}
             <tr class="fleet-row {{ 'table-danger' if bd else ('table-secondary opacity-75' if not m.active else '') }}"
+                {% if row_colours and not bd and m.active %}style="border-left: 4px solid {{ row_colours[1] }};"{% endif %}
                 data-group-id="{{ m.group_id or '' }}"
                 data-machine-type="{{ m.machine_type or '' }}"
                 data-project-ids="{{ proj_ids | join(',') }}">
@@ -308,11 +325,15 @@
               </td>
               <td>
                 {% set assigned_proj = machine_assigned_project.get(m.id) %}
+                {% set proj_colours = project_colour_map.get(assigned_proj.id) if assigned_proj else None %}
                 <div class="d-flex align-items-center gap-1">
+                  {% if assigned_proj and proj_colours %}
+                  <span class="badge rounded-pill px-2 py-1 me-1" style="background:{{ proj_colours[0] }};color:{{ proj_colours[1] }};font-size:.75rem;">{{ assigned_proj.name }}</span>
+                  {% endif %}
                   <form method="POST" action="{{ url_for('equipment.equipment_assign') }}" class="d-inline"
                         onsubmit="return confirmAssign(this, '{{ m.name|replace("'", "\\'") }}', '{{ assigned_proj.name|replace("'", "\\'") if assigned_proj else '' }}')">
                     <input type="hidden" name="machine_id" value="{{ m.id }}">
-                    <select name="project_id" class="form-select form-select-sm py-0" style="width:auto;min-width:110px;font-size:.78rem;"
+                    <select name="project_id" class="form-select form-select-sm py-0" style="width:auto;min-width:100px;font-size:.75rem;"
                             onchange="this.form.submit()">
                       <option value="">— None —</option>
                       {% for p in projects %}

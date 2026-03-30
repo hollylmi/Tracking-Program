@@ -323,6 +323,23 @@ def equipment_overview():
             'pending_transfers': pending_transfers,
         }
 
+    # ── Project colour map (matches scheduling page) ───────────────────
+    EQUIP_PALETTE = [
+        ('#cfe2ff', '#084298'),  # blue
+        ('#d1e7dd', '#0a3622'),  # green
+        ('#f8d7da', '#842029'),  # red
+        ('#fff3cd', '#664d03'),  # yellow
+        ('#d2f4ea', '#0b4c34'),  # teal
+        ('#fde8d8', '#6c3a00'),  # orange
+        ('#e2d9f3', '#3d1a78'),  # purple
+        ('#dee2e6', '#343a40'),  # grey
+    ]
+    all_proj_ordered = Project.query.order_by(Project.id).all()
+    project_colour_map = {
+        p.id: EQUIP_PALETTE[i % len(EQUIP_PALETTE)]
+        for i, p in enumerate(all_proj_ordered)
+    }
+
     return render_template('equipment/index.html',
                            own_machines=own_machines,
                            hired_machines=hired_machines,
@@ -336,7 +353,8 @@ def equipment_overview():
                            own_bd_history=own_bd_history,
                            hired_bd_history=hired_bd_history,
                            today=date.today(),
-                           dashboard=dashboard_data)
+                           dashboard=dashboard_data,
+                           project_colour_map=project_colour_map)
 
 
 @equipment_bp.route('/equipment/breakdown/add', methods=['POST'])
@@ -1142,6 +1160,13 @@ def operations_dashboard():
         ScheduledCheckCompletion.completed_date >= today_date - timedelta(days=14),
     ).order_by(ScheduledCheckCompletion.completed_date.desc()).all()
 
+    # Project colour map
+    PALETTE = [('#cfe2ff','#084298'),('#d1e7dd','#0a3622'),('#f8d7da','#842029'),
+               ('#fff3cd','#664d03'),('#d2f4ea','#0b4c34'),('#fde8d8','#6c3a00'),
+               ('#e2d9f3','#3d1a78'),('#dee2e6','#343a40')]
+    all_proj = Project.query.order_by(Project.id).all()
+    project_colour_map = {p.id: PALETTE[i % len(PALETTE)] for i, p in enumerate(all_proj)}
+
     return render_template('equipment/operations.html',
                            today=today_date,
                            inspection_due=inspection_due,
@@ -1152,7 +1177,8 @@ def operations_dashboard():
                            checks_by_date=dict(checks_by_date),
                            open_breakdowns=open_breakdowns,
                            pending_transfers=pending_transfers,
-                           recent_completions=recent_completions)
+                           recent_completions=recent_completions,
+                           project_colour_map=project_colour_map)
 
 
 @equipment_bp.route('/equipment/daily-checks/view')
@@ -1192,6 +1218,14 @@ def daily_checks_view():
 
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
+    # Project colour map
+    PALETTE = [('#cfe2ff','#084298'),('#d1e7dd','#0a3622'),('#f8d7da','#842029'),
+               ('#fff3cd','#664d03'),('#d2f4ea','#0b4c34'),('#fde8d8','#6c3a00'),
+               ('#e2d9f3','#3d1a78'),('#dee2e6','#343a40')]
+    all_proj = Project.query.order_by(Project.id).all()
+    project_colour_map = {p.id: PALETTE[i % len(PALETTE)] for i, p in enumerate(all_proj)}
+
     return render_template('equipment/daily_checks_view.html',
                            checks=checks, project=project, check_date=check_date,
-                           unchecked_machines=unchecked_machines, projects=projects)
+                           unchecked_machines=unchecked_machines, projects=projects,
+                           project_colour_map=project_colour_map)

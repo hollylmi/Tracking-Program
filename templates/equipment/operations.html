@@ -182,7 +182,8 @@
             <a href="{{ url_for('equipment.machine_detail', machine_id=dc.machine.id) }}" class="text-decoration-none">{{ dc.machine.name }}</a>
             {% elif dc.hired_machine %}{{ dc.hired_machine.machine_name }}{% else %}—{% endif %}
           </td>
-          <td class="small">{{ dc.project.name if dc.project else '—' }}</td>
+          {% set pc = project_colour_map.get(dc.project_id) if dc.project_id else None %}
+          <td class="small">{% if pc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.7rem;">{{ dc.project.name }}</span>{% else %}{{ dc.project.name if dc.project else '—' }}{% endif %}</td>
           <td><span class="badge {% if dc.condition == 'good' %}bg-success{% elif dc.condition == 'fair' %}bg-warning{% elif dc.condition == 'poor' %}bg-danger{% else %}bg-dark{% endif %}">{{ dc.condition | replace('_', ' ') | title }}</span></td>
           <td class="small">{{ dc.hours_reading if dc.hours_reading else '—' }}</td>
           <td class="small">{{ dc.checked_by_user.display_name if dc.checked_by_user else '—' }}</td>
