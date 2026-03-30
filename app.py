@@ -249,6 +249,20 @@ with app.app_context():
         # Travel & accommodation feature
         "ALTER TABLE employee ADD COLUMN requires_accommodation BOOLEAN DEFAULT TRUE",
         "ALTER TABLE schedule_day_override ADD COLUMN is_half_day BOOLEAN DEFAULT FALSE",
+        # ── 2026-03-30: Equipment tracking — extended machine fields ──
+        "ALTER TABLE machine ADD COLUMN acquired_date DATE",
+        "ALTER TABLE machine ADD COLUMN dispose_by_date DATE",
+        "ALTER TABLE machine ADD COLUMN next_inspection_date DATE",
+        "ALTER TABLE machine ADD COLUMN inspection_interval_days INTEGER",
+        "ALTER TABLE machine ADD COLUMN storage_instructions TEXT",
+        "ALTER TABLE machine ADD COLUMN service_instructions TEXT",
+        "ALTER TABLE machine ADD COLUMN spare_parts_notes TEXT",
+        "ALTER TABLE machine ADD COLUMN disposal_procedure TEXT",
+        "ALTER TABLE machine ADD COLUMN serial_number VARCHAR(200)",
+        "ALTER TABLE machine ADD COLUMN manufacturer VARCHAR(200)",
+        "ALTER TABLE machine ADD COLUMN model_number VARCHAR(200)",
+        # Project — site manager
+        'ALTER TABLE project ADD COLUMN site_manager_user_id INTEGER REFERENCES "user"(id)',
     ]:
         try:
             db.session.execute(db.text(stmt))
