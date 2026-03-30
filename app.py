@@ -265,7 +265,8 @@ with app.app_context():
         'ALTER TABLE project ADD COLUMN site_manager_user_id INTEGER REFERENCES "user"(id)',
         # ── 2026-03-30: Machine daily check — hours reading ──
         "ALTER TABLE machine_daily_check ADD COLUMN hours_reading FLOAT",
-        # ── 2026-03-30: Transfer — pre/post checks ──
+        # ── 2026-03-30: Transfer — batch + pre/post checks ──
+        "ALTER TABLE machine_transfer ADD COLUMN batch_id INTEGER",
         "ALTER TABLE machine_transfer ADD COLUMN pre_check_id INTEGER",
         "ALTER TABLE machine_transfer ADD COLUMN pre_check_notes TEXT",
         "ALTER TABLE machine_transfer ADD COLUMN arrival_check_id INTEGER",

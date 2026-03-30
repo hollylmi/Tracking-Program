@@ -813,24 +813,64 @@ class BreakdownPhoto(db.Model):
 # Equipment transfer, checklist, and daily check models
 # ---------------------------------------------------------------------------
 
-class MachineTransfer(db.Model):
-    """Scheduled transfer of a machine between projects."""
+class TransferBatch(db.Model):
+    """A transfer event — one or more machines moving between projects."""
     id = db.Column(db.Integer, primary_key=True)
+    from_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    to_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    scheduled_date = db.Column(db.Date, nullable=False)
+    pickup_location = db.Column(db.String(500))      # auto-filled from source project site_address
+    dropoff_location = db.Column(db.String(500))      # auto-filled from dest project site_address
+    travel_notes = db.Column(db.Text)
+    status = db.Column(db.String(20), default='scheduled')  # scheduled / in_transit / completed / cancelled
+    # Personnel
+    pre_check_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)     # source supervisor
+    transport_user_ids = db.Column(db.Text, nullable=True)                                  # comma-separated user IDs
+    transport_contact = db.Column(db.String(500))                                           # free text contact info
+    arrival_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)        # destination supervisor
+    # Metadata
+    created_by = db.Column(db.String(200))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    reminder_sent = db.Column(db.Boolean, default=False)
+
+    from_project = db.relationship('Project', foreign_keys=[from_project_id])
+    to_project = db.relationship('Project', foreign_keys=[to_project_id])
+    pre_check_user = db.relationship('User', foreign_keys=[pre_check_user_id])
+    arrival_user = db.relationship('User', foreign_keys=[arrival_user_id])
+    items = db.relationship('MachineTransfer', backref='batch', cascade='all, delete-orphan', lazy=True)
+
+    @property
+    def all_pre_checked(self):
+        return all(t.pre_check_id for t in self.items)
+
+    @property
+    def all_arrived(self):
+        return all(t.arrival_check_id for t in self.items)
+
+    def __repr__(self):
+        return f'<TransferBatch {self.id} {self.status}>'
+
+
+class MachineTransfer(db.Model):
+    """One machine within a transfer batch."""
+    id = db.Column(db.Integer, primary_key=True)
+    batch_id = db.Column(db.Integer, db.ForeignKey('transfer_batch.id'), nullable=True)
     machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False)
     from_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
     to_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
     scheduled_date = db.Column(db.Date, nullable=False)
     travel_notes = db.Column(db.Text)
     transport_contact = db.Column(db.String(200))
-    status = db.Column(db.String(20), default='scheduled')  # scheduled / pre_check / in_transit / arrived / completed / cancelled
+    status = db.Column(db.String(20), default='scheduled')  # scheduled / in_transit / completed / cancelled
     reminder_sent = db.Column(db.Boolean, default=False)
     created_by = db.Column(db.String(200))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
-    # Pre-move check (done at source site before transport)
+    # Pre-move check
     pre_check_id = db.Column(db.Integer, db.ForeignKey('machine_daily_check.id'), nullable=True)
     pre_check_notes = db.Column(db.Text, nullable=True)
-    # Post-arrival check (done at destination site after arrival)
+    # Arrival check
     arrival_check_id = db.Column(db.Integer, db.ForeignKey('machine_daily_check.id'), nullable=True)
     arrival_check_notes = db.Column(db.Text, nullable=True)
     arrived_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)

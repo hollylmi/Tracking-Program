@@ -162,7 +162,7 @@ else:
               'project_equipment_requirement', 'project_equipment_assignment',
               'machine_breakdown', 'breakdown_photo', 'public_holiday', 'cfmeu_date',
               'machine_transfer', 'site_equipment_checklist', 'site_equipment_checklist_item',
-              'machine_daily_check', 'machine_document', 'machine_hours_log',
+              'machine_daily_check', 'machine_document', 'machine_hours_log', 'transfer_batch',
               'project_daily_task_assignment'):
         if table_exists(t):
             print(f"OK:     {t} table exists")

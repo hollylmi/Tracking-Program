@@ -154,6 +154,8 @@
       </div>
       {% if todo.task_type == 'machine_startup' and not todo.completed %}
       <div class="small text-muted">{{ todo.done }} started</div>
+      {% elif todo.task_type in ('incoming_transfer', 'pre_check_transfer') and not todo.completed %}
+      <div class="small text-muted">{{ todo.done }}/{{ todo.total }}</div>
       {% endif %}
       {% if todo.task_type == 'daily_entry' and not todo.completed %}
       <a href="{{ url_for('entries.new_entry') }}" class="btn btn-sm btn-primary">Start</a>
@@ -161,6 +163,10 @@
       <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-primary">Start Machines</a>
       {% elif todo.task_type == 'scheduled_check' and not todo.completed %}
       <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-primary">Check</a>
+      {% elif todo.task_type == 'incoming_transfer' and not todo.completed %}
+      <a href="{{ url_for('equipment.transfer_batch_detail', batch_id=todo.batch_id) }}" class="btn btn-sm btn-outline-warning">Receive</a>
+      {% elif todo.task_type == 'pre_check_transfer' and not todo.completed %}
+      <a href="{{ url_for('equipment.transfer_batch_detail', batch_id=todo.batch_id) }}" class="btn btn-sm btn-outline-info">Pre-Check</a>
       {% endif %}
     </div>
     {% endfor %}

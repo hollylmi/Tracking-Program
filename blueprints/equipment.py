@@ -16,7 +16,7 @@ from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBre
                     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem,
                     MachineDailyCheck, MachineDocument, MachineHoursLog,
                     ProjectDailyTaskAssignment, ScheduledEquipmentCheck,
-                    ScheduledCheckCompletion)
+                    ScheduledCheckCompletion, TransferBatch)
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -585,47 +585,75 @@ def checklist_delete(checklist_id):
 @equipment_bp.route('/equipment/transfer/schedule', methods=['POST'])
 @require_role('admin', 'supervisor')
 def transfer_schedule():
-    """Schedule a machine transfer between projects."""
-    machine_id = request.form.get('machine_id', type=int)
+    """Schedule a transfer batch — one or more machines between projects."""
     from_project_id = request.form.get('from_project_id', type=int)
     to_project_id = request.form.get('to_project_id', type=int)
     scheduled_date_str = request.form.get('scheduled_date', '').strip()
     travel_notes = request.form.get('travel_notes', '').strip() or None
     transport_contact = request.form.get('transport_contact', '').strip() or None
+    pre_check_user_id = request.form.get('pre_check_user_id', type=int)
+    arrival_user_id = request.form.get('arrival_user_id', type=int)
+    transport_user_ids = ','.join(request.form.getlist('transport_user_ids'))
+    pickup_location = request.form.get('pickup_location', '').strip() or None
+    dropoff_location = request.form.get('dropoff_location', '').strip() or None
 
-    if not machine_id or not scheduled_date_str:
-        flash('Machine and scheduled date are required.', 'danger')
-        return redirect(url_for('equipment.equipment_overview'))
+    # Support both single machine_id and multiple machine_ids
+    machine_ids = request.form.getlist('machine_ids', type=int)
+    single_id = request.form.get('machine_id', type=int)
+    if single_id and single_id not in machine_ids:
+        machine_ids.append(single_id)
+
+    if not machine_ids or not scheduled_date_str:
+        flash('At least one machine and a scheduled date are required.', 'danger')
+        return redirect(request.referrer or url_for('equipment.operations_dashboard'))
 
     try:
         scheduled_date = datetime.strptime(scheduled_date_str, '%Y-%m-%d').date()
     except ValueError:
         flash('Invalid date.', 'danger')
-        return redirect(url_for('equipment.equipment_overview'))
+        return redirect(request.referrer or url_for('equipment.operations_dashboard'))
 
-    machine = Machine.query.get_or_404(machine_id)
+    # Auto-fill locations from project addresses if not provided
+    if not pickup_location and from_project_id:
+        src = Project.query.get(from_project_id)
+        if src and src.site_address:
+            pickup_location = src.site_address
+    if not dropoff_location and to_project_id:
+        dst = Project.query.get(to_project_id)
+        if dst and dst.site_address:
+            dropoff_location = dst.site_address
 
-    # Validate machine is currently assigned to from_project
-    if from_project_id:
-        existing = ProjectMachine.query.filter_by(
-            machine_id=machine_id, project_id=from_project_id).first()
-        if not existing:
-            flash(f'Machine "{machine.name}" is not assigned to the selected source project.', 'danger')
-            return redirect(url_for('equipment.equipment_overview'))
-
-    transfer = MachineTransfer(
-        machine_id=machine_id,
+    batch = TransferBatch(
         from_project_id=from_project_id or None,
         to_project_id=to_project_id or None,
         scheduled_date=scheduled_date,
+        pickup_location=pickup_location,
+        dropoff_location=dropoff_location,
         travel_notes=travel_notes,
         transport_contact=transport_contact,
+        pre_check_user_id=pre_check_user_id or None,
+        arrival_user_id=arrival_user_id or None,
+        transport_user_ids=transport_user_ids or None,
         created_by=current_user.display_name or current_user.username,
     )
-    db.session.add(transfer)
+    db.session.add(batch)
+    db.session.flush()
+
+    for mid in machine_ids:
+        db.session.add(MachineTransfer(
+            batch_id=batch.id,
+            machine_id=mid,
+            from_project_id=from_project_id or None,
+            to_project_id=to_project_id or None,
+            scheduled_date=scheduled_date,
+            travel_notes=travel_notes,
+            transport_contact=transport_contact,
+            created_by=current_user.display_name or current_user.username,
+        ))
+
     db.session.commit()
-    flash(f'Transfer scheduled for "{machine.name}".', 'success')
-    return redirect(url_for('equipment.transfer_detail', transfer_id=transfer.id))
+    flash(f'Transfer scheduled for {len(machine_ids)} machine(s).', 'success')
+    return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch.id))
 
 
 @equipment_bp.route('/equipment/transfer/<int:transfer_id>/update', methods=['POST'])
@@ -700,7 +728,6 @@ def transfer_pre_check(transfer_id):
 
     transfer.pre_check_id = check.id
     transfer.pre_check_notes = notes
-    transfer.status = 'in_transit'
 
     # Log hours
     if hours_reading is not None:
@@ -713,8 +740,21 @@ def transfer_pre_check(transfer_id):
             daily_check_id=check.id,
         ))
 
+    # If all machines in the batch are pre-checked, mark batch as in_transit
+    if transfer.batch_id:
+        batch = TransferBatch.query.get(transfer.batch_id)
+        if batch and all(t.pre_check_id for t in batch.items):
+            batch.status = 'in_transit'
+            for t in batch.items:
+                t.status = 'in_transit'
+    else:
+        transfer.status = 'in_transit'
+
     db.session.commit()
-    flash(f'Pre-transfer check recorded. Machine is now in transit.', 'success')
+    machine_name = transfer.machine.name if transfer.machine else 'Machine'
+    flash(f'Pre-transfer check recorded for {machine_name}.', 'success')
+    if transfer.batch_id:
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=transfer.batch_id))
     return redirect(request.referrer or url_for('equipment.operations_dashboard'))
 
 
@@ -787,17 +827,52 @@ def transfer_arrive(transfer_id):
             daily_check_id=check.id,
         ))
 
+    # If all machines in the batch have arrived, mark batch complete
+    if transfer.batch_id:
+        batch = TransferBatch.query.get(transfer.batch_id)
+        if batch and all(t.arrival_check_id for t in batch.items):
+            batch.status = 'completed'
+            batch.completed_at = datetime.utcnow()
+
     db.session.commit()
-    flash(f'Machine arrived and checked. Transfer complete.', 'success')
+    machine_name = transfer.machine.name if transfer.machine else 'Machine'
+    flash(f'{machine_name} arrived and checked.', 'success')
+    if transfer.batch_id:
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=transfer.batch_id))
     return redirect(request.referrer or url_for('equipment.operations_dashboard'))
 
 
 @equipment_bp.route('/equipment/transfer/<int:transfer_id>')
 @require_role('admin', 'supervisor', 'site')
 def transfer_detail(transfer_id):
-    """View transfer details including pre/post checks."""
+    """View single transfer — redirect to batch if it has one."""
     transfer = MachineTransfer.query.get_or_404(transfer_id)
+    if transfer.batch_id:
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=transfer.batch_id))
     return render_template('equipment/transfer_detail.html', transfer=transfer, today=date.today())
+
+
+@equipment_bp.route('/equipment/transfer-batch/<int:batch_id>')
+@require_role('admin', 'supervisor', 'site')
+def transfer_batch_detail(batch_id):
+    """View a transfer batch with all machines and check status."""
+    batch = TransferBatch.query.get_or_404(batch_id)
+    users = User.query.filter_by(active=True).order_by(User.display_name).all()
+    # Parse transport user IDs
+    transport_users = []
+    if batch.transport_user_ids:
+        tids = [int(x) for x in batch.transport_user_ids.split(',') if x.strip()]
+        transport_users = User.query.filter(User.id.in_(tids)).all() if tids else []
+
+    # Check if pre-checks are available (within 24h of scheduled date)
+    pre_check_window = batch.scheduled_date - timedelta(days=1) <= date.today()
+    # Check if arrival checks are available (in transit)
+    arrival_window = batch.status == 'in_transit'
+
+    return render_template('equipment/transfer_batch_detail.html',
+                           batch=batch, users=users, transport_users=transport_users,
+                           pre_check_window=pre_check_window, arrival_window=arrival_window,
+                           today=date.today())
 
 
 # ---------------------------------------------------------------------------
@@ -1285,8 +1360,12 @@ def operations_dashboard():
         MachineBreakdown.repair_status != 'completed'
     ).order_by(MachineBreakdown.incident_date.desc()).all()
 
-    # ── 5. Pending transfers ────────────────────────────────────────────
+    # ── 5. Pending transfers (batches + legacy individual) ──────────────
+    pending_batches = TransferBatch.query.filter(
+        TransferBatch.status.in_(['scheduled', 'in_transit'])
+    ).order_by(TransferBatch.scheduled_date).all()
     pending_transfers = MachineTransfer.query.filter(
+        MachineTransfer.batch_id.is_(None),
         MachineTransfer.status.in_(['scheduled', 'in_transit'])
     ).order_by(MachineTransfer.scheduled_date).all()
 
@@ -1304,6 +1383,7 @@ def operations_dashboard():
 
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
     all_machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
+    all_users = User.query.filter_by(active=True).order_by(User.display_name).all()
 
     return render_template('equipment/operations.html',
                            today=today_date,
@@ -1314,11 +1394,13 @@ def operations_dashboard():
                            scheduled_checks=scheduled_checks,
                            checks_by_date=dict(checks_by_date),
                            open_breakdowns=open_breakdowns,
+                           pending_batches=pending_batches,
                            pending_transfers=pending_transfers,
                            recent_completions=recent_completions,
                            project_colour_map=project_colour_map,
                            projects=projects,
-                           all_machines=all_machines)
+                           all_machines=all_machines,
+                           all_users=all_users)
 
 
 @equipment_bp.route('/equipment/daily-checks/view')

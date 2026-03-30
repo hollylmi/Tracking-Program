@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from flask import Blueprint, render_template
 from flask_login import current_user
@@ -7,7 +7,7 @@ from sqlalchemy import func
 from blueprints.auth import require_role
 from models import (db, DailyEntry, Project, HiredMachine, User, ProjectMachine,
                     MachineDailyCheck, MachineBreakdown, ProjectDailyTaskAssignment,
-                    EntryDelayLine, ScheduledEquipmentCheck)
+                    EntryDelayLine, ScheduledEquipmentCheck, TransferBatch)
 from utils.progress import compute_project_progress
 from utils.gantt import compute_gantt_data
 
@@ -147,6 +147,43 @@ def index():
                 'completed': already_done,
                 'check_id': sc.id,
                 'machine_count': len(sc.machines),
+            })
+
+        # Incoming transfers (assigned as arrival check person)
+        incoming_transfers = TransferBatch.query.filter(
+            TransferBatch.arrival_user_id == current_user.id,
+            TransferBatch.status == 'in_transit',
+        ).all()
+        for batch in incoming_transfers:
+            arrived_count = sum(1 for t in batch.items if t.arrival_check_id)
+            total_count = len(batch.items)
+            todos.append({
+                'project': batch.to_project,
+                'task_type': 'incoming_transfer',
+                'label': f'Incoming transfer — {total_count} machine{"s" if total_count != 1 else ""}',
+                'completed': arrived_count >= total_count,
+                'done': arrived_count,
+                'total': total_count,
+                'batch_id': batch.id,
+            })
+
+        # Pre-move checks (assigned as pre-check person)
+        outgoing_transfers = TransferBatch.query.filter(
+            TransferBatch.pre_check_user_id == current_user.id,
+            TransferBatch.status == 'scheduled',
+            TransferBatch.scheduled_date <= today + timedelta(days=1),
+        ).all()
+        for batch in outgoing_transfers:
+            checked_count = sum(1 for t in batch.items if t.pre_check_id)
+            total_count = len(batch.items)
+            todos.append({
+                'project': batch.from_project,
+                'task_type': 'pre_check_transfer',
+                'label': f'Pre-move check — {total_count} machine{"s" if total_count != 1 else ""} leaving',
+                'completed': checked_count >= total_count,
+                'done': checked_count,
+                'total': total_count,
+                'batch_id': batch.id,
             })
 
         my_todos = todos

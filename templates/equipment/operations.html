@@ -216,8 +216,35 @@
 {% endif %}
 
 <!-- ── Pending Transfers ──────────────────────────────────────────────── -->
+{% if pending_batches %}
+<h5 class="fw-bold mb-3"><i class="bi bi-arrow-left-right me-2 text-info"></i>Transfer Batches</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>From</th><th>To</th><th>Scheduled</th><th>Machines</th><th>Status</th><th>Pre-Checks</th><th>Arrivals</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for b in pending_batches %}
+        <tr>
+          {% set fpc = project_colour_map.get(b.from_project_id) if b.from_project_id else None %}
+          <td class="small">{% if fpc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ fpc[0] }};color:{{ fpc[1] }};font-size:.7rem;">{{ b.from_project.name }}</span>{% else %}{{ b.from_project.name if b.from_project else '—' }}{% endif %}</td>
+          {% set tpc = project_colour_map.get(b.to_project_id) if b.to_project_id else None %}
+          <td class="small">{% if tpc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ tpc[0] }};color:{{ tpc[1] }};font-size:.7rem;">{{ b.to_project.name }}</span>{% else %}{{ b.to_project.name if b.to_project else '—' }}{% endif %}</td>
+          <td class="small">{{ b.scheduled_date.strftime('%d/%m/%Y') }}</td>
+          <td class="small fw-bold">{{ b.items | length }}</td>
+          <td><span class="badge {% if b.status == 'scheduled' %}bg-info{% elif b.status == 'in_transit' %}bg-warning{% else %}bg-success{% endif %}">{{ b.status | replace('_', ' ') | title }}</span></td>
+          <td class="small">{{ b.items | selectattr('pre_check_id') | list | length }}/{{ b.items | length }}</td>
+          <td class="small">{{ b.items | selectattr('arrival_check_id') | list | length }}/{{ b.items | length }}</td>
+          <td><a href="{{ url_for('equipment.transfer_batch_detail', batch_id=b.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i></a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {% if pending_transfers %}
-<h5 class="fw-bold mb-3"><i class="bi bi-arrow-left-right me-2 text-info"></i>Pending Transfers</h5>
+<h5 class="fw-bold mb-3"><i class="bi bi-arrow-left-right me-2 text-info"></i>Individual Transfers</h5>
 <div class="card border-0 shadow-sm mb-4">
   <div class="table-responsive">
     <table class="table table-sm table-hover mb-0 align-middle">
@@ -247,45 +274,82 @@
 
 <!-- ── Schedule Transfer Modal ────────────────────────────────────────── -->
 <div class="modal fade" id="scheduleTransferModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <form method="POST" action="{{ url_for('equipment.transfer_schedule') }}">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title">Schedule Machine Transfer</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-header"><h5 class="modal-title">Schedule Equipment Transfer</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Machine *</label>
-            <select name="machine_id" class="form-select" required>
-              <option value="">— Select Machine —</option>
-              {% for m in all_machines %}
-              <option value="{{ m.id }}">{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">From Project</label>
-            <select name="from_project_id" class="form-select">
-              <option value="">— Unassigned —</option>
-              {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">To Project *</label>
-            <select name="to_project_id" class="form-select" required>
-              <option value="">— Select Destination —</option>
-              {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Scheduled Date *</label>
-            <input type="date" name="scheduled_date" class="form-control" required>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Transport Contact</label>
-            <input type="text" name="transport_contact" class="form-control" placeholder="Name / phone">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Travel Notes</label>
-            <textarea name="travel_notes" class="form-control" rows="2" placeholder="Special instructions, transport method, etc."></textarea>
+          <div class="row g-3">
+            <!-- Projects -->
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">From Project</label>
+              <select name="from_project_id" class="form-select" id="transferFromProject" onchange="autoFillPickup(this)">
+                <option value="">— Unassigned —</option>
+                {% for p in projects %}<option value="{{ p.id }}" data-address="{{ p.site_address or '' }}">{{ p.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">To Project *</label>
+              <select name="to_project_id" class="form-select" required id="transferToProject" onchange="autoFillDropoff(this)">
+                <option value="">— Select Destination —</option>
+                {% for p in projects %}<option value="{{ p.id }}" data-address="{{ p.site_address or '' }}">{{ p.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <!-- Machines (multi-select) -->
+            <div class="col-12">
+              <label class="form-label fw-semibold">Machines * <small class="text-muted fw-normal">(select all that are being moved)</small></label>
+              <div class="border rounded p-2" style="max-height: 180px; overflow-y: auto;">
+                {% for m in all_machines %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="machine_ids" value="{{ m.id }}" id="tm{{ m.id }}">
+                  <label class="form-check-label small" for="tm{{ m.id }}">{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}{% if m.machine_type %} — {{ m.machine_type }}{% endif %}</label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <!-- Date -->
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Scheduled Date *</label>
+              <input type="date" name="scheduled_date" class="form-control" required>
+            </div>
+            <!-- Locations -->
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Pick Up Location</label>
+              <input type="text" name="pickup_location" class="form-control" id="pickupLocation" placeholder="Auto-fills from project">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Drop Off Location</label>
+              <input type="text" name="dropoff_location" class="form-control" id="dropoffLocation" placeholder="Auto-fills from project">
+            </div>
+            <!-- Personnel -->
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Pre-Check Person</label>
+              <select name="pre_check_user_id" class="form-select">
+                <option value="">— Select —</option>
+                {% for u in all_users %}<option value="{{ u.id }}">{{ u.display_name or u.username }} ({{ u.role }})</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Transport Crew</label>
+              <select name="transport_user_ids" class="form-select" multiple size="3">
+                {% for u in all_users %}<option value="{{ u.id }}">{{ u.display_name or u.username }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Arrival Check Person</label>
+              <select name="arrival_user_id" class="form-select">
+                <option value="">— Select —</option>
+                {% for u in all_users %}<option value="{{ u.id }}">{{ u.display_name or u.username }} ({{ u.role }})</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Transport Contact</label>
+              <input type="text" name="transport_contact" class="form-control" placeholder="Phone / company">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Travel Notes</label>
+              <textarea name="travel_notes" class="form-control" rows="2" placeholder="Special instructions"></textarea>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -296,5 +360,16 @@
     </form>
   </div>
 </div>
+
+<script>
+function autoFillPickup(sel) {
+  var opt = sel.options[sel.selectedIndex];
+  document.getElementById('pickupLocation').value = opt.dataset.address || '';
+}
+function autoFillDropoff(sel) {
+  var opt = sel.options[sel.selectedIndex];
+  document.getElementById('dropoffLocation').value = opt.dataset.address || '';
+}
+</script>
 
 {% endblock %}
