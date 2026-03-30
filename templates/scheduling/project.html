@@ -16,6 +16,8 @@
   .cell-r_and_r    { background: #e0cffc; color: #3d1a78; text-align: center; font-weight: 600; }
   .cell-travel     { background: #d2f4ea; color: #0b4c34; text-align: center; }
   .cell-travel_half { background: linear-gradient(135deg, #d2f4ea 50%, #cfe2ff 50%); color: #084298; text-align: center; font-weight: 600; }
+  .cell-office     { background: #fde8d8; color: #6c3a00; text-align: center; font-weight: 600; }
+  .cell-terminated { background: #e9ecef; color: #adb5bd; text-align: center; }
   .cell-weekend    { background: #f1f3f5; color: #ced4da; text-align: center; }
   .accom-dot::before { content: '\f422'; font-family: 'bootstrap-icons'; font-size:.45rem; vertical-align:super; margin-right:1px; opacity:.7; }
   .col-today       { outline: 2px solid #0d6efd; outline-offset: -2px; }
@@ -214,6 +216,8 @@
               {% elif status == 'rdo' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.6rem;">{{ cell.get('label', 'RDO') }}</span>
               {% elif status == 'r_and_r' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">R&R</span>
               {% elif status == 'travel' %}<i class="bi bi-airplane-fill {{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.6rem;"></i>
+              {% elif status == 'office' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}" style="font-size:.55rem;"><i class="bi bi-building"></i></span>
+              {% elif status == 'terminated' %}
               {% elif status == 'leave' %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">L</span>
               {% else %}<span class="{{ 'cell-override-dot' if ov_id else '' }}">&bull;</span>{% endif %}
             </td>
@@ -619,6 +623,8 @@
                   <option value="sick">Sick Leave</option>
                   <option value="personal">Personal Leave</option>
                   <option value="rdo">RDO (manual)</option>
+                  <option value="office_sydney">Office (Sydney)</option>
+                  <option value="office_melbourne">Office (Melbourne)</option>
                   <option value="other">Other Leave</option>
                 </select>
               </div>

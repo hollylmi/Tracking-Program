@@ -119,6 +119,8 @@ class Employee(db.Model):
     delay_rate = db.Column(db.Float)              # overridable; defaults to max of assigned roles
     active = db.Column(db.Boolean, default=True)
     requires_accommodation = db.Column(db.Boolean, default=True)  # False for locals who don't need accommodation
+    termination_date = db.Column(db.Date, nullable=True)  # Employee drops off schedule after this date
+    home_base = db.Column(db.String(50), nullable=True)  # e.g. 'sydney', 'melbourne' — for office/travel grouping
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     roles = db.relationship('Role', secondary='employee_roles', lazy='subquery',
@@ -711,10 +713,11 @@ class ScheduleDayOverride(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     date = db.Column(db.Date, nullable=False)
-    # status: available / project / annual / sick / personal / r_and_r / travel / rdo / other
+    # status: available / project / annual / sick / personal / r_and_r / travel / rdo / office / other
     status = db.Column(db.String(20), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
     is_half_day = db.Column(db.Boolean, default=False)  # True = half travel + half on site (project_id = site project)
+    office_location = db.Column(db.String(50))  # 'sydney' or 'melbourne' when status='office'
     notes = db.Column(db.String(300))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -1238,19 +1241,81 @@ class FlightBooking(db.Model):
         return f'<FlightBooking {self.employee_id} {self.date} {self.flight_number}>'
 
 
-class AccommodationBooking(db.Model):
-    """Standalone accommodation booking for an employee (date range, not tied to a project)."""
+class AccommodationProperty(db.Model):
+    """A shared accommodation (house, apartment, hotel) that multiple employees can be assigned to."""
     id = db.Column(db.Integer, primary_key=True)
-    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
-    date_from = db.Column(db.Date, nullable=False)
-    date_to = db.Column(db.Date, nullable=False)
-    property_name = db.Column(db.String(300))
+    name = db.Column(db.String(300), nullable=False)          # e.g. "4-bed house Smith St"
+    property_type = db.Column(db.String(50), default='house')  # house / apartment / hotel / motel / other
     address = db.Column(db.String(500))
     phone = db.Column(db.String(50))
-    room_info = db.Column(db.String(200))            # e.g. "Room 204", "Unit 3B"
+    bedrooms = db.Column(db.Integer, default=1)                # capacity
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    date_from = db.Column(db.Date, nullable=True)              # lease/booking start
+    date_to = db.Column(db.Date, nullable=True)                # lease/booking end
+    check_in_time = db.Column(db.String(10))                   # HH:MM
+    check_out_time = db.Column(db.String(10))                  # HH:MM
     booking_reference = db.Column(db.String(100))
-    check_in_time = db.Column(db.String(10))         # HH:MM
-    check_out_time = db.Column(db.String(10))        # HH:MM
+    instructions = db.Column(db.Text)                          # admin check-in instructions, directions, rules
+    notes = db.Column(db.Text)
+    active = db.Column(db.Boolean, default=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = db.relationship('Project', backref='accommodation_properties')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+    bookings = db.relationship('AccommodationBooking', backref='property', lazy=True)
+    documents = db.relationship('AccommodationDocument', backref='property', lazy=True,
+                                cascade='all, delete-orphan')
+
+    @property
+    def current_occupants(self):
+        """Employees currently assigned (booking covers today)."""
+        from datetime import date as d
+        today = d.today()
+        return [b for b in self.bookings if b.date_from <= today <= b.date_to]
+
+    @property
+    def occupants_between(self):
+        """Helper — use query-based filtering in routes instead."""
+        return self.bookings
+
+    def __repr__(self):
+        return f'<AccommodationProperty {self.name}>'
+
+
+class AccommodationDocument(db.Model):
+    """File attached to an accommodation property (lease, check-in PDF, map, etc.)."""
+    id = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('accommodation_property.id'), nullable=False)
+    filename = db.Column(db.String(300), nullable=False)       # UUID-based stored name
+    original_name = db.Column(db.String(300))
+    doc_type = db.Column(db.String(50), default='other')       # lease / check_in / map / rules / receipt / other
+    title = db.Column(db.String(300))
+    notes = db.Column(db.String(500))
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_user_id])
+
+    def __repr__(self):
+        return f'<AccommodationDocument {self.original_name}>'
+
+
+class AccommodationBooking(db.Model):
+    """Links an employee to an accommodation property (or standalone one-off hotel booking)."""
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    property_id = db.Column(db.Integer, db.ForeignKey('accommodation_property.id'), nullable=True)  # NULL = legacy standalone
+    date_from = db.Column(db.Date, nullable=False)
+    date_to = db.Column(db.Date, nullable=False)
+    property_name = db.Column(db.String(300))                  # kept for standalone/legacy bookings
+    address = db.Column(db.String(500))
+    phone = db.Column(db.String(50))
+    room_info = db.Column(db.String(200))                      # e.g. "Room 204", "Bedroom 2"
+    booking_reference = db.Column(db.String(100))
+    check_in_time = db.Column(db.String(10))                   # HH:MM
+    check_out_time = db.Column(db.String(10))                  # HH:MM
     notes = db.Column(db.String(500))
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1258,6 +1323,33 @@ class AccommodationBooking(db.Model):
 
     employee = db.relationship('Employee', backref='accommodation_bookings')
     created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+    @property
+    def display_name(self):
+        """Property name — from linked property or standalone field."""
+        if self.property:
+            return self.property.name
+        return self.property_name or 'Unknown'
+
+    @property
+    def display_address(self):
+        if self.property:
+            return self.property.address
+        return self.address
+
+    @property
+    def housemates(self):
+        """Other employees staying at the same property during overlapping dates."""
+        if not self.property_id:
+            return []
+        from models import Employee
+        overlapping = AccommodationBooking.query.filter(
+            AccommodationBooking.property_id == self.property_id,
+            AccommodationBooking.id != self.id,
+            AccommodationBooking.date_from <= self.date_to,
+            AccommodationBooking.date_to >= self.date_from,
+        ).all()
+        return overlapping
 
     def __repr__(self):
         return f'<AccommodationBooking {self.employee_id} {self.date_from}-{self.date_to}>'

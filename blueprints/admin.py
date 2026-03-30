@@ -747,6 +747,9 @@ def admin_employees():
             if name:
                 emp = Employee(name=name)
                 emp.requires_accommodation = 'requires_accommodation' in request.form
+                emp.home_base = request.form.get('home_base', '').strip() or None
+                term_str = request.form.get('termination_date', '').strip()
+                emp.termination_date = datetime.strptime(term_str, '%Y-%m-%d').date() if term_str else None
                 db.session.add(emp)
                 db.session.flush()  # get emp.id before setting m2m
                 if role_ids:
@@ -769,6 +772,9 @@ def admin_employees():
             emp = Employee.query.get_or_404(int(request.form.get('id')))
             emp.name = request.form.get('name', '').strip()
             emp.requires_accommodation = 'requires_accommodation' in request.form
+            emp.home_base = request.form.get('home_base', '').strip() or None
+            term_str = request.form.get('termination_date', '').strip()
+            emp.termination_date = datetime.strptime(term_str, '%Y-%m-%d').date() if term_str else None
             role_ids = request.form.getlist('role_ids')
             delay_rate_raw = request.form.get('delay_rate', '').strip()
             if role_ids:

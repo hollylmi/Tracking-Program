@@ -185,6 +185,15 @@ def build_schedule_grid(employees, date_list):
         for d in date_list:
             date_str = d.isoformat()
 
+            # Priority 0: Terminated — employee is gone after termination_date
+            if emp.termination_date and d > emp.termination_date:
+                grid[emp.id][date_str] = {
+                    'status': 'terminated',
+                    'label': '',
+                    'project_name': ''
+                }
+                continue
+
             # Priority 1: Single-day override (explicit manual entry)
             override = override_by_emp.get(emp.id, {}).get(d)
             if override:
@@ -192,6 +201,7 @@ def build_schedule_grid(employees, date_list):
                     'available': 'Available', 'annual': 'Annual Leave', 'sick': 'Sick',
                     'personal': 'Personal', 'r_and_r': 'R&R', 'travel': 'Travel',
                     'rdo': 'RDO', 'other': 'Leave',
+                    'office_sydney': 'Office (SYD)', 'office_melbourne': 'Office (MEL)',
                 }
                 is_half = bool(override.is_half_day) if override.is_half_day is not None else False
                 if override.status == 'project' and override.project:
@@ -215,6 +225,16 @@ def build_schedule_grid(employees, date_list):
                         'is_half_day': True,
                         'project_id': override.project_id,
                     }
+                elif override.status in ('office_sydney', 'office_melbourne'):
+                    grid[emp.id][date_str] = {
+                        'status': 'office',
+                        'label': _OV_LABELS.get(override.status, 'Office'),
+                        'project_name': '',
+                        'override_id': override.id,
+                        'override_status': override.status,
+                        'override_project_id': '',
+                    }
+                    continue
                 else:
                     css = override.status if override.status in (
                         'r_and_r', 'travel', 'rdo', 'available') else 'leave'

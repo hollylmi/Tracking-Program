@@ -1,3 +1,4 @@
+import os
 from datetime import date, datetime, timedelta
 from itertools import groupby
 
@@ -16,7 +17,7 @@ from models import (
     PublicHoliday, CFMEUDate,
     ProjectEquipmentRequirement, ProjectEquipmentAssignment,
     ProjectMachine, MachineBreakdown,
-    FlightBooking, AccommodationBooking, User,
+    FlightBooking, AccommodationBooking, AccommodationProperty, AccommodationDocument, User,
 )
 from utils.schedule import build_schedule_grid
 
@@ -629,6 +630,249 @@ def day_details(emp_id, date_str):
             'notes': override.notes,
         } if override else None,
     })
+
+
+# ---------------------------------------------------------------------------
+# Travel & Accommodation overview page
+# ---------------------------------------------------------------------------
+
+@scheduling_bp.route('/scheduling/travel')
+@require_role('admin', 'supervisor')
+def travel_overview():
+    """Shows upcoming travel, accommodation, and travel groupings."""
+    today = date.today()
+    look_ahead = today + timedelta(days=90)
+
+    # Upcoming flights (next 90 days)
+    upcoming_flights = (FlightBooking.query
+        .filter(FlightBooking.date >= today, FlightBooking.date <= look_ahead)
+        .order_by(FlightBooking.date, FlightBooking.departure_time)
+        .all())
+
+    # Group flights by (date, departure_airport, arrival_airport) to find travel buddies
+    flight_groups = {}
+    for f in upcoming_flights:
+        key = (f.date, f.departure_airport or '', f.arrival_airport or '')
+        flight_groups.setdefault(key, []).append(f)
+
+    travel_groups = []
+    solo_flights = []
+    for (fdate, dep, arr), flights in sorted(flight_groups.items()):
+        if len(flights) > 1:
+            travel_groups.append({
+                'date': fdate,
+                'departure': dep,
+                'arrival': arr,
+                'flights': flights,
+                'employees': [f.employee for f in flights],
+            })
+        else:
+            solo_flights.append(flights[0])
+
+    # People who need accommodation (requires_accommodation=True, active, assigned to a project)
+    active_assignments = (ProjectAssignment.query
+        .filter(
+            db.or_(ProjectAssignment.date_to.is_(None), ProjectAssignment.date_to >= today),
+            ProjectAssignment.date_from <= look_ahead,
+        ).all())
+    assigned_emp_ids = {a.employee_id for a in active_assignments}
+    need_accom_emps = (Employee.query
+        .filter(Employee.active == True, Employee.requires_accommodation == True,
+                Employee.id.in_(assigned_emp_ids))
+        .order_by(Employee.name).all())
+
+    # Current accommodation bookings
+    current_bookings = (AccommodationBooking.query
+        .filter(AccommodationBooking.date_to >= today)
+        .order_by(AccommodationBooking.date_from)
+        .all())
+    booked_emp_ids = {b.employee_id for b in current_bookings if b.date_from <= look_ahead}
+
+    # Employees needing accommodation but not booked
+    unbooked = [e for e in need_accom_emps if e.id not in booked_emp_ids]
+
+    # Accommodation properties
+    properties = (AccommodationProperty.query
+        .filter_by(active=True)
+        .order_by(AccommodationProperty.name)
+        .all())
+
+    employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
+    return render_template(
+        'scheduling/travel.html',
+        today=today,
+        travel_groups=travel_groups,
+        solo_flights=solo_flights,
+        upcoming_flights=upcoming_flights,
+        unbooked=unbooked,
+        current_bookings=current_bookings,
+        properties=properties,
+        employees=employees,
+        projects=projects,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Accommodation Property CRUD
+# ---------------------------------------------------------------------------
+
+@scheduling_bp.route('/scheduling/property/add', methods=['POST'])
+@require_role('admin', 'supervisor')
+def property_add():
+    prop = AccommodationProperty(
+        name=request.form.get('prop_name', '').strip(),
+        property_type=request.form.get('property_type', 'house').strip(),
+        address=request.form.get('prop_address', '').strip() or None,
+        phone=request.form.get('prop_phone', '').strip() or None,
+        bedrooms=int(request.form.get('bedrooms', 1) or 1),
+        project_id=int(request.form.get('project_id')) if request.form.get('project_id') else None,
+        booking_reference=request.form.get('prop_booking_ref', '').strip() or None,
+        check_in_time=request.form.get('prop_check_in', '').strip() or None,
+        check_out_time=request.form.get('prop_check_out', '').strip() or None,
+        instructions=request.form.get('prop_instructions', '').strip() or None,
+        notes=request.form.get('prop_notes', '').strip() or None,
+        created_by_id=current_user.id,
+    )
+    date_from_str = request.form.get('prop_date_from', '').strip()
+    date_to_str = request.form.get('prop_date_to', '').strip()
+    try:
+        if date_from_str:
+            prop.date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        if date_to_str:
+            prop.date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        pass
+    db.session.add(prop)
+    db.session.commit()
+    flash(f'Property "{prop.name}" added.', 'success')
+    return redirect(url_for('scheduling.travel_overview'))
+
+
+@scheduling_bp.route('/scheduling/property/<int:prop_id>/edit', methods=['POST'])
+@require_role('admin', 'supervisor')
+def property_edit(prop_id):
+    prop = AccommodationProperty.query.get_or_404(prop_id)
+    prop.name = request.form.get('prop_name', '').strip() or prop.name
+    prop.property_type = request.form.get('property_type', prop.property_type).strip()
+    prop.address = request.form.get('prop_address', '').strip() or None
+    prop.phone = request.form.get('prop_phone', '').strip() or None
+    prop.bedrooms = int(request.form.get('bedrooms', prop.bedrooms) or prop.bedrooms)
+    prop.project_id = int(request.form.get('project_id')) if request.form.get('project_id') else None
+    prop.booking_reference = request.form.get('prop_booking_ref', '').strip() or None
+    prop.check_in_time = request.form.get('prop_check_in', '').strip() or None
+    prop.check_out_time = request.form.get('prop_check_out', '').strip() or None
+    prop.instructions = request.form.get('prop_instructions', '').strip() or None
+    prop.notes = request.form.get('prop_notes', '').strip() or None
+    date_from_str = request.form.get('prop_date_from', '').strip()
+    date_to_str = request.form.get('prop_date_to', '').strip()
+    try:
+        prop.date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date() if date_from_str else None
+        prop.date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date() if date_to_str else None
+    except ValueError:
+        pass
+    db.session.commit()
+    flash('Property updated.', 'success')
+    return redirect(url_for('scheduling.travel_overview'))
+
+
+@scheduling_bp.route('/scheduling/property/<int:prop_id>/delete', methods=['POST'])
+@require_role('admin')
+def property_delete(prop_id):
+    prop = AccommodationProperty.query.get_or_404(prop_id)
+    db.session.delete(prop)
+    db.session.commit()
+    flash(f'Property "{prop.name}" deleted.', 'success')
+    return redirect(url_for('scheduling.travel_overview'))
+
+
+@scheduling_bp.route('/scheduling/property/<int:prop_id>/assign', methods=['POST'])
+@require_role('admin', 'supervisor')
+def property_assign(prop_id):
+    """Assign an employee to an accommodation property."""
+    prop = AccommodationProperty.query.get_or_404(prop_id)
+    employee_id = request.form.get('employee_id', type=int)
+    date_from_str = request.form.get('assign_date_from', '').strip()
+    date_to_str = request.form.get('assign_date_to', '').strip()
+    try:
+        d_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        d_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Invalid dates.', 'danger')
+        return redirect(url_for('scheduling.travel_overview'))
+
+    booking = AccommodationBooking(
+        employee_id=employee_id,
+        property_id=prop.id,
+        date_from=d_from,
+        date_to=d_to,
+        room_info=request.form.get('room_info', '').strip() or None,
+        notes=request.form.get('assign_notes', '').strip() or None,
+        created_by_id=current_user.id,
+    )
+    db.session.add(booking)
+    db.session.commit()
+    flash(f'Employee assigned to "{prop.name}".', 'success')
+    _notify_travel_change(employee_id, d_from, 'accommodation', 'added')
+    return redirect(url_for('scheduling.travel_overview'))
+
+
+@scheduling_bp.route('/scheduling/property/<int:prop_id>/document/upload', methods=['POST'])
+@require_role('admin', 'supervisor')
+def property_document_upload(prop_id):
+    """Upload a document to an accommodation property."""
+    import uuid
+    prop = AccommodationProperty.query.get_or_404(prop_id)
+    file = request.files.get('document')
+    if not file or not file.filename:
+        flash('No file selected.', 'danger')
+        return redirect(url_for('scheduling.travel_overview'))
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    stored_name = f"accom_{uuid.uuid4().hex}{ext}"
+
+    upload_dir = os.path.join(current_app.root_path, 'uploads', 'accommodation')
+    os.makedirs(upload_dir, exist_ok=True)
+    file.save(os.path.join(upload_dir, stored_name))
+
+    doc = AccommodationDocument(
+        property_id=prop.id,
+        filename=stored_name,
+        original_name=file.filename,
+        doc_type=request.form.get('doc_type', 'other').strip(),
+        title=request.form.get('doc_title', '').strip() or file.filename,
+        notes=request.form.get('doc_notes', '').strip() or None,
+        uploaded_by_user_id=current_user.id,
+    )
+    db.session.add(doc)
+    db.session.commit()
+    flash(f'Document uploaded to "{prop.name}".', 'success')
+    return redirect(url_for('scheduling.travel_overview'))
+
+
+@scheduling_bp.route('/scheduling/accommodation-doc/<filename>')
+@login_required
+def accommodation_document(filename):
+    """Serve an accommodation document."""
+    upload_dir = os.path.join(current_app.root_path, 'uploads', 'accommodation')
+    from flask import send_from_directory
+    return send_from_directory(upload_dir, filename)
+
+
+@scheduling_bp.route('/scheduling/property/<int:prop_id>/document/<int:doc_id>/delete', methods=['POST'])
+@require_role('admin', 'supervisor')
+def property_document_delete(prop_id, doc_id):
+    doc = AccommodationDocument.query.get_or_404(doc_id)
+    upload_dir = os.path.join(current_app.root_path, 'uploads', 'accommodation')
+    try:
+        os.remove(os.path.join(upload_dir, doc.filename))
+    except OSError:
+        pass
+    db.session.delete(doc)
+    db.session.commit()
+    flash('Document deleted.', 'success')
+    return redirect(url_for('scheduling.travel_overview'))
 
 
 # ---------------------------------------------------------------------------

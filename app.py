@@ -273,6 +273,11 @@ with app.app_context():
         "ALTER TABLE machine_transfer ADD COLUMN arrival_check_notes TEXT",
         'ALTER TABLE machine_transfer ADD COLUMN arrived_by_user_id INTEGER REFERENCES "user"(id)',
         "ALTER TABLE machine_transfer ADD COLUMN arrived_at TIMESTAMP",
+        # ── 2026-03-31: Employee retirement + office scheduling + accommodation properties ──
+        "ALTER TABLE employee ADD COLUMN termination_date DATE",
+        "ALTER TABLE employee ADD COLUMN home_base VARCHAR(50)",
+        "ALTER TABLE schedule_day_override ADD COLUMN office_location VARCHAR(50)",
+        "ALTER TABLE accommodation_booking ADD COLUMN property_id INTEGER REFERENCES accommodation_property(id)",
     ]:
         try:
             db.session.execute(db.text(stmt))

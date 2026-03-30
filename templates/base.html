@@ -162,12 +162,18 @@
              NOTE (Prompt 2.3): scheduling_overview currently shows the full
              company roster. Filtering to the current user's schedule is a
              future task. -->
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint and 'scheduling' in request.endpoint %}active{% endif %}"
-             href="{{ url_for('scheduling.scheduling_overview') }}">
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if request.endpoint and 'scheduling' in request.endpoint %}active{% endif %}"
+             href="#" data-bs-toggle="dropdown">
             <i class="bi bi-calendar3-week me-1"></i>
             {%- if current_user.role == 'admin' %}Scheduling{% else %}My Roster{% endif %}
           </a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('scheduling.scheduling_overview') }}"><i class="bi bi-calendar3 me-2"></i>Schedule Grid</a></li>
+            {% if current_user.role in ('admin', 'supervisor') %}
+            <li><a class="dropdown-item" href="{{ url_for('scheduling.travel_overview') }}"><i class="bi bi-airplane me-2"></i>Travel & Accommodation</a></li>
+            {% endif %}
+          </ul>
         </li>
 
         <!-- Admin dropdown — admin only -->

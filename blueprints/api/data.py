@@ -18,6 +18,7 @@ from models import (
     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem, MachineDailyCheck,
     MachineDocument, MachineHoursLog, ProjectDailyTaskAssignment,
     ScheduledEquipmentCheck, ScheduledCheckCompletion,
+    FlightBooking, AccommodationBooking, AccommodationProperty, AccommodationDocument,
 )
 from utils.files import allowed_photo
 import storage
@@ -3609,3 +3610,266 @@ def scheduled_check_complete_api(check_id):
     db.session.commit()
 
     return {'message': 'Check completed', 'next_due_date': sc.next_due_date.isoformat() if sc.active else None}, 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRAVEL & ACCOMMODATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_data_bp.route('/my-travel', methods=['GET'])
+@jwt_required()
+def get_my_travel():
+    """Return the logged-in user's upcoming flights and accommodation bookings."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    if user.employee_id is None:
+        return {'flights': [], 'accommodations': [], 'no_employee': True}, 200
+
+    employee = Employee.query.get(user.employee_id)
+    if not employee:
+        return {'flights': [], 'accommodations': [], 'no_employee': True}, 200
+
+    today = date.today()
+
+    # Flights: upcoming (today or later), ordered by date then departure time
+    flights = FlightBooking.query.filter(
+        FlightBooking.employee_id == employee.id,
+        FlightBooking.date >= today,
+    ).order_by(FlightBooking.date, FlightBooking.departure_time).all()
+
+    flights_out = []
+    for f in flights:
+        flights_out.append({
+            'id': f.id,
+            'date': f.date.isoformat() if f.date else None,
+            'direction': f.direction,
+            'airline': f.airline,
+            'flight_number': f.flight_number,
+            'departure_airport': f.departure_airport,
+            'departure_time': f.departure_time,
+            'arrival_airport': f.arrival_airport,
+            'arrival_time': f.arrival_time,
+            'booking_reference': f.booking_reference,
+            'notes': f.notes,
+        })
+
+    # Accommodation: bookings that haven't ended yet (date_to >= today)
+    bookings = AccommodationBooking.query.filter(
+        AccommodationBooking.employee_id == employee.id,
+        AccommodationBooking.date_to >= today,
+    ).order_by(AccommodationBooking.date_from).all()
+
+    accommodations_out = []
+    for b in bookings:
+        prop = b.property  # may be None for standalone bookings
+
+        # Property name and address — prefer linked property, fall back to standalone fields
+        property_name = prop.name if prop else (b.property_name or None)
+        address = prop.address if prop else (b.address or None)
+
+        # Check-in / check-out — booking-level overrides, then property defaults
+        check_in_time = b.check_in_time or (prop.check_in_time if prop else None)
+        check_out_time = b.check_out_time or (prop.check_out_time if prop else None)
+
+        # Housemates — other employees at the same property with overlapping dates
+        housemates_out = []
+        if prop:
+            overlapping = AccommodationBooking.query.filter(
+                AccommodationBooking.property_id == prop.id,
+                AccommodationBooking.id != b.id,
+                AccommodationBooking.date_from <= b.date_to,
+                AccommodationBooking.date_to >= b.date_from,
+            ).all()
+            for hm in overlapping:
+                hm_emp = hm.employee
+                housemates_out.append({
+                    'name': hm_emp.name if hm_emp else 'Unknown',
+                    'room_info': hm.room_info,
+                    'date_from': hm.date_from.isoformat() if hm.date_from else None,
+                    'date_to': hm.date_to.isoformat() if hm.date_to else None,
+                })
+
+        # Instructions from linked property
+        instructions = prop.instructions if prop else None
+
+        # Documents from linked property
+        documents_out = []
+        if prop:
+            for doc in prop.documents:
+                documents_out.append({
+                    'id': doc.id,
+                    'title': doc.title or doc.original_name,
+                    'original_name': doc.original_name,
+                    'doc_type': doc.doc_type,
+                    'url': f'/scheduling/accommodation-doc/{doc.filename}',
+                })
+
+        accommodations_out.append({
+            'id': b.id,
+            'date_from': b.date_from.isoformat() if b.date_from else None,
+            'date_to': b.date_to.isoformat() if b.date_to else None,
+            'property_name': property_name,
+            'address': address,
+            'phone': b.phone or (prop.phone if prop else None),
+            'room_info': b.room_info,
+            'booking_reference': b.booking_reference or (prop.booking_reference if prop else None),
+            'check_in_time': check_in_time,
+            'check_out_time': check_out_time,
+            'notes': b.notes,
+            'housemates': housemates_out,
+            'instructions': instructions,
+            'documents': documents_out,
+        })
+
+    return {'flights': flights_out, 'accommodations': accommodations_out}, 200
+
+
+@api_data_bp.route('/travel-overview', methods=['GET'])
+@jwt_required()
+def get_travel_overview():
+    """Admin-only overview of all upcoming flights, accommodation properties, and unbooked employees."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    if user.role != 'admin':
+        return {'error': 'Admin access required'}, 403
+
+    today = date.today()
+    horizon = today + timedelta(days=90)
+
+    # ── Upcoming flights (next 90 days) ──────────────────────────────────────
+    flights = FlightBooking.query.filter(
+        FlightBooking.date >= today,
+        FlightBooking.date <= horizon,
+    ).order_by(FlightBooking.date, FlightBooking.departure_time).all()
+
+    upcoming_flights = []
+    group_counts = {}  # (date, departure, arrival) -> list of flight dicts
+    for f in flights:
+        emp = f.employee
+        flight_dict = {
+            'id': f.id,
+            'date': f.date.isoformat() if f.date else None,
+            'direction': f.direction,
+            'airline': f.airline,
+            'flight_number': f.flight_number,
+            'departure_airport': f.departure_airport,
+            'departure_time': f.departure_time,
+            'arrival_airport': f.arrival_airport,
+            'arrival_time': f.arrival_time,
+            'booking_reference': f.booking_reference,
+            'notes': f.notes,
+            'employee_id': emp.id if emp else None,
+            'employee_name': emp.name if emp else 'Unknown',
+        }
+        upcoming_flights.append(flight_dict)
+
+        key = (
+            f.date.isoformat() if f.date else '',
+            f.departure_airport or '',
+            f.arrival_airport or '',
+        )
+        group_counts.setdefault(key, []).append(flight_dict)
+
+    # Only include groups with more than 1 traveller
+    travel_groups = []
+    for (dt, dep, arr), members in group_counts.items():
+        if len(members) > 1:
+            travel_groups.append({
+                'date': dt,
+                'departure_airport': dep,
+                'arrival_airport': arr,
+                'count': len(members),
+                'flights': members,
+            })
+
+    # ── Accommodation properties (active, with bookings & occupancy) ─────────
+    def _booking_dict(b):
+        emp = b.employee
+        return {
+            'id': b.id,
+            'employee_id': emp.id if emp else None,
+            'employee_name': emp.name if emp else 'Unknown',
+            'date_from': b.date_from.isoformat() if b.date_from else None,
+            'date_to': b.date_to.isoformat() if b.date_to else None,
+            'room_info': b.room_info,
+        }
+
+    properties = AccommodationProperty.query.filter_by(active=True).all()
+    properties_out = []
+    for prop in properties:
+        current = [b for b in prop.bookings if b.date_from <= today <= b.date_to]
+        upcoming = [b for b in prop.bookings if b.date_from > today and b.date_from <= horizon]
+
+        documents_out = []
+        for doc in prop.documents:
+            documents_out.append({
+                'id': doc.id,
+                'title': doc.title or doc.original_name,
+                'original_name': doc.original_name,
+                'doc_type': doc.doc_type,
+                'url': f'/scheduling/accommodation-doc/{doc.filename}',
+            })
+
+        properties_out.append({
+            'id': prop.id,
+            'name': prop.name,
+            'property_type': prop.property_type,
+            'address': prop.address,
+            'phone': prop.phone,
+            'bedrooms': prop.bedrooms,
+            'project_id': prop.project_id,
+            'project_name': prop.project.name if prop.project else None,
+            'date_from': prop.date_from.isoformat() if prop.date_from else None,
+            'date_to': prop.date_to.isoformat() if prop.date_to else None,
+            'check_in_time': prop.check_in_time,
+            'check_out_time': prop.check_out_time,
+            'booking_reference': prop.booking_reference,
+            'instructions': prop.instructions,
+            'notes': prop.notes,
+            'current_occupants': [_booking_dict(b) for b in current],
+            'upcoming_bookings': [_booking_dict(b) for b in upcoming],
+            'documents': documents_out,
+        })
+
+    # ── Unbooked employees (require accommodation, assigned to project, no current booking)
+    assigned_employees = db.session.query(Employee).join(
+        ProjectAssignment, ProjectAssignment.employee_id == Employee.id
+    ).filter(
+        Employee.active == True,
+        Employee.requires_accommodation == True,
+        ProjectAssignment.date_from <= today,
+        or_(ProjectAssignment.date_to >= today, ProjectAssignment.date_to == None),
+    ).distinct().all()
+
+    # Employees who have a current accommodation booking
+    booked_ids = {b.employee_id for b in AccommodationBooking.query.filter(
+        AccommodationBooking.date_from <= today,
+        AccommodationBooking.date_to >= today,
+    ).all()}
+
+    unbooked = []
+    for emp in assigned_employees:
+        if emp.id not in booked_ids:
+            # Find their current assignment for context
+            assignment = ProjectAssignment.query.filter(
+                ProjectAssignment.employee_id == emp.id,
+                ProjectAssignment.date_from <= today,
+                or_(ProjectAssignment.date_to >= today, ProjectAssignment.date_to == None),
+            ).first()
+            unbooked.append({
+                'employee_id': emp.id,
+                'employee_name': emp.name,
+                'project_id': assignment.project_id if assignment else None,
+                'project_name': assignment.project.name if assignment and assignment.project else None,
+            })
+
+    return {
+        'upcoming_flights': upcoming_flights,
+        'travel_groups': travel_groups,
+        'properties': properties_out,
+        'unbooked': unbooked,
+    }, 200

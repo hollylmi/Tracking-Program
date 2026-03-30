@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+{% block title %}Travel & Accommodation{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-airplane me-2 text-primary"></i>Travel & Accommodation</h2>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('scheduling.scheduling_overview') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-calendar3 me-1"></i>Schedule
+    </a>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addPropertyModal">
+      <i class="bi bi-house-add me-1"></i>Add Property
+    </button>
+  </div>
+</div>
+
+<!-- Upcoming Travel Groups -->
+{% if travel_groups %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3">
+    <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-info"></i>Travel Groups <span class="badge bg-info-subtle text-info">{{ travel_groups|length }}</span></h5>
+    <small class="text-muted">People travelling the same route on the same day — can share transport</small>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Date</th><th>Route</th><th>People</th><th>Flight Details</th></tr>
+      </thead>
+      <tbody>
+        {% for group in travel_groups %}
+        <tr>
+          <td class="fw-semibold text-nowrap">{{ group.date.strftime('%a %d %b') }}</td>
+          <td>
+            <span class="badge bg-primary-subtle text-primary">{{ group.departure }}</span>
+            <i class="bi bi-arrow-right mx-1"></i>
+            <span class="badge bg-success-subtle text-success">{{ group.arrival }}</span>
+          </td>
+          <td>
+            {% for emp in group.employees %}
+            <span class="badge bg-light text-dark border me-1">{{ emp.name }}</span>
+            {% endfor %}
+          </td>
+          <td class="small text-muted">
+            {% for f in group.flights %}
+            {{ f.employee.name }}: {{ f.airline or '' }} {{ f.flight_number or '' }} {{ f.departure_time or '' }}-{{ f.arrival_time or '' }}<br>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- All Upcoming Flights -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3">
+    <h5 class="mb-0 fw-semibold"><i class="bi bi-airplane me-2"></i>Upcoming Flights <span class="badge bg-secondary-subtle text-secondary">{{ upcoming_flights|length }}</span></h5>
+  </div>
+  <div class="card-body p-0">
+    {% if upcoming_flights %}
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Date</th><th>Employee</th><th>Direction</th><th>From</th><th>To</th><th>Flight</th><th>Time</th><th>Ref</th></tr>
+      </thead>
+      <tbody>
+        {% for f in upcoming_flights %}
+        <tr>
+          <td class="fw-semibold text-nowrap">{{ f.date.strftime('%a %d %b') }}</td>
+          <td>{{ f.employee.name }}</td>
+          <td>
+            {% if f.direction == 'inbound' %}
+            <span class="badge bg-success-subtle text-success"><i class="bi bi-box-arrow-in-right"></i> In</span>
+            {% else %}
+            <span class="badge bg-warning-subtle text-warning"><i class="bi bi-box-arrow-right"></i> Out</span>
+            {% endif %}
+          </td>
+          <td>{{ f.departure_airport or '—' }}</td>
+          <td>{{ f.arrival_airport or '—' }}</td>
+          <td class="small">{{ f.airline or '' }} {{ f.flight_number or '' }}</td>
+          <td class="small text-nowrap">{{ f.departure_time or '' }}{% if f.arrival_time %} - {{ f.arrival_time }}{% endif %}</td>
+          <td class="small text-muted">{{ f.booking_reference or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center py-4 text-muted">No upcoming flights booked.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Accommodation Needed -->
+{% if unbooked %}
+<div class="card border-0 shadow-sm mb-4 border-start border-warning border-3">
+  <div class="card-header bg-white py-3">
+    <h5 class="mb-0 fw-semibold text-warning"><i class="bi bi-exclamation-triangle me-2"></i>Accommodation Needed <span class="badge bg-warning text-dark">{{ unbooked|length }}</span></h5>
+    <small class="text-muted">Employees assigned to projects who require accommodation but have no current booking</small>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Employee</th><th>Role</th><th>Home Base</th><th>Action</th></tr>
+      </thead>
+      <tbody>
+        {% for emp in unbooked %}
+        <tr>
+          <td class="fw-semibold">{{ emp.name }}</td>
+          <td class="text-muted">{{ emp.role or '—' }}</td>
+          <td>{{ (emp.home_base or '—')|title }}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="openQuickAssign({{ emp.id }}, '{{ emp.name|replace("'", "\\'") }}')">
+              <i class="bi bi-house-add me-1"></i>Assign
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Accommodation Properties -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <div>
+      <h5 class="mb-0 fw-semibold"><i class="bi bi-houses me-2 text-success"></i>Properties <span class="badge bg-secondary-subtle text-secondary">{{ properties|length }}</span></h5>
+    </div>
+    <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#addPropertyModal">
+      <i class="bi bi-plus-lg me-1"></i>Add Property
+    </button>
+  </div>
+  <div class="card-body">
+    {% if properties %}
+    <div class="row g-3">
+      {% for prop in properties %}
+      <div class="col-lg-6">
+        <div class="card h-100 border">
+          <div class="card-header bg-white d-flex justify-content-between align-items-start">
+            <div>
+              <h6 class="fw-bold mb-1">{{ prop.name }}</h6>
+              {% if prop.address %}<small class="text-muted"><i class="bi bi-geo-alt"></i> {{ prop.address }}</small>{% endif %}
+            </div>
+            <div class="d-flex gap-1">
+              <span class="badge bg-{{ 'success' if prop.occupancy < prop.bedrooms else 'danger' }}-subtle text-{{ 'success' if prop.occupancy < prop.bedrooms else 'danger' }}">
+                {{ prop.occupancy }}/{{ prop.bedrooms }} beds
+              </span>
+              <span class="badge bg-light text-dark border">{{ prop.property_type|title }}</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <!-- Current residents -->
+            {% set residents = prop.current_occupants %}
+            {% if residents %}
+            <p class="small fw-semibold mb-2">Current Residents:</p>
+            <div class="mb-3">
+              {% for b in residents %}
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span><i class="bi bi-person-fill me-1"></i>{{ b.employee.name }}{% if b.room_info %} <small class="text-muted">({{ b.room_info }})</small>{% endif %}</span>
+                <small class="text-muted">{{ b.date_from.strftime('%d %b') }} - {{ b.date_to.strftime('%d %b') }}</small>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="small text-muted mb-3"><i class="bi bi-house"></i> No current residents</p>
+            {% endif %}
+
+            <!-- All bookings for this property -->
+            {% set all_bookings = prop.bookings %}
+            {% if all_bookings|length > residents|length %}
+            <details class="mb-3">
+              <summary class="small fw-semibold">All Bookings ({{ all_bookings|length }})</summary>
+              {% for b in all_bookings|sort(attribute='date_from') %}
+              <div class="d-flex justify-content-between align-items-center mt-1 small">
+                <span>{{ b.employee.name }}{% if b.room_info %} ({{ b.room_info }}){% endif %}</span>
+                <span class="text-muted">{{ b.date_from.strftime('%d %b') }} - {{ b.date_to.strftime('%d %b %Y') }}</span>
+              </div>
+              {% endfor %}
+            </details>
+            {% endif %}
+
+            {% if prop.instructions %}
+            <details class="mb-3">
+              <summary class="small fw-semibold">Instructions</summary>
+              <div class="small mt-1 bg-light rounded p-2">{{ prop.instructions }}</div>
+            </details>
+            {% endif %}
+
+            <!-- Documents -->
+            {% if prop.documents %}
+            <p class="small fw-semibold mb-1">Documents:</p>
+            {% for doc in prop.documents %}
+            <a href="{{ url_for('scheduling.accommodation_document', filename=doc.filename) }}"
+               class="badge bg-light text-dark border me-1 text-decoration-none" target="_blank">
+              <i class="bi bi-file-earmark me-1"></i>{{ doc.title or doc.original_name }}
+            </a>
+            {% endfor %}
+            {% endif %}
+          </div>
+          <div class="card-footer bg-white d-flex gap-1">
+            <button class="btn btn-sm btn-outline-primary" onclick="openAssignToProperty({{ prop.id }}, '{{ prop.name|replace("'", "\\'") }}')">
+              <i class="bi bi-person-plus"></i> Assign
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="openUploadDoc({{ prop.id }}, '{{ prop.name|replace("'", "\\'") }}')">
+              <i class="bi bi-upload"></i> Upload Doc
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#editProp{{ prop.id }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <form method="POST" action="{{ url_for('scheduling.property_delete', prop_id=prop.id) }}" class="d-inline"
+                  onsubmit="return confirm('Delete property \'{{ prop.name }}\'?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </div>
+          <!-- Inline edit form (collapsed) -->
+          <div class="collapse" id="editProp{{ prop.id }}">
+            <div class="card-body border-top bg-light">
+              <form method="POST" action="{{ url_for('scheduling.property_edit', prop_id=prop.id) }}">
+                <div class="row g-2 mb-2">
+                  <div class="col-8"><input name="prop_name" class="form-control form-control-sm" value="{{ prop.name }}" placeholder="Name"></div>
+                  <div class="col-4">
+                    <select name="property_type" class="form-select form-select-sm">
+                      {% for t in ['house','apartment','hotel','motel','other'] %}
+                      <option value="{{ t }}" {{ 'selected' if prop.property_type == t }}>{{ t|title }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-8"><input name="prop_address" class="form-control form-control-sm" value="{{ prop.address or '' }}" placeholder="Address"></div>
+                  <div class="col-4"><input name="bedrooms" type="number" class="form-control form-control-sm" value="{{ prop.bedrooms }}" min="1" placeholder="Beds"></div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-6"><input name="prop_phone" class="form-control form-control-sm" value="{{ prop.phone or '' }}" placeholder="Phone"></div>
+                  <div class="col-6"><input name="prop_booking_ref" class="form-control form-control-sm" value="{{ prop.booking_reference or '' }}" placeholder="Booking Ref"></div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-6"><input name="prop_date_from" type="date" class="form-control form-control-sm" value="{{ prop.date_from.isoformat() if prop.date_from else '' }}"></div>
+                  <div class="col-6"><input name="prop_date_to" type="date" class="form-control form-control-sm" value="{{ prop.date_to.isoformat() if prop.date_to else '' }}"></div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-6"><input name="prop_check_in" class="form-control form-control-sm" value="{{ prop.check_in_time or '' }}" placeholder="Check-in (HH:MM)"></div>
+                  <div class="col-6"><input name="prop_check_out" class="form-control form-control-sm" value="{{ prop.check_out_time or '' }}" placeholder="Check-out (HH:MM)"></div>
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-6">
+                    <select name="project_id" class="form-select form-select-sm">
+                      <option value="">— No project —</option>
+                      {% for p in projects %}
+                      <option value="{{ p.id }}" {{ 'selected' if prop.project_id == p.id }}>{{ p.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <textarea name="prop_instructions" class="form-control form-control-sm mb-2" rows="2" placeholder="Check-in instructions...">{{ prop.instructions or '' }}</textarea>
+                <textarea name="prop_notes" class="form-control form-control-sm mb-2" rows="1" placeholder="Notes">{{ prop.notes or '' }}</textarea>
+                <button type="submit" class="btn btn-sm btn-primary">Save Changes</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-muted">
+      <i class="bi bi-houses fs-1 d-block mb-2"></i>
+      No properties added yet. Click "Add Property" to get started.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Add Property Modal -->
+<div class="modal fade" id="addPropertyModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('scheduling.property_add') }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-house-add me-2"></i>Add Accommodation Property</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2 mb-3">
+            <div class="col-8">
+              <label class="form-label fw-semibold">Name *</label>
+              <input name="prop_name" class="form-control" required placeholder="e.g. 4-bed house on Smith St">
+            </div>
+            <div class="col-4">
+              <label class="form-label fw-semibold">Type</label>
+              <select name="property_type" class="form-select">
+                <option value="house">House</option>
+                <option value="apartment">Apartment</option>
+                <option value="hotel">Hotel</option>
+                <option value="motel">Motel</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-8">
+              <label class="form-label fw-semibold">Address</label>
+              <input name="prop_address" class="form-control" placeholder="Street address">
+            </div>
+            <div class="col-4">
+              <label class="form-label fw-semibold">Bedrooms</label>
+              <input name="bedrooms" type="number" class="form-control" value="1" min="1">
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Phone</label>
+              <input name="prop_phone" class="form-control" placeholder="Contact phone">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Booking Reference</label>
+              <input name="prop_booking_ref" class="form-control" placeholder="Ref #">
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Lease/Booking From</label>
+              <input name="prop_date_from" type="date" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Lease/Booking To</label>
+              <input name="prop_date_to" type="date" class="form-control">
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Check-in Time</label>
+              <input name="prop_check_in" type="time" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Check-out Time</label>
+              <input name="prop_check_out" type="time" class="form-control">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Project</label>
+            <select name="project_id" class="form-select">
+              <option value="">— No project —</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Check-in Instructions</label>
+            <textarea name="prop_instructions" class="form-control" rows="3" placeholder="Directions, access codes, rules..."></textarea>
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea name="prop_notes" class="form-control" rows="2" placeholder="Internal notes"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Property</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Assign Employee to Property Modal -->
+<div class="modal fade" id="assignModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" id="assignForm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="assignModalTitle">Assign to Property</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Employee</label>
+            <select name="employee_id" id="assignEmpSelect" class="form-select" required>
+              <option value="">— Select —</option>
+              {% for emp in employees %}
+              <option value="{{ emp.id }}">{{ emp.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">From</label>
+              <input name="assign_date_from" type="date" class="form-control" required value="{{ today.isoformat() }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">To</label>
+              <input name="assign_date_to" type="date" class="form-control" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Room/Bed</label>
+            <input name="room_info" class="form-control" placeholder="e.g. Bedroom 2, Room 204">
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Notes</label>
+            <input name="assign_notes" class="form-control" placeholder="Any special notes">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Assign</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Upload Document Modal -->
+<div class="modal fade" id="uploadDocModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" id="uploadDocForm" enctype="multipart/form-data">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="uploadDocTitle">Upload Document</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">File *</label>
+            <input type="file" name="document" class="form-control" required>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">Title</label>
+              <input name="doc_title" class="form-control" placeholder="Document title">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Type</label>
+              <select name="doc_type" class="form-select">
+                <option value="check_in">Check-in Instructions</option>
+                <option value="lease">Lease/Agreement</option>
+                <option value="map">Map/Directions</option>
+                <option value="rules">House Rules</option>
+                <option value="receipt">Receipt</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Notes</label>
+            <input name="doc_notes" class="form-control" placeholder="Any notes about this document">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Upload</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function openAssignToProperty(propId, propName) {
+    document.getElementById('assignForm').action = `/scheduling/property/${propId}/assign`;
+    document.getElementById('assignModalTitle').textContent = `Assign to ${propName}`;
+    new bootstrap.Modal(document.getElementById('assignModal')).show();
+  }
+
+  function openQuickAssign(empId, empName) {
+    // Open assign modal and pre-select the employee
+    document.getElementById('assignEmpSelect').value = empId;
+    document.getElementById('assignModalTitle').textContent = `Assign Accommodation for ${empName}`;
+    // Default to first property if available
+    {% if properties|length > 0 %}
+    document.getElementById('assignForm').action = `/scheduling/property/{{ properties[0].id }}/assign`;
+    {% endif %}
+    new bootstrap.Modal(document.getElementById('assignModal')).show();
+  }
+
+  function openUploadDoc(propId, propName) {
+    document.getElementById('uploadDocForm').action = `/scheduling/property/${propId}/document/upload`;
+    document.getElementById('uploadDocTitle').textContent = `Upload Document for ${propName}`;
+    new bootstrap.Modal(document.getElementById('uploadDocModal')).show();
+  }
+</script>
+{% endblock %}
