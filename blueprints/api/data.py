@@ -2865,10 +2865,38 @@ def equipment_project_daily_checks(project_id):
     check_by_machine = {c.machine_id: c for c in checks if c.machine_id}
     check_by_hired = {c.hired_machine_id: c for c in checks if c.hired_machine_id}
 
+    # Pending transfers for machines on this project
+    pending_transfers = {t.machine_id: t for t in MachineTransfer.query.filter(
+        MachineTransfer.status.in_(['scheduled', 'in_transit'])).all() if t.machine_id}
+
     machines_list = []
     for pm in own_assignments:
         m = pm.machine
         dc = check_by_machine.get(m.id)
+
+        # Build alerts list
+        alerts = []
+        if m.next_inspection_date:
+            days = (m.next_inspection_date - check_date).days
+            if days <= 14:
+                alerts.append({'type': 'inspection', 'message': f'Inspection due in {days} days' if days > 0 else 'Inspection overdue', 'days': days, 'urgency': 'danger' if days <= 3 else 'warning'})
+        if m.dispose_by_date:
+            days = (m.dispose_by_date - check_date).days
+            if days <= 30:
+                alerts.append({'type': 'disposal', 'message': f'Disposal in {days} days' if days > 0 else 'Disposal overdue', 'days': days, 'urgency': 'danger' if days <= 7 else 'warning'})
+        if m.inspection_interval_days and m.next_inspection_date:
+            alerts.append({'type': 'interval', 'message': f'Inspected every {m.inspection_interval_days} days'})
+
+        # Pending transfer
+        transfer = pending_transfers.get(m.id)
+        transfer_info = None
+        if transfer:
+            transfer_info = {
+                'to_project': transfer.to_project.name if transfer.to_project else 'Unassigned',
+                'scheduled_date': transfer.scheduled_date.isoformat(),
+                'status': transfer.status,
+            }
+
         machines_list.append({
             'machine_id': m.id,
             'hired_machine_id': None,
@@ -2876,6 +2904,8 @@ def equipment_project_daily_checks(project_id):
             'plant_id': m.plant_id,
             'type': m.machine_type,
             'source': 'fleet',
+            'alerts': alerts,
+            'pending_transfer': transfer_info,
             'check': {
                 'id': dc.id,
                 'condition': dc.condition,
@@ -2895,6 +2925,8 @@ def equipment_project_daily_checks(project_id):
             'plant_id': hm.plant_id,
             'type': hm.machine_type,
             'source': 'hired',
+            'alerts': [],
+            'pending_transfer': None,
             'check': {
                 'id': dc.id,
                 'condition': dc.condition,

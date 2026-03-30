@@ -195,17 +195,23 @@ const CONDITION_OPTIONS: { value: string; label: string; color: string; bg: stri
 function MachineCheckCard({ machine, onCheck }: { machine: DailyCheckMachine; onCheck: () => void }) {
   const checked = !!machine.check
   const condOpt = CONDITION_OPTIONS.find((c) => c.value === machine.check?.condition)
+  const hasAlerts = machine.alerts && machine.alerts.length > 0
+  const hasTransfer = !!machine.pending_transfer
   return (
     <Card padding="none" style={{ overflow: 'hidden' }}>
-      <View style={[styles.accentBar, { backgroundColor: checked ? Colors.success : Colors.border }]} />
+      <View style={[styles.accentBar, { backgroundColor: checked ? Colors.success : hasAlerts ? Colors.warning : Colors.border }]} />
       <View style={styles.row}>
-        <View style={[styles.iconWrap, { backgroundColor: checked ? 'rgba(61,139,65,0.15)' : Colors.surface }]}>
-          <Ionicons name={checked ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={checked ? Colors.success : Colors.textLight} />
+        <View style={[styles.iconWrap, { backgroundColor: checked ? 'rgba(61,139,65,0.15)' : hasAlerts ? 'rgba(201,106,0,0.1)' : Colors.surface }]}>
+          <Ionicons name={checked ? 'checkmark-circle' : hasAlerts ? 'alert-circle' : 'ellipse-outline'} size={22}
+            color={checked ? Colors.success : hasAlerts ? Colors.warning : Colors.textLight} />
         </View>
         <View style={styles.info}>
           <Text style={styles.name}>{machine.name}</Text>
           {machine.type ? <Text style={styles.type}>{machine.type}</Text> : null}
           {machine.source === 'hired' ? <Text style={[styles.type, { color: Colors.warning }]}>Hired</Text> : null}
+          {checked && machine.check?.hours_reading != null ? (
+            <Text style={styles.type}>{machine.check.hours_reading} hrs</Text>
+          ) : null}
         </View>
         <View style={styles.right}>
           {checked && condOpt ? (
@@ -219,6 +225,29 @@ function MachineCheckCard({ machine, onCheck }: { machine: DailyCheckMachine; on
           )}
         </View>
       </View>
+      {/* Alerts banner */}
+      {hasAlerts && (
+        <View style={checkStyles.alertBanner}>
+          {machine.alerts.map((a, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name={a.type === 'inspection' ? 'search' : a.type === 'disposal' ? 'trash' : 'calendar'}
+                size={12} color={a.urgency === 'danger' ? Colors.error : Colors.warning} />
+              <Text style={[checkStyles.alertText, { color: a.urgency === 'danger' ? Colors.error : Colors.warning }]}>
+                {a.message}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {/* Transfer banner */}
+      {hasTransfer && (
+        <View style={checkStyles.transferBanner}>
+          <Ionicons name="arrow-forward-circle" size={12} color="#1565C0" />
+          <Text style={checkStyles.transferText}>
+            Scheduled move to {machine.pending_transfer!.to_project} — {new Date(machine.pending_transfer!.scheduled_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+          </Text>
+        </View>
+      )}
       {checked && machine.check?.notes ? (
         <View style={checkStyles.notesBanner}>
           <Text style={checkStyles.notesText} numberOfLines={1}>{machine.check.notes}</Text>
@@ -649,6 +678,26 @@ const checkStyles = StyleSheet.create({
     paddingVertical: Spacing.xs + 2,
   },
   checkBtnText: { ...Typography.caption, color: Colors.dark, fontWeight: '700' },
+  alertBanner: {
+    paddingHorizontal: Spacing.md + 4,
+    paddingVertical: 5,
+    gap: 3,
+    backgroundColor: 'rgba(201,106,0,0.08)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(201,106,0,0.2)',
+  },
+  alertText: { ...Typography.caption, fontWeight: '600' },
+  transferBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: Spacing.md + 4,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(21,101,192,0.08)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(21,101,192,0.2)',
+  },
+  transferText: { ...Typography.caption, color: '#1565C0', fontWeight: '600' },
   notesBanner: {
     paddingHorizontal: Spacing.md + 4,
     paddingVertical: 4,

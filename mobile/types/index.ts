@@ -226,6 +226,19 @@ export interface TransferInfo {
   transport_contact: string | null
 }
 
+export interface MachineAlert {
+  type: 'inspection' | 'disposal' | 'interval'
+  message: string
+  days?: number
+  urgency?: 'warning' | 'danger'
+}
+
+export interface MachineTransferBrief {
+  to_project: string
+  scheduled_date: string
+  status: string
+}
+
 export interface DailyCheckMachine {
   machine_id: number | null
   hired_machine_id: number | null
@@ -233,9 +246,12 @@ export interface DailyCheckMachine {
   plant_id: string | null
   type: string | null
   source: 'fleet' | 'hired'
+  alerts: MachineAlert[]
+  pending_transfer: MachineTransferBrief | null
   check: {
     id: number
     condition: string
+    hours_reading: number | null
     notes: string | null
     checked_by: string | null
     photo_url: string | null
