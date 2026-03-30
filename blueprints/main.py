@@ -1,9 +1,13 @@
 from datetime import date
 
 from flask import Blueprint, render_template
+from flask_login import current_user
+from sqlalchemy import func
 
 from blueprints.auth import require_role
-from models import DailyEntry, Project, HiredMachine
+from models import (db, DailyEntry, Project, HiredMachine, User, ProjectMachine,
+                    MachineDailyCheck, MachineBreakdown, ProjectDailyTaskAssignment,
+                    EntryDelayLine)
 from utils.progress import compute_project_progress
 from utils.gantt import compute_gantt_data
 
@@ -37,7 +41,101 @@ def index():
             'variance_days': gantt.get('variance_days') if gantt else None,
         })
 
+    # ── Admin task overview ─────────────────────────────────────────────
+    task_overview = None
+    if current_user.role == 'admin':
+        task_projects = []
+        supervisors = User.query.filter(User.active == True, User.role.in_(['admin', 'supervisor'])).order_by(User.display_name).all()
+
+        for p in projects:
+            assignments = ProjectDailyTaskAssignment.query.filter_by(
+                project_id=p.id, active=True).all()
+            entry_assignment = next((a for a in assignments if a.task_type == 'daily_entry'), None)
+            startup_assignment = next((a for a in assignments if a.task_type == 'machine_startup'), None)
+
+            entry_today = DailyEntry.query.filter_by(
+                project_id=p.id).filter(
+                func.date(DailyEntry.entry_date) == today).first()
+
+            own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
+            hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
+            total_machines = own_count + hired_count
+            checks_done = MachineDailyCheck.query.filter_by(
+                project_id=p.id, check_date=today).count()
+
+            # Standdown check
+            standdown_needed = False
+            if entry_today and hired_count > 0:
+                has_delays = (entry_today.delay_hours or 0) > 0
+                if not has_delays:
+                    has_delays = EntryDelayLine.query.filter_by(entry_id=entry_today.id).count() > 0
+                standdown_needed = has_delays
+
+            own_machine_ids = {pm.machine_id for pm in ProjectMachine.query.filter_by(project_id=p.id).all()}
+            hired_ids = {hm.id for hm in HiredMachine.query.filter_by(project_id=p.id).all()}
+            open_bds = MachineBreakdown.query.filter(
+                MachineBreakdown.repair_status != 'completed',
+                db.or_(
+                    MachineBreakdown.machine_id.in_(own_machine_ids) if own_machine_ids else db.false(),
+                    MachineBreakdown.hired_machine_id.in_(hired_ids) if hired_ids else db.false(),
+                )
+            ).count()
+
+            task_projects.append({
+                'project': p,
+                'entry_assigned': entry_assignment,
+                'startup_assigned': startup_assignment,
+                'entry_done': entry_today is not None,
+                'checks_done': checks_done,
+                'total_machines': total_machines,
+                'startup_complete': checks_done >= total_machines and total_machines > 0,
+                'standdown_needed': standdown_needed,
+                'open_breakdowns': open_bds,
+            })
+
+        task_overview = {
+            'projects': task_projects,
+            'supervisors': supervisors,
+        }
+
+    # ── Supervisor to-do ────────────────────────────────────────────────
+    my_todos = None
+    if current_user.role in ('supervisor', 'site'):
+        todos = []
+        my_assignments = ProjectDailyTaskAssignment.query.filter_by(
+            assigned_user_id=current_user.id, active=True).all()
+        for a in my_assignments:
+            p = a.project
+            if not p or not p.active:
+                continue
+            if a.task_type == 'daily_entry':
+                entry_exists = DailyEntry.query.filter_by(
+                    project_id=p.id).filter(
+                    func.date(DailyEntry.entry_date) == today).first()
+                todos.append({
+                    'project': p,
+                    'task_type': 'daily_entry',
+                    'label': 'Submit daily entry',
+                    'completed': entry_exists is not None,
+                })
+            elif a.task_type == 'machine_startup':
+                own_count = ProjectMachine.query.filter_by(project_id=p.id).count()
+                hired_count = HiredMachine.query.filter_by(project_id=p.id, active=True).count()
+                total = own_count + hired_count
+                done = MachineDailyCheck.query.filter_by(
+                    project_id=p.id, check_date=today).count()
+                todos.append({
+                    'project': p,
+                    'task_type': 'machine_startup',
+                    'label': 'Complete machine startup checks',
+                    'completed': done >= total and total > 0,
+                    'done': done,
+                    'total': total,
+                })
+        my_todos = todos
+
     return render_template('index.html', recent_entries=recent_entries,
                            total_entries=total_entries, entries_today=entries_today,
                            active_projects=len(projects), active_hired=active_hired,
-                           project_data=project_data, today=today)
+                           project_data=project_data, today=today,
+                           task_overview=task_overview, my_todos=my_todos)
