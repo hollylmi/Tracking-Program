@@ -761,6 +761,9 @@ class ProjectAssignment(db.Model):
     date_to = db.Column(db.Date, nullable=True)    # None = ongoing / no end date
     notes = db.Column(db.String(300))
     scheduled_role_id = db.Column(db.Integer, db.ForeignKey('role.id'), nullable=True)
+    # Transport overrides for travel planning
+    transport_to_mode = db.Column(db.String(20))    # fly / drive / local — overrides auto-detection
+    transport_from_mode = db.Column(db.String(20))   # fly / drive / local — overrides auto-detection
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     employee = db.relationship('Employee', backref='project_assignments')
@@ -1234,11 +1237,21 @@ class FlightBooking(db.Model):
     arrival_time = db.Column(db.String(10))          # HH:MM
     booking_reference = db.Column(db.String(100))
     notes = db.Column(db.String(500))
+    # Ground transport after arrival
+    ground_transport = db.Column(db.String(30))      # uber / hire_car / pickup / public_transport / self_drive / shuttle
+    ground_destination = db.Column(db.String(300))    # Where they're going after (address, accom name, site)
+    ground_with_employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True)  # Sharing with
+    ground_pickup_by = db.Column(db.String(200))      # Person picking them up (name / phone)
+    hire_car_company = db.Column(db.String(200))       # Hire car company
+    hire_car_reference = db.Column(db.String(100))     # Hire car booking ref
+    hire_car_booked_for = db.Column(db.String(200))    # Whose name the car is under
+    ground_notes = db.Column(db.String(500))           # Any other ground transport notes
     created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     employee = db.relationship('Employee', backref='flight_bookings')
+    ground_with = db.relationship('Employee', foreign_keys=[ground_with_employee_id])
     created_by = db.relationship('User', foreign_keys=[created_by_id])
 
     def __repr__(self):

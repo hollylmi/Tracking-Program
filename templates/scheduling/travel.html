@@ -248,6 +248,24 @@
                       </div>
                     </div>
                     <div class="col-auto">
+                      <label class="form-label small mb-1">Travel TO</label>
+                      <select name="transport_to_mode" class="form-select form-select-sm">
+                        <option value="">Auto</option>
+                        <option value="fly" {{ 'selected' if s.transport_to == 'fly' }}>Fly</option>
+                        <option value="drive" {{ 'selected' if s.transport_to == 'drive' }}>Drive</option>
+                        <option value="local" {{ 'selected' if s.transport_to == 'local' }}>Local</option>
+                      </select>
+                    </div>
+                    <div class="col-auto">
+                      <label class="form-label small mb-1">Travel FROM</label>
+                      <select name="transport_from_mode" class="form-select form-select-sm">
+                        <option value="">Auto</option>
+                        <option value="fly" {{ 'selected' if s.transport_from == 'fly' }}>Fly</option>
+                        <option value="drive" {{ 'selected' if s.transport_from == 'drive' }}>Drive</option>
+                        <option value="local" {{ 'selected' if s.transport_from == 'local' }}>Local</option>
+                      </select>
+                    </div>
+                    <div class="col-auto">
                       <label class="form-label small mb-1">Notes</label>
                       <input type="text" name="notes" class="form-control form-control-sm" placeholder="Optional notes">
                     </div>
@@ -279,7 +297,21 @@
                       {% else %}TBD{% endif %}
                     </p>
                     {% if s.has_flight_to %}
-                      <div class="alert alert-success py-1 px-2 mb-2 small"><i class="bi bi-check-circle me-1"></i>{{ s.flights_to|join(', ') }}</div>
+                      {% for f in s.flights_to_raw %}
+                      <div class="alert alert-success py-1 px-2 mb-2 small">
+                        <i class="bi bi-check-circle me-1"></i>{{ f.airline or '' }} {{ f.flight_number or '' }} {{ f.departure_airport or '' }}&rarr;{{ f.arrival_airport or '' }} {{ f.departure_time or '' }}
+                        {% if f.booking_reference %}<br><small>Ref: {{ f.booking_reference }}</small>{% endif %}
+                        {% if f.ground_transport %}
+                          <br><i class="bi bi-signpost-split me-1"></i><strong>After:</strong>
+                          {{ f.ground_transport|replace('_', ' ')|title }}
+                          {% if f.ground_destination %}&rarr; {{ f.ground_destination }}{% endif %}
+                          {% if f.ground_with %}<br><small>With: {{ f.ground_with.name }}</small>{% endif %}
+                          {% if f.ground_pickup_by %}<br><small>Pickup: {{ f.ground_pickup_by }}</small>{% endif %}
+                          {% if f.hire_car_company %}<br><small>Car: {{ f.hire_car_company }}{% if f.hire_car_reference %} ({{ f.hire_car_reference }}){% endif %}{% if f.hire_car_booked_for %} — booked for {{ f.hire_car_booked_for }}{% endif %}</small>{% endif %}
+                          {% if f.ground_notes %}<br><small>{{ f.ground_notes }}</small>{% endif %}
+                        {% endif %}
+                      </div>
+                      {% endfor %}
                     {% elif s.transport_to == 'fly' %}
                       <div class="alert alert-danger py-1 px-2 mb-2 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
                         {% if s.from_airport and s.project_airport %}<br>Need: {{ s.from_airport }} &rarr; {{ s.project_airport }}{% endif %}
@@ -320,7 +352,51 @@
                           <input name="booking_reference" class="form-control form-control-sm" placeholder="Booking reference">
                         </div>
                         <div class="mb-1">
-                          <input name="flight_notes" class="form-control form-control-sm" placeholder="Notes (e.g. pickup instructions)">
+                          <input name="flight_notes" class="form-control form-control-sm" placeholder="Flight notes">
+                        </div>
+                        <hr class="my-2"><small class="fw-bold text-muted">After Landing</small>
+                        <div class="row g-1 mb-1 mt-1">
+                          <div class="col-6">
+                            <select name="ground_transport" class="form-select form-select-sm">
+                              <option value="">— Transport —</option>
+                              <option value="hire_car">Hire Car</option>
+                              <option value="uber">Uber / Taxi</option>
+                              <option value="pickup">Someone picking up</option>
+                              <option value="shuttle">Shuttle</option>
+                              <option value="public_transport">Public Transport</option>
+                              <option value="self_drive">Self Drive</option>
+                            </select>
+                          </div>
+                          <div class="col-6">
+                            <input name="ground_destination" class="form-control form-control-sm" placeholder="Going to (site/accom)">
+                          </div>
+                        </div>
+                        <div class="row g-1 mb-1">
+                          <div class="col-6">
+                            <select name="ground_with_employee_id" class="form-select form-select-sm">
+                              <option value="">Travelling with...</option>
+                              {% for emp in employees %}
+                              <option value="{{ emp.id }}">{{ emp.name }}</option>
+                              {% endfor %}
+                            </select>
+                          </div>
+                          <div class="col-6">
+                            <input name="ground_pickup_by" class="form-control form-control-sm" placeholder="Picked up by (name)">
+                          </div>
+                        </div>
+                        <div class="row g-1 mb-1">
+                          <div class="col-4">
+                            <input name="hire_car_company" class="form-control form-control-sm" placeholder="Car co.">
+                          </div>
+                          <div class="col-4">
+                            <input name="hire_car_reference" class="form-control form-control-sm" placeholder="Car ref #">
+                          </div>
+                          <div class="col-4">
+                            <input name="hire_car_booked_for" class="form-control form-control-sm" placeholder="Booked for">
+                          </div>
+                        </div>
+                        <div class="mb-1">
+                          <input name="ground_notes" class="form-control form-control-sm" placeholder="Ground transport notes">
                         </div>
                         <button type="submit" class="btn btn-sm btn-success w-100"><i class="bi bi-airplane me-1"></i>Add Flight</button>
                       </form>
@@ -443,7 +519,21 @@
                         {% else %}TBD{% endif %}
                       </p>
                       {% if s.has_flight_from %}
-                        <div class="alert alert-success py-1 px-2 mb-2 small"><i class="bi bi-check-circle me-1"></i>{{ s.flights_from|join(', ') }}</div>
+                        {% for f in s.flights_from_raw %}
+                        <div class="alert alert-success py-1 px-2 mb-2 small">
+                          <i class="bi bi-check-circle me-1"></i>{{ f.airline or '' }} {{ f.flight_number or '' }} {{ f.departure_airport or '' }}&rarr;{{ f.arrival_airport or '' }} {{ f.departure_time or '' }}
+                          {% if f.booking_reference %}<br><small>Ref: {{ f.booking_reference }}</small>{% endif %}
+                          {% if f.ground_transport %}
+                            <br><i class="bi bi-signpost-split me-1"></i><strong>After:</strong>
+                            {{ f.ground_transport|replace('_', ' ')|title }}
+                            {% if f.ground_destination %}&rarr; {{ f.ground_destination }}{% endif %}
+                            {% if f.ground_with %}<br><small>With: {{ f.ground_with.name }}</small>{% endif %}
+                            {% if f.ground_pickup_by %}<br><small>Pickup: {{ f.ground_pickup_by }}</small>{% endif %}
+                            {% if f.hire_car_company %}<br><small>Car: {{ f.hire_car_company }}{% if f.hire_car_reference %} ({{ f.hire_car_reference }}){% endif %}{% if f.hire_car_booked_for %} — booked for {{ f.hire_car_booked_for }}{% endif %}</small>{% endif %}
+                            {% if f.ground_notes %}<br><small>{{ f.ground_notes }}</small>{% endif %}
+                          {% endif %}
+                        </div>
+                        {% endfor %}
                       {% elif s.transport_from == 'fly' %}
                         <div class="alert alert-danger py-1 px-2 mb-2 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
                           {% if s.project_airport and s.home_airport %}<br>Need: {{ s.project_airport }} &rarr; {{ s.home_airport }}{% endif %}
@@ -484,7 +574,51 @@
                             <input name="booking_reference" class="form-control form-control-sm" placeholder="Booking reference">
                           </div>
                           <div class="mb-1">
-                            <input name="flight_notes" class="form-control form-control-sm" placeholder="Notes (e.g. pickup instructions)">
+                            <input name="flight_notes" class="form-control form-control-sm" placeholder="Flight notes">
+                          </div>
+                          <hr class="my-2"><small class="fw-bold text-muted">After Landing</small>
+                          <div class="row g-1 mb-1 mt-1">
+                            <div class="col-6">
+                              <select name="ground_transport" class="form-select form-select-sm">
+                                <option value="">— Transport —</option>
+                                <option value="hire_car">Hire Car</option>
+                                <option value="uber">Uber / Taxi</option>
+                                <option value="pickup">Someone picking up</option>
+                                <option value="shuttle">Shuttle</option>
+                                <option value="public_transport">Public Transport</option>
+                                <option value="self_drive">Self Drive</option>
+                              </select>
+                            </div>
+                            <div class="col-6">
+                              <input name="ground_destination" class="form-control form-control-sm" placeholder="Going to (home/accom)">
+                            </div>
+                          </div>
+                          <div class="row g-1 mb-1">
+                            <div class="col-6">
+                              <select name="ground_with_employee_id" class="form-select form-select-sm">
+                                <option value="">Travelling with...</option>
+                                {% for emp in employees %}
+                                <option value="{{ emp.id }}">{{ emp.name }}</option>
+                                {% endfor %}
+                              </select>
+                            </div>
+                            <div class="col-6">
+                              <input name="ground_pickup_by" class="form-control form-control-sm" placeholder="Picked up by (name)">
+                            </div>
+                          </div>
+                          <div class="row g-1 mb-1">
+                            <div class="col-4">
+                              <input name="hire_car_company" class="form-control form-control-sm" placeholder="Car co.">
+                            </div>
+                            <div class="col-4">
+                              <input name="hire_car_reference" class="form-control form-control-sm" placeholder="Car ref #">
+                            </div>
+                            <div class="col-4">
+                              <input name="hire_car_booked_for" class="form-control form-control-sm" placeholder="Booked for">
+                            </div>
+                          </div>
+                          <div class="mb-1">
+                            <input name="ground_notes" class="form-control form-control-sm" placeholder="Ground transport notes">
                           </div>
                           <button type="submit" class="btn btn-sm btn-success w-100"><i class="bi bi-airplane me-1"></i>Add Flight</button>
                         </form>

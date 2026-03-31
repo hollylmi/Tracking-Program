@@ -379,6 +379,14 @@ def scheduling_assign_edit(pa_id):
     if project_id_str:
         pa.project_id = int(project_id_str)
 
+    # Transport overrides
+    transport_to = request.form.get('transport_to_mode', '').strip()
+    transport_from = request.form.get('transport_from_mode', '').strip()
+    if transport_to is not None:
+        pa.transport_to_mode = transport_to or None
+    if transport_from is not None:
+        pa.transport_from_mode = transport_from or None
+
     db.session.commit()
 
     if is_ajax:
@@ -983,6 +991,7 @@ def flight_add():
         flash('Invalid date.', 'danger')
         return redirect(url_for('scheduling.scheduling_overview'))
 
+    ground_with_id = request.form.get('ground_with_employee_id', '').strip()
     fb = FlightBooking(
         employee_id=employee_id,
         date=flight_date,
@@ -995,6 +1004,14 @@ def flight_add():
         arrival_time=request.form.get('arrival_time', '').strip() or None,
         booking_reference=request.form.get('booking_reference', '').strip() or None,
         notes=request.form.get('flight_notes', '').strip() or None,
+        ground_transport=request.form.get('ground_transport', '').strip() or None,
+        ground_destination=request.form.get('ground_destination', '').strip() or None,
+        ground_with_employee_id=int(ground_with_id) if ground_with_id else None,
+        ground_pickup_by=request.form.get('ground_pickup_by', '').strip() or None,
+        hire_car_company=request.form.get('hire_car_company', '').strip() or None,
+        hire_car_reference=request.form.get('hire_car_reference', '').strip() or None,
+        hire_car_booked_for=request.form.get('hire_car_booked_for', '').strip() or None,
+        ground_notes=request.form.get('ground_notes', '').strip() or None,
         created_by_id=current_user.id,
     )
     db.session.add(fb)

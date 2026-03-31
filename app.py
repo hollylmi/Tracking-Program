@@ -282,6 +282,18 @@ with app.app_context():
         "ALTER TABLE project ADD COLUMN city VARCHAR(100)",
         "ALTER TABLE project ADD COLUMN nearest_airport VARCHAR(10)",
         "ALTER TABLE project ADD COLUMN planned_end_date DATE",
+        # Transport overrides on assignments
+        "ALTER TABLE project_assignment ADD COLUMN transport_to_mode VARCHAR(20)",
+        "ALTER TABLE project_assignment ADD COLUMN transport_from_mode VARCHAR(20)",
+        # Ground transport on flight bookings
+        "ALTER TABLE flight_booking ADD COLUMN ground_transport VARCHAR(30)",
+        "ALTER TABLE flight_booking ADD COLUMN ground_destination VARCHAR(300)",
+        "ALTER TABLE flight_booking ADD COLUMN ground_with_employee_id INTEGER REFERENCES employee(id)",
+        "ALTER TABLE flight_booking ADD COLUMN ground_pickup_by VARCHAR(200)",
+        "ALTER TABLE flight_booking ADD COLUMN hire_car_company VARCHAR(200)",
+        "ALTER TABLE flight_booking ADD COLUMN hire_car_reference VARCHAR(100)",
+        "ALTER TABLE flight_booking ADD COLUMN hire_car_booked_for VARCHAR(200)",
+        "ALTER TABLE flight_booking ADD COLUMN ground_notes VARCHAR(500)",
     ]:
         try:
             db.session.execute(db.text(stmt))

@@ -810,7 +810,8 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             flights_to = flight_map.get((emp.id, day_before), [])
             if flights_to:
                 travel_to_date = day_before
-        transport_to = _transport(from_location, proj_city, emp)
+        # Transport mode — use override if set, otherwise auto-detect
+        transport_to = assign.transport_to_mode or _transport(from_location, proj_city, emp)
         from utils.settings import get_drive_time
         drive_time_to = get_drive_time(from_location, proj_city) if transport_to in ('drive', 'drives') else None
 
@@ -824,7 +825,7 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
                 flights_from = flight_map.get((emp.id, day_after), [])
                 if flights_from:
                     travel_from_date = day_after
-        transport_from = _transport(proj_city, emp_home, emp)
+        transport_from = assign.transport_from_mode or _transport(proj_city, emp_home, emp)
         drive_time_from = get_drive_time(proj_city, emp_home) if transport_from in ('drive', 'drives') else None
 
         # Accommodation
@@ -921,12 +922,14 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             'from_airport': from_airport,
             'from_project_name': from_project_name,
             'flights_to': [_fmt_flight(f) for f in flights_to],
+            'flights_to_raw': flights_to,
             'has_flight_to': len(flights_to) > 0,
             # Travel FROM
             'travel_from_date': travel_from_date,
             'transport_from': transport_from,
             'drive_time_from': drive_time_from,
             'flights_from': [_fmt_flight(f) for f in flights_from],
+            'flights_from_raw': flights_from,
             'has_flight_from': len(flights_from) > 0,
             # Accommodation
             'needs_accommodation': needs_accom,
