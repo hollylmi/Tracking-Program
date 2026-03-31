@@ -175,10 +175,14 @@
           <td>
             {% if s.status == 'urgent' %}
               {% for issue in s.issues %}
-              <span class="badge bg-warning text-dark d-block mb-1" style="font-size:.7rem;"><i class="bi bi-exclamation-triangle me-1"></i>{{ issue }}</span>
+              <span class="badge bg-warning text-dark d-block mb-1" style="font-size:.7rem;">
+                <i class="bi bi-exclamation-triangle me-1"></i>{{ issue.text }}
+                {% if issue.days is defined %}<br><small>{{ issue.days }} day{{ 's' if issue.days != 1 }} away</small>{% endif %}
+              </span>
               {% endfor %}
             {% elif s.status == 'upcoming' %}
               <span class="badge bg-info-subtle text-info"><i class="bi bi-clock me-1"></i>Upcoming</span>
+              <br><small class="text-muted">{{ s.earliest_action_days }} day{{ 's' if s.earliest_action_days != 1 }} to sort</small>
             {% else %}
               <span class="badge bg-success-subtle text-success"><i class="bi bi-check-circle me-1"></i>All sorted</span>
             {% endif %}
@@ -511,14 +515,18 @@
   <div class="card-body p-0">
     <table class="table table-hover align-middle mb-0">
       <thead class="table-light">
-        <tr><th>Property</th><th>Project</th><th>Expires</th><th>Beds</th><th>Occupants</th></tr>
+        <tr><th>Property</th><th>Type</th><th>Project</th><th>Expires</th><th>Beds</th><th>Occupants</th></tr>
       </thead>
       <tbody>
         {% for prop in expiring_properties %}
-        <tr>
+        <tr class="{{ 'table-danger' if prop._days_left <= 2 else 'table-warning' }}">
           <td class="fw-semibold">{{ prop.name }}{% if prop.address %}<br><small class="text-muted">{{ prop.address }}</small>{% endif %}</td>
+          <td><span class="badge bg-light text-dark border">{{ (prop.property_type or 'other')|title }}</span></td>
           <td>{{ prop.project.name if prop.project else '—' }}</td>
-          <td class="fw-semibold text-danger">{{ prop.date_to.strftime('%d %b %Y') }}</td>
+          <td class="fw-semibold text-danger">
+            {{ prop.date_to.strftime('%d %b %Y') }}
+            <br><span class="badge bg-danger">{{ prop._days_left }} day{{ 's' if prop._days_left != 1 }} left</span>
+          </td>
           <td>{{ prop.bedrooms }}</td>
           <td>
             {% for b in prop.current_occupants %}

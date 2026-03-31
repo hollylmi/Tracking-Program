@@ -687,11 +687,18 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             AccommodationBooking.date_to >= earliest).all():
         accom_by_emp[ab.employee_id].append(ab)
 
-    # Expiring properties
-    expiring_properties = [
-        prop for prop in AccommodationProperty.query.filter_by(active=True).all()
-        if prop.date_to and today <= prop.date_to <= cutoff
-    ]
+    # Expiring properties — 14 days for house/apartment, 2 days for hotel/motel
+    expiring_properties = []
+    for prop in AccommodationProperty.query.filter_by(active=True).all():
+        if not prop.date_to or prop.date_to < today:
+            continue
+        days_left = (prop.date_to - today).days
+        ptype = (prop.property_type or '').lower()
+        threshold = 2 if ptype in ('hotel', 'motel') else 14
+        if days_left <= threshold:
+            prop._days_left = days_left  # attach for template use
+            expiring_properties.append(prop)
+    expiring_properties.sort(key=lambda p: p._days_left)
 
     # Driveable city pairs from settings
     from utils.settings import get_drive_pairs
@@ -856,27 +863,40 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
                     if hm.employee:
                         housemates.add(hm.employee.name)
 
-        # Issues — only flag within 5 days
+        # Issues — urgency-based thresholds
         issues = []
         days_to_start = (start - today).days
         days_to_end = (end - today).days if not is_ongoing else 999
 
+        # Flights: flag within 5 days
         if transport_to == 'fly' and not flights_to and days_to_start <= 5:
-            issues.append('No flight booked TO site')
+            issues.append({'text': 'No flight booked TO site', 'days': days_to_start})
         if not is_ongoing and transport_from == 'fly' and not flights_from and days_to_end <= 5:
-            issues.append('No flight booked FROM site')
+            issues.append({'text': 'No flight booked FROM site', 'days': days_to_end})
+        # Accommodation: flag within 5 days
         if needs_accom and not has_accom and days_to_start <= 5:
-            issues.append('No accommodation booked')
+            issues.append({'text': 'No accommodation booked', 'days': days_to_start})
         elif needs_accom and accom_gap_days > 0 and days_to_start <= 5:
-            issues.append(f'Accommodation gap: {accom_gap_days} day(s) uncovered')
-        if accom_expiring:
-            # Only flag if property expires within 5 days
-            for a in accom_bookings:
-                if a.property and a.property.date_to:
-                    prop_days = (a.property.date_to - today).days
-                    if prop_days <= 5:
-                        issues.append(f'Property "{a.property.name}" expires in {prop_days} day{"s" if prop_days != 1 else ""}')
-                        break
+            issues.append({'text': f'Accommodation gap: {accom_gap_days} day(s) uncovered', 'days': days_to_start})
+        # Property expiry: 14 days for house/apartment, 2 days for hotel/motel
+        for a in accom_bookings:
+            if a.property and a.property.date_to:
+                prop_days = (a.property.date_to - today).days
+                ptype = (a.property.property_type or '').lower()
+                threshold = 2 if ptype in ('hotel', 'motel') else 14
+                if prop_days <= threshold:
+                    issues.append({'text': f'{a.property.name} ({ptype}) expires in {prop_days} day{"s" if prop_days != 1 else ""}',
+                                   'days': prop_days})
+
+        # Earliest action date for sorting
+        action_dates = []
+        if transport_to == 'fly' and not flights_to:
+            action_dates.append(days_to_start)
+        if not is_ongoing and transport_from == 'fly' and not flights_from:
+            action_dates.append(days_to_end)
+        if needs_accom and not has_accom:
+            action_dates.append(days_to_start)
+        earliest_action_days = min(action_dates) if action_dates else 999
 
         swings.append({
             'assignment_id': assign.id,
@@ -915,14 +935,17 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             'accom_gap_days': accom_gap_days,
             'accom_expiring': accom_expiring,
             'housemates': sorted(housemates),
-            # Issues
+            # Issues & urgency
             'issues': issues,
             'has_issues': len(issues) > 0,
-            # Status: 'sorted' = everything booked, 'upcoming' = needs action but not urgent, 'urgent' = within 5 days
+            'earliest_action_days': earliest_action_days,
+            'days_to_start': days_to_start,
             'status': _swing_status(
                 transport_to, transport_from, flights_to, flights_from,
                 needs_accom, has_accom, accom_gap_days, is_ongoing, issues),
         })
 
-    swings.sort(key=lambda s: (s['start_date'], s['employee_name']))
+    # Sort: urgent first (by earliest_action_days), then upcoming, then sorted
+    _STATUS_ORDER = {'urgent': 0, 'upcoming': 1, 'sorted': 2}
+    swings.sort(key=lambda s: (_STATUS_ORDER.get(s['status'], 2), s['earliest_action_days'], s['employee_name']))
     return {'swings': swings, 'expiring_properties': expiring_properties}
