@@ -786,18 +786,27 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
                     if hm.employee:
                         housemates.add(hm.employee.name)
 
-        # Issues
+        # Issues — only flag actionable items (within 14 days for flights, 5 days for property expiry)
         issues = []
-        if transport_to == 'fly' and not flights_to:
+        days_to_start = (start - today).days
+        days_to_end = (end - today).days if not is_ongoing else 999
+
+        if transport_to == 'fly' and not flights_to and days_to_start <= 14:
             issues.append('No flight booked TO site')
-        if not is_ongoing and transport_from == 'fly' and not flights_from:
+        if not is_ongoing and transport_from == 'fly' and not flights_from and days_to_end <= 14:
             issues.append('No flight booked FROM site')
-        if needs_accom and not has_accom:
+        if needs_accom and not has_accom and days_to_start <= 14:
             issues.append('No accommodation booked')
-        elif needs_accom and accom_gap_days > 0:
+        elif needs_accom and accom_gap_days > 0 and days_to_start <= 14:
             issues.append(f'Accommodation gap: {accom_gap_days} day(s) uncovered')
         if accom_expiring:
-            issues.append('Property expires during assignment')
+            # Only flag if property expires within 5 days
+            for a in accom_bookings:
+                if a.property and a.property.date_to:
+                    prop_days = (a.property.date_to - today).days
+                    if prop_days <= 5:
+                        issues.append(f'Property "{a.property.name}" expires in {prop_days} day{"s" if prop_days != 1 else ""}')
+                        break
 
         swings.append({
             'assignment_id': assign.id,
