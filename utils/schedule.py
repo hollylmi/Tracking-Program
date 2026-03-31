@@ -402,18 +402,19 @@ def build_schedule_grid(employees, date_list):
 # ---------------------------------------------------------------------------
 # Home-base → city name mapping
 # ---------------------------------------------------------------------------
-_BASE_CITY = {
-    'office_sydney': 'Sydney',
-    'office_melbourne': 'Melbourne',
-    'sydney': 'Sydney',
-    'melbourne': 'Melbourne',
-    'brisbane': 'Brisbane',
-    'perth': 'Perth',
-    'adelaide': 'Adelaide',
-}
+def _get_base_city_map():
+    """Build home_base value → display city name mapping dynamically from settings."""
+    from utils.settings import get_locations
+    mapping = {
+        'office_sydney': 'Sydney',
+        'office_melbourne': 'Melbourne',
+    }
+    for loc in get_locations():
+        mapping[loc.lower()] = loc
+    return mapping
 
 
-def _location_for_cell(cell, project_cities):
+def _location_for_cell(cell, project_cities, base_city_map):
     """Determine the city/location an employee is at based on a grid cell.
     Returns (city_name, location_type) or (None, None).
     location_type is 'project', 'office', 'home', or None.
@@ -425,8 +426,8 @@ def _location_for_cell(cell, project_cities):
         return (city, 'project') if city else (None, 'project')
     if status == 'office':
         ov = cell.get('override_status', '')
-        if ov in _BASE_CITY:
-            return _BASE_CITY[ov], 'office'
+        if ov in base_city_map:
+            return base_city_map[ov], 'office'
         return None, 'office'
     if status in ('r_and_r', 'leave', 'annual', 'sick', 'personal', 'available', 'rdo'):
         return None, 'home'  # at home base
@@ -451,6 +452,7 @@ def detect_travel_needs(employees, date_list, grid=None, look_ahead_days=90):
 
     today = date.today()
     cutoff = today + timedelta(days=look_ahead_days)
+    base_city_map = _get_base_city_map()
 
     # Build grid if not provided
     if grid is None:
@@ -524,7 +526,7 @@ def detect_travel_needs(employees, date_list, grid=None, look_ahead_days=90):
 
     travel_needs = []
     for emp in employees:
-        emp_home = _BASE_CITY.get(emp.home_base)
+        emp_home = base_city_map.get(emp.home_base)
         prev_location = emp_home  # assume starting at home
         prev_type = 'home'
         prev_project_id = None
@@ -541,7 +543,7 @@ def detect_travel_needs(employees, date_list, grid=None, look_ahead_days=90):
             if status in ('sunday', 'terminated', ''):
                 continue
 
-            curr_location, curr_type = _location_for_cell(cell, project_cities)
+            curr_location, curr_type = _location_for_cell(cell, project_cities, base_city_map)
 
             # If at home (R&R, leave, available), location = home base
             if curr_type == 'home':

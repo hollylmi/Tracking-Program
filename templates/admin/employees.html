@@ -181,15 +181,12 @@
                 <option value="office_melbourne">Office — Melbourne</option>
               </optgroup>
               <optgroup label="Location only (for travel grouping)">
-                <option value="sydney">Sydney</option>
-                <option value="melbourne">Melbourne</option>
-                <option value="brisbane">Brisbane</option>
-                <option value="perth">Perth</option>
-                <option value="adelaide">Adelaide</option>
-                <option value="other">Other</option>
+                {% for loc in locations %}
+                <option value="{{ loc|lower }}">{{ loc }}</option>
+                {% endfor %}
               </optgroup>
             </select>
-            <div class="form-text">Office locations auto-fill the schedule on weekdays. Other locations are for travel grouping only.</div>
+            <div class="form-text">Office locations auto-fill the schedule on weekdays. Other locations are for travel grouping only. <a href="{{ url_for('admin.admin_settings') }}">Manage locations</a></div>
           </div>
 
           <div class="mb-3">
@@ -198,20 +195,9 @@
               <option value="">— Not set —</option>
               <option value="DRIVES">Drives (no flights)</option>
               <optgroup label="Airports">
-                <option value="SYD">SYD — Sydney</option>
-                <option value="MEL">MEL — Melbourne</option>
-                <option value="BNE">BNE — Brisbane</option>
-                <option value="PER">PER — Perth</option>
-                <option value="ADL">ADL — Adelaide</option>
-                <option value="CBR">CBR — Canberra</option>
-                <option value="OOL">OOL — Gold Coast</option>
-                <option value="CNS">CNS — Cairns</option>
-                <option value="TSV">TSV — Townsville</option>
-                <option value="DRW">DRW — Darwin</option>
-                <option value="HBA">HBA — Hobart</option>
-                <option value="KTA">KTA — Karratha</option>
-                <option value="PHE">PHE — Port Hedland</option>
-                <option value="NTL">NTL — Newcastle</option>
+                {% for ap in airports %}
+                <option value="{{ ap.code }}">{{ ap.code }} — {{ ap.name }}</option>
+                {% endfor %}
               </optgroup>
             </select>
             <div class="form-text">Set to "Drives" if this person never flies. Otherwise select their home airport for travel planning.</div>

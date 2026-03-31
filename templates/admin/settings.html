@@ -87,6 +87,57 @@
       </button>
 
     </form>
+
+    <!-- Airports -->
+    <div class="card border-0 shadow-sm mb-4 mt-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-airplane me-2 text-info"></i>Airports</h5>
+        <button class="btn btn-sm btn-outline-info" onclick="addAirportRow()"><i class="bi bi-plus-lg me-1"></i>Add</button>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">These appear in employee home airport and project nearest airport dropdowns.</p>
+        <form method="POST" action="{{ url_for('admin.admin_save_airports') }}">
+          <table class="table table-sm align-middle mb-3" id="airportsTable">
+            <thead class="table-light">
+              <tr><th style="width:100px">Code</th><th>Name</th><th style="width:50px"></th></tr>
+            </thead>
+            <tbody>
+              {% for ap in settings.get('airports', []) %}
+              <tr>
+                <td><input name="airport_code" class="form-control form-control-sm" value="{{ ap.code }}" placeholder="SYD" required style="text-transform:uppercase"></td>
+                <td><input name="airport_name" class="form-control form-control-sm" value="{{ ap.name }}" placeholder="Sydney" required></td>
+                <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <button type="submit" class="btn btn-info btn-sm"><i class="bi bi-save me-1"></i>Save Airports</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Locations -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-geo-alt me-2 text-success"></i>Locations</h5>
+        <button class="btn btn-sm btn-outline-success" onclick="addLocationRow()"><i class="bi bi-plus-lg me-1"></i>Add</button>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">Cities/towns for employee home base and project location dropdowns.</p>
+        <form method="POST" action="{{ url_for('admin.admin_save_locations') }}">
+          <div id="locationsContainer" class="row g-2 mb-3">
+            {% for loc in settings.get('locations', [])|sort %}
+            <div class="col-6 col-md-4 d-flex gap-1">
+              <input name="location" class="form-control form-control-sm" value="{{ loc }}" required>
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove()"><i class="bi bi-x"></i></button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-save me-1"></i>Save Locations</button>
+        </form>
+      </div>
+    </div>
+
   </div>
 
   <div class="col-lg-5">
@@ -175,4 +226,32 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addAirportRow() {
+  const tbody = document.querySelector('#airportsTable tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input name="airport_code" class="form-control form-control-sm" placeholder="e.g. MKY" required style="text-transform:uppercase"></td>
+    <td><input name="airport_name" class="form-control form-control-sm" placeholder="e.g. Mackay" required></td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+  `;
+  tbody.appendChild(tr);
+  tr.querySelector('input').focus();
+}
+
+function addLocationRow() {
+  const container = document.getElementById('locationsContainer');
+  const div = document.createElement('div');
+  div.className = 'col-6 col-md-4 d-flex gap-1';
+  div.innerHTML = `
+    <input name="location" class="form-control form-control-sm" placeholder="e.g. Mackay" required>
+    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove()"><i class="bi bi-x"></i></button>
+  `;
+  container.appendChild(div);
+  div.querySelector('input').focus();
+}
+</script>
 {% endblock %}

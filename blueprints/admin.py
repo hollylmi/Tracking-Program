@@ -813,9 +813,11 @@ def admin_employees():
                 flash('Employee deleted.', 'info')
         return redirect(url_for('admin.admin_employees'))
 
+    from utils.settings import get_airports, get_locations
     employees = Employee.query.order_by(Employee.name).all()
     roles = Role.query.order_by(Role.name).all()
-    return render_template('admin/employees.html', employees=employees, roles=roles)
+    return render_template('admin/employees.html', employees=employees, roles=roles,
+                           airports=get_airports(), locations=get_locations())
 
 
 @admin_bp.route('/admin/machines', methods=['GET', 'POST'])
@@ -1086,3 +1088,32 @@ def admin_settings():
         flash('Settings saved.', 'success')
         return redirect(url_for('admin.admin_settings'))
     return render_template('admin/settings.html', settings=settings)
+
+
+@admin_bp.route('/admin/settings/airports', methods=['POST'])
+@require_role('admin')
+def admin_save_airports():
+    settings = load_settings()
+    codes = request.form.getlist('airport_code')
+    names = request.form.getlist('airport_name')
+    airports = []
+    for code, name in zip(codes, names):
+        code = code.strip().upper()
+        name = name.strip()
+        if code and name:
+            airports.append({'code': code, 'name': name})
+    settings['airports'] = airports
+    save_settings(settings)
+    flash(f'{len(airports)} airports saved.', 'success')
+    return redirect(url_for('admin.admin_settings'))
+
+
+@admin_bp.route('/admin/settings/locations', methods=['POST'])
+@require_role('admin')
+def admin_save_locations():
+    settings = load_settings()
+    locations = [loc.strip() for loc in request.form.getlist('location') if loc.strip()]
+    settings['locations'] = sorted(set(locations))
+    save_settings(settings)
+    flash(f'{len(locations)} locations saved.', 'success')
+    return redirect(url_for('admin.admin_settings'))
