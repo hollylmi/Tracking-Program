@@ -786,18 +786,18 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
                     if hm.employee:
                         housemates.add(hm.employee.name)
 
-        # Issues — only flag actionable items (within 14 days for flights, 5 days for property expiry)
+        # Issues — only flag within 5 days
         issues = []
         days_to_start = (start - today).days
         days_to_end = (end - today).days if not is_ongoing else 999
 
-        if transport_to == 'fly' and not flights_to and days_to_start <= 14:
+        if transport_to == 'fly' and not flights_to and days_to_start <= 5:
             issues.append('No flight booked TO site')
-        if not is_ongoing and transport_from == 'fly' and not flights_from and days_to_end <= 14:
+        if not is_ongoing and transport_from == 'fly' and not flights_from and days_to_end <= 5:
             issues.append('No flight booked FROM site')
-        if needs_accom and not has_accom and days_to_start <= 14:
+        if needs_accom and not has_accom and days_to_start <= 5:
             issues.append('No accommodation booked')
-        elif needs_accom and accom_gap_days > 0 and days_to_start <= 14:
+        elif needs_accom and accom_gap_days > 0 and days_to_start <= 5:
             issues.append(f'Accommodation gap: {accom_gap_days} day(s) uncovered')
         if accom_expiring:
             # Only flag if property expires within 5 days
