@@ -24,6 +24,8 @@
             <tr>
               <th>Name</th>
               <th>Role</th>
+              <th>Home Base</th>
+              <th>Airport</th>
               <th>Delay Rate</th>
               <th>Entries</th>
               <th>Status</th>
@@ -39,6 +41,16 @@
                   {% for r in emp.roles|sort(attribute='name') %}
                     <span class="badge bg-secondary-subtle text-secondary me-1">{{ r.name }}</span>
                   {% endfor %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="small">{{ (emp.home_base or '—')|replace('office_', 'Office ')|replace('_', ' ')|title }}</td>
+              <td class="small">
+                {% if emp.home_airport == 'DRIVES' %}
+                  <span class="badge bg-light text-muted border"><i class="bi bi-car-front"></i></span>
+                {% elif emp.home_airport %}
+                  <span class="badge bg-info-subtle text-info">{{ emp.home_airport }}</span>
                 {% else %}
                   —
                 {% endif %}
