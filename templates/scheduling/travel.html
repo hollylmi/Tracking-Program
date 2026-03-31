@@ -15,16 +15,17 @@
 </div>
 
 <!-- Project filter -->
-{% if project_sections|length > 1 %}
+{% if project_sections|length > 1 or filter_project_id %}
 <div class="mb-3">
   <div class="d-flex gap-2 flex-wrap align-items-center">
     <span class="small text-muted fw-medium">Filter:</span>
-    <button class="btn btn-sm btn-outline-primary active" onclick="filterProject('all', this)">All Projects</button>
+    <a href="{{ url_for('scheduling.travel_overview') }}" class="btn btn-sm btn-outline-primary {{ 'active' if not filter_project_id }}">All Projects</a>
     {% for ps in project_sections %}
-    <button class="btn btn-sm btn-outline-primary" onclick="filterProject('proj-{{ ps.project.id }}', this)">
+    <a href="{{ url_for('scheduling.travel_overview', project=ps.project.id) }}"
+       class="btn btn-sm btn-outline-primary {{ 'active' if filter_project_id == ps.project.id }}">
       {{ ps.project.name }}
       {% if ps.issues_count %}<span class="badge bg-warning text-dark ms-1">{{ ps.issues_count }}</span>{% endif %}
-    </button>
+    </a>
     {% endfor %}
   </div>
 </div>
@@ -32,6 +33,7 @@
 
 <!-- Project Sections -->
 {% for ps in project_sections %}
+{% if not filter_project_id or filter_project_id == ps.project.id %}
 <div class="project-section mb-4" data-project="proj-{{ ps.project.id }}">
   <div class="card border-0 shadow-sm">
     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
@@ -112,21 +114,24 @@
             {% if pt.over_capacity %}<i class="bi bi-exclamation-triangle text-danger" title="Over capacity on some weeks"></i>{% endif %}
           </span>
         </div>
-        <div style="position:relative; height:24px; background:#f1f3f5; border-radius:4px; overflow:hidden;">
+        {% set lane_h = 22 %}
+        <div style="position:relative; height:{{ pt.num_lanes * lane_h + 4 }}px; background:#f1f3f5; border-radius:4px; overflow:hidden;">
           <!-- Today marker -->
           {% set today_pct = ((today - ps.timeline_start).days / ps.timeline_days * 100) %}
           {% if today_pct >= 0 and today_pct <= 100 %}
           <div style="position:absolute; left:{{ today_pct }}%; top:0; bottom:0; width:1px; background:#0d6efd; z-index:3;" title="Today"></div>
           {% endif %}
-          <!-- Booking bars -->
+          <!-- Booking bars — stacked in lanes -->
           {% set colors = ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#00BCD4', '#E91E63', '#795548', '#607D8B'] %}
           {% for bd in pt.bookings %}
-          <div style="position:absolute; left:{{ bd.left_pct }}%; width:{{ bd.width_pct }}%; top:2px; bottom:2px;
-                       background:{{ colors[loop.index0 % colors|length] }}; border-radius:3px; opacity:0.85; z-index:2;
-                       display:flex; align-items:center; padding:0 4px; overflow:hidden; cursor:default;"
+          <div style="position:absolute; left:{{ bd.left_pct }}%; width:{{ bd.width_pct }}%;
+                       top:{{ bd.lane * lane_h + 2 }}px; height:{{ lane_h - 3 }}px;
+                       background:{{ colors[loop.index0 % colors|length] }}; border-radius:3px; opacity:0.9; z-index:2;
+                       display:flex; align-items:center; padding:0 4px; overflow:hidden; cursor:default;
+                       border:1px solid rgba(0,0,0,0.15);"
                title="{{ bd.booking.employee.name }}: {{ bd.booking.date_from.strftime('%d %b') }} — {{ bd.booking.date_to.strftime('%d %b') }}{% if bd.booking.room_info %} ({{ bd.booking.room_info }}){% endif %}">
             <span style="font-size:.6rem; color:white; font-weight:600; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.3);">
-              {{ bd.booking.employee.name.split(' ')[0] }}
+              {{ bd.booking.employee.name }}
             </span>
           </div>
           {% endfor %}
@@ -792,6 +797,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endfor %}
 
 <!-- Expiring Properties -->
@@ -1328,13 +1334,19 @@
     }
   }
 
-  function filterProject(projectClass, btn) {
-    document.querySelectorAll('.project-section').forEach(el => {
-      el.style.display = projectClass === 'all' || el.dataset.project === projectClass ? '' : 'none';
+  // Inject filter_project hidden field into all forms so project filter persists
+  {% if filter_project_id %}
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('form').forEach(function(form) {
+      if (!form.querySelector('[name="filter_project"]')) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'filter_project';
+        input.value = '{{ filter_project_id }}';
+        form.appendChild(input);
+      }
     });
-    // Update active button
-    btn.closest('.d-flex').querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-  }
+  });
+  {% endif %}
 </script>
 {% endblock %}

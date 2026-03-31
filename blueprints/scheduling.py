@@ -23,6 +23,15 @@ from utils.schedule import build_schedule_grid, detect_travel_needs, build_swing
 
 scheduling_bp = Blueprint('scheduling', __name__)
 
+
+def _travel_redirect():
+    """Redirect to travel overview, preserving project filter if set."""
+    project_id = request.form.get('filter_project') or request.args.get('project')
+    if project_id:
+        return redirect(url_for('scheduling.travel_overview', project=project_id))
+    return _travel_redirect()
+
+
 # Per-project colour palette (bg, text) — cycled by project.id order
 SCHED_PALETTE = [
     ('#cfe2ff', '#084298'),  # blue
@@ -402,7 +411,7 @@ def scheduling_assign_edit(pa_id):
     flash('Assignment updated.', 'success')
     redirect_to = request.form.get('redirect_to', '')
     if redirect_to == 'travel':
-        return redirect(url_for('scheduling.travel_overview'))
+        return _travel_redirect()
     return redirect(url_for('scheduling.scheduling_overview'))
 
 
@@ -418,7 +427,7 @@ def scheduling_assign_delete(pa_id):
     if redirect_to == 'scheduling_project':
         return redirect(url_for('scheduling.scheduling_project', project_id=project_id))
     if redirect_to == 'travel':
-        return redirect(url_for('scheduling.travel_overview'))
+        return _travel_redirect()
     return redirect(url_for('scheduling.scheduling_overview'))
 
 
@@ -696,6 +705,7 @@ def travel_overview():
     """Shows upcoming travel, accommodation, and travel groupings."""
     today = date.today()
     look_ahead = today + timedelta(days=90)
+    filter_project_id = request.args.get('project', type=int)
 
     # Upcoming flights (next 90 days)
     upcoming_flights = (FlightBooking.query
@@ -783,22 +793,37 @@ def travel_overview():
         timeline_end = max(all_ends) if all_ends else today + timedelta(days=90)
         timeline_days = max((timeline_end - timeline_start).days, 1)
 
-        # Build timeline entries per property
+        # Build timeline entries per property — assign lanes so bars don't overlap
         prop_timelines = []
         for prop in proj_properties:
+            sorted_bookings = sorted(
+                [b for b in prop.bookings if b.date_to >= timeline_start and b.date_from <= timeline_end],
+                key=lambda b: b.date_from)
+            # Assign lanes: each booking gets the lowest lane where it doesn't overlap
+            lane_ends = []  # lane_ends[i] = end date of last booking in lane i
             bookings_data = []
-            for b in sorted(prop.bookings, key=lambda b: b.date_from):
-                if b.date_to < timeline_start or b.date_from > timeline_end:
-                    continue
+            for b in sorted_bookings:
                 bar_start = max(b.date_from, timeline_start)
                 bar_end = min(b.date_to, timeline_end)
+                # Find first available lane
+                lane = None
+                for i, le in enumerate(lane_ends):
+                    if bar_start > le:
+                        lane = i
+                        lane_ends[i] = bar_end
+                        break
+                if lane is None:
+                    lane = len(lane_ends)
+                    lane_ends.append(bar_end)
                 left_pct = round(((bar_start - timeline_start).days / timeline_days) * 100, 1)
                 width_pct = round(max(((bar_end - bar_start).days + 1) / timeline_days * 100, 1), 1)
                 bookings_data.append({
                     'booking': b,
                     'left_pct': left_pct,
                     'width_pct': width_pct,
+                    'lane': lane,
                 })
+            num_lanes = max(len(lane_ends), 1)
             # Capacity check per week
             over_capacity_weeks = []
             d = timeline_start
@@ -810,12 +835,16 @@ def travel_overview():
             prop_timelines.append({
                 'property': prop,
                 'bookings': bookings_data,
+                'num_lanes': num_lanes,
                 'over_capacity': len(over_capacity_weeks) > 0,
             })
 
         project_sections.append({
             'project': proj,
-            'swings': sorted(proj_swings, key=lambda s: s['employee_name']),
+            'swings': sorted(proj_swings, key=lambda s: (
+                {'urgent': 0, 'upcoming': 1, 'sorted': 2}.get(s['status'], 2),
+                s['earliest_action_days'],
+                s['employee_name'])),
             'properties': proj_properties,
             'issues_count': issues_count,
             'prop_timelines': prop_timelines,
@@ -871,6 +900,7 @@ def travel_overview():
         swings=swings,
         expiring_properties=expiring_properties,
         carpool_groups=carpool_groups,
+        filter_project_id=filter_project_id,
     )
 
 
@@ -907,7 +937,7 @@ def property_add():
     db.session.add(prop)
     db.session.commit()
     flash(f'Property "{prop.name}" added.', 'success')
-    return redirect(url_for('scheduling.travel_overview'))
+    return _travel_redirect()
 
 
 @scheduling_bp.route('/scheduling/property/<int:prop_id>/edit', methods=['POST'])
@@ -934,7 +964,7 @@ def property_edit(prop_id):
         pass
     db.session.commit()
     flash('Property updated.', 'success')
-    return redirect(url_for('scheduling.travel_overview'))
+    return _travel_redirect()
 
 
 @scheduling_bp.route('/scheduling/property/<int:prop_id>/delete', methods=['POST'])
@@ -944,7 +974,7 @@ def property_delete(prop_id):
     db.session.delete(prop)
     db.session.commit()
     flash(f'Property "{prop.name}" deleted.', 'success')
-    return redirect(url_for('scheduling.travel_overview'))
+    return _travel_redirect()
 
 
 @scheduling_bp.route('/scheduling/property/<int:prop_id>/assign', methods=['POST'])
@@ -957,7 +987,7 @@ def property_assign(prop_id):
     # Check property not expired
     if prop.date_to and prop.date_to < date.today():
         flash(f'Property "{prop.name}" has expired ({prop.date_to.strftime("%d %b %Y")}). Cannot assign.', 'danger')
-        return redirect(url_for('scheduling.travel_overview'))
+        return _travel_redirect()
 
     # "Duration of stay" — use assignment dates
     assignment_id = request.form.get('use_assignment_id', '').strip()
@@ -978,7 +1008,7 @@ def property_assign(prop_id):
                     d_to = proj.planned_end_date or (date.today() + timedelta(days=90))
         else:
             flash('Assignment not found.', 'danger')
-            return redirect(url_for('scheduling.travel_overview'))
+            return _travel_redirect()
     elif request.form.get('use_assignment_dates'):
         # Legacy checkbox fallback — use first matching assignment
         from utils.schedule import build_swing_planner
@@ -990,7 +1020,7 @@ def property_assign(prop_id):
             d_to = matching[0]['end_date']
         else:
             flash('No active assignment found for this employee.', 'danger')
-            return redirect(url_for('scheduling.travel_overview'))
+            return _travel_redirect()
     else:
         date_from_str = request.form.get('assign_date_from', '').strip()
         date_to_str = request.form.get('assign_date_to', '').strip()
@@ -999,7 +1029,7 @@ def property_assign(prop_id):
             d_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
         except ValueError:
             flash('Invalid dates.', 'danger')
-            return redirect(url_for('scheduling.travel_overview'))
+            return _travel_redirect()
 
     # Cap to property end date if set
     if prop.date_to and d_to > prop.date_to:
@@ -1015,7 +1045,7 @@ def property_assign(prop_id):
         overlap_name = overlap.display_name
         flash(f'Overlap: {overlap_name} ({overlap.date_from.strftime("%d %b")} — {overlap.date_to.strftime("%d %b")}). '
               f'Adjust the existing booking first or use different dates.', 'danger')
-        return redirect(url_for('scheduling.travel_overview'))
+        return _travel_redirect()
 
     booking = AccommodationBooking(
         employee_id=employee_id,
@@ -1030,7 +1060,7 @@ def property_assign(prop_id):
     db.session.commit()
     flash(f'Employee assigned to "{prop.name}" ({d_from.strftime("%d %b")} — {d_to.strftime("%d %b")}).', 'success')
     _notify_travel_change(employee_id, d_from, 'accommodation', 'added')
-    return redirect(url_for('scheduling.travel_overview'))
+    return _travel_redirect()
 
 
 @scheduling_bp.route('/scheduling/property/<int:prop_id>/document/upload', methods=['POST'])
@@ -1042,7 +1072,7 @@ def property_document_upload(prop_id):
     file = request.files.get('document')
     if not file or not file.filename:
         flash('No file selected.', 'danger')
-        return redirect(url_for('scheduling.travel_overview'))
+        return _travel_redirect()
 
     ext = os.path.splitext(file.filename)[1].lower()
     stored_name = f"accom_{uuid.uuid4().hex}{ext}"
@@ -1063,7 +1093,7 @@ def property_document_upload(prop_id):
     db.session.add(doc)
     db.session.commit()
     flash(f'Document uploaded to "{prop.name}".', 'success')
-    return redirect(url_for('scheduling.travel_overview'))
+    return _travel_redirect()
 
 
 @scheduling_bp.route('/scheduling/accommodation-doc/<filename>')
@@ -1087,7 +1117,7 @@ def property_document_delete(prop_id, doc_id):
     db.session.delete(doc)
     db.session.commit()
     flash('Document deleted.', 'success')
-    return redirect(url_for('scheduling.travel_overview'))
+    return _travel_redirect()
 
 
 # ---------------------------------------------------------------------------
@@ -1142,7 +1172,7 @@ def flight_add():
         return jsonify({'ok': True, 'flight_id': fb.id})
     flash('Flight booking added.', 'success')
     if request.form.get('redirect_to') == 'travel':
-        return redirect(url_for('scheduling.travel_overview'))
+        return _travel_redirect()
     return redirect(url_for('scheduling.scheduling_overview'))
 
 
@@ -1266,7 +1296,7 @@ def accommodation_edit(accom_id):
         return jsonify({'ok': True})
     flash('Accommodation booking updated.', 'success')
     if request.form.get('redirect_to') == 'travel':
-        return redirect(url_for('scheduling.travel_overview'))
+        return _travel_redirect()
     return redirect(url_for('scheduling.scheduling_overview'))
 
 
@@ -1285,7 +1315,7 @@ def accommodation_delete(accom_id):
         return jsonify({'ok': True})
     flash('Accommodation booking deleted.', 'success')
     if request.form.get('redirect_to') == 'travel':
-        return redirect(url_for('scheduling.travel_overview'))
+        return _travel_redirect()
     return redirect(url_for('scheduling.scheduling_overview'))
 
 
