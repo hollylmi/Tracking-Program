@@ -148,7 +148,14 @@
           <!-- Accommodation -->
           <td>
             {% if not s.needs_accommodation %}
-              <span class="badge bg-light text-muted border">Local — no accom needed</span>
+              <span class="badge bg-light text-muted border"><i class="bi bi-house-slash me-1"></i>No accom needed</span>
+              <form method="POST" action="{{ url_for('scheduling.scheduling_assign_edit', pa_id=s.assignment_id) }}" class="d-inline" onclick="event.stopPropagation()">
+                <input type="hidden" name="redirect_to" value="travel">
+                <input type="hidden" name="needs_accommodation" value="">
+                <button type="submit" class="btn btn-outline-primary py-0 px-1 ms-1" style="font-size:.6rem;" title="Re-enable accommodation">
+                  <i class="bi bi-arrow-counterclockwise"></i>
+                </button>
+              </form>
             {% elif s.has_accommodation %}
               {% for a in s.accom_bookings %}
               <div class="mb-1">
@@ -168,6 +175,13 @@
               {% endif %}
             {% else %}
               <span class="badge bg-danger-subtle text-danger"><i class="bi bi-house-x"></i> No accommodation</span>
+              <form method="POST" action="{{ url_for('scheduling.scheduling_assign_edit', pa_id=s.assignment_id) }}" class="d-inline" onclick="event.stopPropagation()">
+                <input type="hidden" name="redirect_to" value="travel">
+                <input type="hidden" name="needs_accommodation" value="0">
+                <button type="submit" class="btn btn-outline-secondary py-0 px-1 ms-1" style="font-size:.6rem;" title="Mark as no accommodation needed (commutes)">
+                  <i class="bi bi-house-slash me-1"></i>No accom
+                </button>
+              </form>
             {% endif %}
           </td>
           <!-- Travel FROM -->
@@ -520,9 +534,18 @@
                       {% endif %}
                     {% else %}
                       <div class="alert alert-danger py-1 px-2 mb-1 small"><i class="bi bi-house-x me-1"></i>No accommodation booked</div>
-                      <button class="btn btn-sm btn-outline-primary" onclick="openQuickAssign({{ s.employee_id }}, '{{ s.employee_name|replace("'", "\\'") }}')">
-                        <i class="bi bi-house-add me-1"></i>Assign Accommodation
-                      </button>
+                      <div class="d-flex gap-1 flex-wrap" onclick="event.stopPropagation()">
+                        <button class="btn btn-sm btn-outline-primary" onclick="openQuickAssign({{ s.employee_id }}, '{{ s.employee_name|replace("'", "\\'") }}')">
+                          <i class="bi bi-house-add me-1"></i>Assign Accommodation
+                        </button>
+                        <form method="POST" action="{{ url_for('scheduling.scheduling_assign_edit', pa_id=s.assignment_id) }}" class="d-inline">
+                          <input type="hidden" name="redirect_to" value="travel">
+                          <input type="hidden" name="needs_accommodation" value="0">
+                          <button type="submit" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-house-slash me-1"></i>No Accom Needed
+                          </button>
+                        </form>
+                      </div>
                     {% endif %}
                   </div>
                 </div>
