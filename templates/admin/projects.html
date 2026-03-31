@@ -71,7 +71,9 @@
                             '{{ project.hours_per_day or "" }}',
                             '{{ project.quoted_days or "" }}',
                             '{{ (project.site_address or '')|replace("'", "\\'") }}',
-                            '{{ (project.site_contact or '')|replace("'", "\\'") }}')"
+                            '{{ (project.site_contact or '')|replace("'", "\\'") }}',
+                            '{{ project.city or "" }}',
+                            '{{ project.nearest_airport or "" }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -168,13 +170,19 @@
           </div>
 
           <div class="row g-3 mb-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
               <label class="form-label fw-semibold">City / Location</label>
               <input type="text" name="city" id="projectCity" class="form-control"
-                     placeholder="e.g. Brisbane, Karratha">
-              <div class="form-text">Used for travel planning.</div>
+                     placeholder="e.g. Brisbane">
+              <div class="form-text">For travel planning.</div>
             </div>
-            <div class="col-md-8">
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Nearest Airport</label>
+              <input type="text" name="nearest_airport" id="projectAirport" class="form-control"
+                     placeholder="e.g. BNE" style="text-transform:uppercase">
+              <div class="form-text">Airport code.</div>
+            </div>
+            <div class="col-md-6">
               <label class="form-label fw-semibold">Site Address <span class="text-muted fw-normal">(optional)</span></label>
               <input type="text" name="site_address" id="projectSiteAddress" class="form-control"
                      placeholder="e.g. 123 Industrial Rd, Hazelwood VIC 3840">
@@ -203,7 +211,7 @@
 
 {% block scripts %}
 <script>
-  function openEditProject(id, name, description, startDate, plannedCrew, hoursPerDay, quotedDays, siteAddress, siteContact) {
+  function openEditProject(id, name, description, startDate, plannedCrew, hoursPerDay, quotedDays, siteAddress, siteContact, city, airport) {
     document.getElementById('formTitle').textContent = 'Edit Project';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
@@ -215,6 +223,8 @@
     document.getElementById('projectQuotedDays').value = quotedDays;
     document.getElementById('projectSiteAddress').value = siteAddress || '';
     document.getElementById('projectSiteContact').value = siteContact || '';
+    document.getElementById('projectCity').value = city || '';
+    document.getElementById('projectAirport').value = airport || '';
     document.getElementById('submitBtn').textContent = 'Save Changes';
     document.getElementById('cancelEditBtn').classList.remove('d-none');
     document.getElementById('projectName').focus();

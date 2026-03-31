@@ -641,6 +641,7 @@ def admin_projects():
                 p.site_address = request.form.get('site_address', '').strip() or None
                 p.site_contact = request.form.get('site_contact', '').strip() or None
                 p.city = request.form.get('city', '').strip() or None
+                p.nearest_airport = request.form.get('nearest_airport', '').strip().upper() or None
                 db.session.add(p)
                 db.session.commit()
                 flash(f'Project "{name}" added.', 'success')
@@ -661,6 +662,7 @@ def admin_projects():
             project.site_address = request.form.get('site_address', '').strip() or None
             project.site_contact = request.form.get('site_contact', '').strip() or None
             project.city = request.form.get('city', '').strip() or None
+            project.nearest_airport = request.form.get('nearest_airport', '').strip().upper() or None
             db.session.commit()
             flash('Project updated.', 'success')
         elif action == 'toggle':
