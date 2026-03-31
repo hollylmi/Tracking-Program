@@ -174,7 +174,8 @@
           </td>
           <!-- Travel TO -->
           <td>
-            <small class="text-muted">{{ s.travel_to_date.strftime('%a %d %b') }}</small><br>
+            <small class="text-muted">{{ s.travel_to_date.strftime('%a %d %b') }}</small>
+            <br><small class="fw-semibold" style="font-size:.65rem;">{{ s.travel_to_label }}</small><br>
             {% if s.transport_to == 'fly' %}
               {% if s.has_flight_to %}
                 <span class="badge bg-success-subtle text-success"><i class="bi bi-airplane"></i> Booked</span>
@@ -258,7 +259,8 @@
               <span class="badge bg-info-subtle text-info"><i class="bi bi-arrow-repeat"></i> Ongoing</span>
               <br><small class="text-muted">No end date set</small>
             {% else %}
-            <small class="text-muted">{{ s.travel_from_date.strftime('%a %d %b') }}</small><br>
+            <small class="text-muted">{{ s.travel_from_date.strftime('%a %d %b') }}</small>
+            <br><small class="fw-semibold" style="font-size:.65rem;">{{ s.travel_from_label }}</small><br>
             {% if s.transport_from == 'fly' %}
               {% if s.has_flight_from %}
                 <span class="badge bg-success-subtle text-success"><i class="bi bi-airplane"></i> Booked</span>
@@ -342,8 +344,12 @@
                   </span>
                   {% if not s.is_ongoing %}
                   <i class="bi bi-arrow-right text-primary"></i>
-                  <span class="badge bg-secondary px-3 py-2">
-                    <i class="bi bi-house-door me-1"></i>{{ s.home_location or 'Home' }}
+                  <span class="badge {{ 'bg-warning text-dark' if s.to_project_name else 'bg-secondary' }} px-3 py-2">
+                    {% if s.to_project_name %}
+                      <i class="bi bi-building me-1"></i>{{ s.to_project_name }} — {{ s.to_location or '?' }}
+                    {% else %}
+                      <i class="bi bi-house-door me-1"></i>R&R ({{ s.home_location or 'Home' }})
+                    {% endif %}
                   </span>
                   {% endif %}
 
@@ -659,7 +665,7 @@
                       <p class="text-info mb-0"><i class="bi bi-arrow-repeat me-1"></i>Assignment is ongoing — no end date set</p>
                     {% else %}
                       <p class="mb-1"><strong>Date:</strong> {{ s.travel_from_date.strftime('%A %d %b %Y') }}</p>
-                      <p class="mb-1"><strong>Route:</strong> {{ s.project_city or '?' }} &rarr; {{ s.home_location or '?' }}</p>
+                      <p class="mb-1"><strong>Route:</strong> {{ s.project_city or '?' }} &rarr; {{ s.to_location or s.home_location or '?' }}{% if s.to_project_name %} ({{ s.to_project_name }}){% else %} (R&R){% endif %}</p>
                       <p class="mb-2"><strong>Mode:</strong>
                         {% if s.transport_from == 'fly' %}<i class="bi bi-airplane"></i> Fly
                         {% elif s.transport_from == 'drive' %}<i class="bi bi-car-front"></i> Drive{% if s.drive_time_from %} (~{{ s.drive_time_from }} hrs){% endif %}
@@ -685,7 +691,7 @@
                         {% endfor %}
                       {% elif s.transport_from == 'fly' %}
                         <div class="alert alert-danger py-1 px-2 mb-2 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
-                          {% if s.project_airport and s.home_airport %}<br>Need: {{ s.project_airport }} &rarr; {{ s.home_airport }}{% endif %}
+                          {% if s.project_airport and (s.to_airport or s.home_airport) %}<br>Need: {{ s.project_airport }} &rarr; {{ s.to_airport or s.home_airport }}{% endif %}
                         </div>
                       {% endif %}
                       <!-- Inline add flight form -->
@@ -700,7 +706,7 @@
                               <input name="departure_airport" class="form-control form-control-sm" placeholder="From" value="{{ s.project_airport or '' }}">
                             </div>
                             <div class="col-6">
-                              <input name="arrival_airport" class="form-control form-control-sm" placeholder="To" value="{{ s.home_airport or '' }}">
+                              <input name="arrival_airport" class="form-control form-control-sm" placeholder="To" value="{{ s.to_airport or s.home_airport or '' }}">
                             </div>
                           </div>
                           <div class="row g-1 mb-1">

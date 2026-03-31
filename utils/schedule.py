@@ -737,8 +737,9 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
     for emp_id in assigns_by_emp:
         assigns_by_emp[emp_id].sort(key=lambda a: a.date_from)
 
-    # Map assignment_id -> previous assignment (for project-to-project travel)
+    # Map assignment_id -> previous/next assignment (for project-to-project travel)
     prev_assignment_map = {}
+    next_assignment_map = {}
     for emp_id, emp_assigns in assigns_by_emp.items():
         for i in range(1, len(emp_assigns)):
             curr = emp_assigns[i]
@@ -747,6 +748,7 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
                 gap_days = (curr.date_from - prev.date_to).days
                 if gap_days <= 3:  # 0-3 day gap = travelling between projects
                     prev_assignment_map[curr.id] = prev
+                    next_assignment_map[prev.id] = curr
 
     # Compute projected finish dates from Gantt for each project with ongoing assignments
     projected_finish_dates = {}
@@ -823,8 +825,34 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
                 flights_from = flight_map.get((emp.id, day_after), [])
                 if flights_from:
                     travel_from_date = day_after
-        transport_from = assign.transport_from_mode or _transport(proj_city, emp_home, emp)
-        drive_time_from = get_drive_time(proj_city, emp_home) if transport_from in ('drive', 'drives') else None
+        # Check for next assignment (project-to-project transfer out)
+        next_assign = next_assignment_map.get(assign.id)
+        if next_assign:
+            next_proj = project_map.get(next_assign.project_id)
+            to_location = next_proj.city if next_proj else emp_home
+            to_airport = next_proj.nearest_airport if next_proj else (
+                emp.home_airport if emp.home_airport and emp.home_airport != 'DRIVES' else None)
+            to_project_name = next_proj.name if next_proj else None
+            transport_from = assign.transport_from_mode or _transport(proj_city, to_location, emp)
+        else:
+            to_location = emp_home
+            to_airport = emp.home_airport if emp.home_airport and emp.home_airport != 'DRIVES' else None
+            to_project_name = None
+            transport_from = assign.transport_from_mode or _transport(proj_city, emp_home, emp)
+        drive_time_from = get_drive_time(proj_city, to_location) if transport_from in ('drive', 'drives') else None
+
+        # Context labels for travel
+        if from_project_name:
+            travel_to_label = f'From {from_project_name}'
+        else:
+            travel_to_label = f'From R&R ({from_location or "home"})' if from_location else 'From home'
+
+        if is_ongoing:
+            travel_from_label = 'Ongoing'
+        elif to_project_name:
+            travel_from_label = f'To {to_project_name}'
+        else:
+            travel_from_label = f'To R&R ({to_location or "home"})' if to_location else 'Going home'
 
         # Accommodation
         emp_accoms = accom_by_emp.get(emp.id, [])
@@ -930,6 +958,7 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             'from_location': from_location,
             'from_airport': from_airport,
             'from_project_name': from_project_name,
+            'travel_to_label': travel_to_label,
             'flights_to': [_fmt_flight(f) for f in flights_to],
             'flights_to_raw': flights_to,
             'has_flight_to': len(flights_to) > 0,
@@ -937,6 +966,10 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             'travel_from_date': travel_from_date,
             'transport_from': transport_from,
             'drive_time_from': drive_time_from,
+            'to_location': to_location,
+            'to_airport': to_airport,
+            'to_project_name': to_project_name,
+            'travel_from_label': travel_from_label,
             'flights_from': [_fmt_flight(f) for f in flights_from],
             'flights_from_raw': flights_from,
             'has_flight_from': len(flights_from) > 0,
