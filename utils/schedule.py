@@ -867,16 +867,33 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
         has_accom = len(accom_bookings) > 0
 
         # Accommodation gap check
+        # For ongoing assignments: only check the next 6 days from today
+        # For fixed assignments: check the full duration
         accom_gap_days = 0
+        accom_next_gap_date = None  # first uncovered date
         if needs_accom:
+            if is_ongoing:
+                check_from = max(start, today)
+                check_to = min(today + timedelta(days=6), end)
+            else:
+                check_from = start
+                check_to = end
             covered = set()
             for a in accom_bookings:
-                d = max(a.date_from, start)
-                while d <= min(a.date_to, end):
+                d = max(a.date_from, check_from)
+                while d <= min(a.date_to, check_to):
                     covered.add(d)
                     d += timedelta(days=1)
-            total_days = (end - start).days + 1
-            accom_gap_days = total_days - len(covered)
+            total_check_days = (check_to - check_from).days + 1
+            accom_gap_days = max(0, total_check_days - len(covered))
+            # Find earliest uncovered date for display
+            if accom_gap_days > 0:
+                d = check_from
+                while d <= check_to:
+                    if d not in covered:
+                        accom_next_gap_date = d
+                        break
+                    d += timedelta(days=1)
 
         # Expiry check — only flag if assignment extends past property AND within 7 days
         accom_expiring = any(
@@ -908,11 +925,15 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             issues.append({'text': 'No flight booked TO site', 'days': days_to_start})
         if not is_ongoing and transport_from == 'fly' and not flights_from and days_to_end <= 5:
             issues.append({'text': 'No flight booked FROM site', 'days': days_to_end})
-        # Accommodation: flag within 5 days
+        # Accommodation: flag within 5 days of start (fixed), or within 6 days of gap (ongoing)
         if needs_accom and not has_accom and days_to_start <= 5:
             issues.append({'text': 'No accommodation booked', 'days': days_to_start})
-        elif needs_accom and accom_gap_days > 0 and days_to_start <= 5:
-            issues.append({'text': f'Accommodation gap: {accom_gap_days} day(s) uncovered', 'days': days_to_start})
+        elif needs_accom and accom_gap_days > 0:
+            if is_ongoing:
+                gap_days_away = (accom_next_gap_date - today).days if accom_next_gap_date else 0
+                issues.append({'text': f'Accommodation runs out {accom_next_gap_date.strftime("%d %b") if accom_next_gap_date else "soon"}', 'days': gap_days_away})
+            elif days_to_start <= 5:
+                issues.append({'text': f'Accommodation gap: {accom_gap_days} day(s) uncovered', 'days': days_to_start})
         # Property expiry: only warn if assignment extends past the property AND
         # we're within 7 days of the property expiring
         for a in accom_bookings:
