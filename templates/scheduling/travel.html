@@ -407,25 +407,6 @@
   </div>
 </div>
 {% endif %}
-            <span class="badge bg-success-subtle text-success">{{ group.arrival }}</span>
-          </td>
-          <td>
-            {% for emp in group.employees %}
-            <span class="badge bg-light text-dark border me-1">{{ emp.name }}</span>
-            {% endfor %}
-          </td>
-          <td class="small text-muted">
-            {% for f in group.flights %}
-            {{ f.employee.name }}: {{ f.airline or '' }} {{ f.flight_number or '' }} {{ f.departure_time or '' }}-{{ f.arrival_time or '' }}<br>
-            {% endfor %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% endif %}
 
 <!-- No assignments message -->
 {% if not project_sections %}
