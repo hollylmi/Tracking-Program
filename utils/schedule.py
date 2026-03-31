@@ -831,7 +831,13 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
         # Accommodation
         emp_accoms = accom_by_emp.get(emp.id, [])
         accom_bookings = [a for a in emp_accoms if a.date_from <= end and a.date_to >= start]
-        needs_accom = emp.requires_accommodation if emp.requires_accommodation is not None else True
+        # Accommodation need: assignment override > employee default > True
+        if assign.needs_accommodation is not None:
+            needs_accom = assign.needs_accommodation
+        elif emp.requires_accommodation is not None:
+            needs_accom = emp.requires_accommodation
+        else:
+            needs_accom = True
         has_accom = len(accom_bookings) > 0
 
         # Accommodation gap check

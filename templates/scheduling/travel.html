@@ -54,18 +54,45 @@
     <!-- Properties for this project -->
     {% if ps.properties %}
     <div class="card-body border-bottom py-2 bg-light">
-      <div class="d-flex flex-wrap gap-3">
-        {% for prop in ps.properties %}
-        <div class="small">
+      {% for prop in ps.properties %}
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <div class="small flex-grow-1">
           <i class="bi bi-house-door text-success"></i>
           <strong>{{ prop.name }}</strong>
           <span class="text-muted">({{ prop.occupancy }}/{{ prop.bedrooms }} beds)</span>
+          {% if prop.date_from or prop.date_to %}
+            <span class="text-muted">| {{ prop.date_from.strftime('%d %b') if prop.date_from else '?' }} — {{ prop.date_to.strftime('%d %b %Y') if prop.date_to else 'ongoing' }}</span>
+          {% endif %}
           {% if prop.date_to and prop.date_to <= expiry_warn_date %}
             <span class="badge bg-danger-subtle text-danger" style="font-size:.65rem;">Expires {{ prop.date_to.strftime('%d %b') }}</span>
           {% endif %}
         </div>
-        {% endfor %}
+        <button class="btn btn-outline-secondary py-0 px-1" style="font-size:.65rem;" type="button"
+                onclick="event.stopPropagation(); document.getElementById('editProp{{ prop.id }}').classList.toggle('d-none')">
+          <i class="bi bi-pencil"></i>
+        </button>
       </div>
+      <!-- Inline edit property form -->
+      <div class="d-none mb-2 ps-3" id="editProp{{ prop.id }}">
+        <form method="POST" action="{{ url_for('scheduling.property_edit', prop_id=prop.id) }}" class="row g-1 align-items-end small">
+          <div class="col-3"><input name="prop_name" class="form-control form-control-sm" value="{{ prop.name }}" placeholder="Name"></div>
+          <div class="col-2"><input name="bedrooms" type="number" class="form-control form-control-sm" value="{{ prop.bedrooms }}" min="1" placeholder="Beds"></div>
+          <div class="col-2"><input name="prop_date_from" type="date" class="form-control form-control-sm" value="{{ prop.date_from.isoformat() if prop.date_from else '' }}"></div>
+          <div class="col-2"><input name="prop_date_to" type="date" class="form-control form-control-sm" value="{{ prop.date_to.isoformat() if prop.date_to else '' }}"></div>
+          <div class="col-2">
+            <select name="property_type" class="form-select form-select-sm">
+              {% for t in ['house','apartment','hotel','motel','other'] %}
+              <option value="{{ t }}" {{ 'selected' if prop.property_type == t }}>{{ t|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-1"><button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-check-lg"></i></button></div>
+          <div class="col-4"><input name="prop_address" class="form-control form-control-sm" value="{{ prop.address or '' }}" placeholder="Address"></div>
+          <div class="col-3"><input name="prop_phone" class="form-control form-control-sm" value="{{ prop.phone or '' }}" placeholder="Phone"></div>
+          <div class="col-5"><textarea name="prop_instructions" class="form-control form-control-sm" rows="1" placeholder="Instructions">{{ prop.instructions or '' }}</textarea></div>
+        </form>
+      </div>
+      {% endfor %}
     </div>
     {% endif %}
 
@@ -263,6 +290,14 @@
                         <option value="fly" {{ 'selected' if s.transport_from == 'fly' }}>Fly</option>
                         <option value="drive" {{ 'selected' if s.transport_from == 'drive' }}>Drive</option>
                         <option value="local" {{ 'selected' if s.transport_from == 'local' }}>Local</option>
+                      </select>
+                    </div>
+                    <div class="col-auto">
+                      <label class="form-label small mb-1">Accom</label>
+                      <select name="needs_accommodation" class="form-select form-select-sm">
+                        <option value="">Default</option>
+                        <option value="1" {{ 'selected' if s.needs_accommodation }}>Needs accom</option>
+                        <option value="0" {{ 'selected' if not s.needs_accommodation }}>No accom needed</option>
                       </select>
                     </div>
                     <div class="col-auto">
@@ -823,19 +858,34 @@
           <div class="mb-3" id="assignPropertyDiv">
             <label class="form-label fw-semibold">Property</label>
             <select id="assignPropertySelect" class="form-select" onchange="updateAssignAction(this)">
-              {% for prop in properties %}
-              <option value="{{ prop.id }}">{{ prop.name }} ({{ prop.occupancy }}/{{ prop.bedrooms }} beds)</option>
+              {% for prop in properties if not prop.date_to or prop.date_to >= today %}
+              <option value="{{ prop.id }}"
+                      data-expires="{{ prop.date_to.isoformat() if prop.date_to else '' }}">
+                {{ prop.name }} ({{ prop.occupancy }}/{{ prop.bedrooms }} beds)
+                {% if prop.date_to %} — expires {{ prop.date_to.strftime('%d %b') }}{% endif %}
+              </option>
               {% endfor %}
             </select>
           </div>
-          <div class="row g-2 mb-3">
+          <!-- On-site dates info -->
+          <div class="alert alert-info py-2 small mb-3 d-none" id="assignOnSiteInfo">
+            <i class="bi bi-info-circle me-1"></i>On site: <strong id="assignOnSiteDates"></strong>
+          </div>
+          <div class="mb-3">
+            <div class="form-check">
+              <input type="checkbox" name="use_assignment_dates" value="1" class="form-check-input" id="assignUseDuration"
+                     onchange="toggleAssignDates(this)">
+              <label class="form-check-label fw-semibold" for="assignUseDuration">For duration of stay</label>
+            </div>
+          </div>
+          <div id="assignDatesDiv" class="row g-2 mb-3">
             <div class="col-6">
               <label class="form-label fw-semibold">From</label>
-              <input name="assign_date_from" type="date" class="form-control" required value="{{ today.isoformat() }}">
+              <input name="assign_date_from" id="assignDateFrom" type="date" class="form-control" value="{{ today.isoformat() }}">
             </div>
             <div class="col-6">
               <label class="form-label fw-semibold">To</label>
-              <input name="assign_date_to" type="date" class="form-control" required>
+              <input name="assign_date_to" id="assignDateTo" type="date" class="form-control">
             </div>
           </div>
           <div class="mb-3">
@@ -905,10 +955,47 @@
 
 {% block scripts %}
 <script>
+  // Employee on-site dates lookup from swings
+  const EMP_SWINGS = {
+    {% for s in swings %}
+    {{ s.employee_id }}: { from: '{{ s.start_date.isoformat() }}', to: '{{ s.end_date.isoformat() }}', ongoing: {{ 'true' if s.is_ongoing else 'false' }}, project: '{{ s.project_name }}' },
+    {% endfor %}
+  };
+
+  function showOnSiteInfo(empId) {
+    const info = EMP_SWINGS[empId];
+    const el = document.getElementById('assignOnSiteInfo');
+    const datesEl = document.getElementById('assignOnSiteDates');
+    if (info) {
+      const from = new Date(info.from).toLocaleDateString('en-AU', {day:'numeric',month:'short'});
+      const to = info.ongoing ? 'Ongoing' : new Date(info.to).toLocaleDateString('en-AU', {day:'numeric',month:'short',year:'numeric'});
+      datesEl.textContent = `${from} — ${to} (${info.project})`;
+      el.classList.remove('d-none');
+      // Pre-fill dates
+      document.getElementById('assignDateFrom').value = info.from;
+      if (!info.ongoing) document.getElementById('assignDateTo').value = info.to;
+    } else {
+      el.classList.add('d-none');
+    }
+  }
+
+  function toggleAssignDates(cb) {
+    const div = document.getElementById('assignDatesDiv');
+    const inputs = div.querySelectorAll('input');
+    if (cb.checked) {
+      div.style.opacity = '0.5';
+      inputs.forEach(i => i.removeAttribute('required'));
+    } else {
+      div.style.opacity = '1';
+    }
+  }
+
   function openAssignToProperty(propId, propName) {
     document.getElementById('assignForm').action = `/scheduling/property/${propId}/assign`;
     document.getElementById('assignModalTitle').textContent = `Assign to ${propName}`;
     document.getElementById('assignPropertyDiv').style.display = 'none';
+    document.getElementById('assignUseDuration').checked = false;
+    toggleAssignDates(document.getElementById('assignUseDuration'));
     new bootstrap.Modal(document.getElementById('assignModal')).show();
   }
 
@@ -916,12 +1003,20 @@
     document.getElementById('assignEmpSelect').value = empId;
     document.getElementById('assignModalTitle').textContent = `Assign Accommodation for ${empName}`;
     document.getElementById('assignPropertyDiv').style.display = '';
+    document.getElementById('assignUseDuration').checked = false;
+    toggleAssignDates(document.getElementById('assignUseDuration'));
     const propSelect = document.getElementById('assignPropertySelect');
     if (propSelect.options.length > 0) {
       document.getElementById('assignForm').action = `/scheduling/property/${propSelect.value}/assign`;
     }
+    showOnSiteInfo(empId);
     new bootstrap.Modal(document.getElementById('assignModal')).show();
   }
+
+  // Update on-site info when employee selection changes
+  document.getElementById('assignEmpSelect').addEventListener('change', function() {
+    showOnSiteInfo(parseInt(this.value));
+  });
 
   function updateAssignAction(sel) {
     document.getElementById('assignForm').action = `/scheduling/property/${sel.value}/assign`;

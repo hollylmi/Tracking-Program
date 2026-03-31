@@ -387,6 +387,14 @@ def scheduling_assign_edit(pa_id):
     if transport_from is not None:
         pa.transport_from_mode = transport_from or None
 
+    accom_val = request.form.get('needs_accommodation', '').strip()
+    if accom_val == '1':
+        pa.needs_accommodation = True
+    elif accom_val == '0':
+        pa.needs_accommodation = False
+    else:
+        pa.needs_accommodation = None  # use employee default
+
     db.session.commit()
 
     if is_ajax:
@@ -890,13 +898,48 @@ def property_assign(prop_id):
     """Assign an employee to an accommodation property."""
     prop = AccommodationProperty.query.get_or_404(prop_id)
     employee_id = request.form.get('employee_id', type=int)
-    date_from_str = request.form.get('assign_date_from', '').strip()
-    date_to_str = request.form.get('assign_date_to', '').strip()
-    try:
-        d_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
-        d_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
-    except ValueError:
-        flash('Invalid dates.', 'danger')
+
+    # Check property not expired
+    if prop.date_to and prop.date_to < date.today():
+        flash(f'Property "{prop.name}" has expired ({prop.date_to.strftime("%d %b %Y")}). Cannot assign.', 'danger')
+        return redirect(url_for('scheduling.travel_overview'))
+
+    # "Duration of stay" — use assignment dates if checkbox is ticked
+    if request.form.get('use_assignment_dates'):
+        from utils.schedule import build_swing_planner
+        emps = Employee.query.filter(Employee.id == employee_id).all()
+        planner = build_swing_planner(emps, look_ahead_days=365)
+        matching = [s for s in planner['swings'] if s['employee_id'] == employee_id]
+        if matching:
+            d_from = matching[0]['start_date']
+            d_to = matching[0]['end_date']
+        else:
+            flash('No active assignment found for this employee.', 'danger')
+            return redirect(url_for('scheduling.travel_overview'))
+    else:
+        date_from_str = request.form.get('assign_date_from', '').strip()
+        date_to_str = request.form.get('assign_date_to', '').strip()
+        try:
+            d_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+            d_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Invalid dates.', 'danger')
+            return redirect(url_for('scheduling.travel_overview'))
+
+    # Cap to property end date if set
+    if prop.date_to and d_to > prop.date_to:
+        d_to = prop.date_to
+
+    # Check for overlapping bookings at ANY property for this employee
+    overlap = AccommodationBooking.query.filter(
+        AccommodationBooking.employee_id == employee_id,
+        AccommodationBooking.date_from < d_to,   # starts before new ends
+        AccommodationBooking.date_to > d_from,    # ends after new starts
+    ).first()
+    if overlap:
+        overlap_name = overlap.display_name
+        flash(f'Overlap: {overlap_name} ({overlap.date_from.strftime("%d %b")} — {overlap.date_to.strftime("%d %b")}). '
+              f'Adjust the existing booking first or use different dates.', 'danger')
         return redirect(url_for('scheduling.travel_overview'))
 
     booking = AccommodationBooking(
@@ -910,7 +953,7 @@ def property_assign(prop_id):
     )
     db.session.add(booking)
     db.session.commit()
-    flash(f'Employee assigned to "{prop.name}".', 'success')
+    flash(f'Employee assigned to "{prop.name}" ({d_from.strftime("%d %b")} — {d_to.strftime("%d %b")}).', 'success')
     _notify_travel_change(employee_id, d_from, 'accommodation', 'added')
     return redirect(url_for('scheduling.travel_overview'))
 

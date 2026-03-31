@@ -294,6 +294,7 @@ with app.app_context():
         "ALTER TABLE flight_booking ADD COLUMN hire_car_reference VARCHAR(100)",
         "ALTER TABLE flight_booking ADD COLUMN hire_car_booked_for VARCHAR(200)",
         "ALTER TABLE flight_booking ADD COLUMN ground_notes VARCHAR(500)",
+        "ALTER TABLE project_assignment ADD COLUMN needs_accommodation BOOLEAN",
     ]:
         try:
             db.session.execute(db.text(stmt))

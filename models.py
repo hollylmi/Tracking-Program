@@ -764,6 +764,7 @@ class ProjectAssignment(db.Model):
     # Transport overrides for travel planning
     transport_to_mode = db.Column(db.String(20))    # fly / drive / local — overrides auto-detection
     transport_from_mode = db.Column(db.String(20))   # fly / drive / local — overrides auto-detection
+    needs_accommodation = db.Column(db.Boolean, nullable=True)  # NULL = use employee default, True/False = override per job
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     employee = db.relationship('Employee', backref='project_assignments')
@@ -1250,7 +1251,7 @@ class FlightBooking(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    employee = db.relationship('Employee', backref='flight_bookings')
+    employee = db.relationship('Employee', foreign_keys=[employee_id], backref='flight_bookings')
     ground_with = db.relationship('Employee', foreign_keys=[ground_with_employee_id])
     created_by = db.relationship('User', foreign_keys=[created_by_id])
 
