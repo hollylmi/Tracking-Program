@@ -305,6 +305,7 @@ def compute_gantt_data(project_id):
         'target_finish_pct': pct(target_finish),
         'target_finish': target_finish.strftime('%d/%m/%Y') if target_finish else None,
         'est_finish': est_finish_overall.strftime('%d/%m/%Y') if est_finish_overall else None,
+        'est_finish_date': est_finish_overall,  # raw date for travel planner
         'variance_days': variance_overall,
         'week_markers': week_markers,
         'month_markers': month_markers,

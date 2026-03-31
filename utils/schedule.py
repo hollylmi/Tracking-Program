@@ -705,6 +705,21 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
     # Build employee lookup
     emp_map = {e.id: e for e in employees}
 
+    # Compute projected finish dates from Gantt for each project with ongoing assignments
+    projected_finish_dates = {}
+    ongoing_project_ids = {a.project_id for a in assignments if a.date_to is None}
+    if ongoing_project_ids:
+        from utils.gantt import compute_gantt_data
+        for pid in ongoing_project_ids:
+            proj = project_map.get(pid)
+            if proj and proj.start_date:
+                try:
+                    gantt = compute_gantt_data(proj)
+                    if gantt and gantt.get('est_finish_date'):
+                        projected_finish_dates[pid] = gantt['est_finish_date']
+                except Exception:
+                    pass  # Gantt may fail if no planned data — fall back to planned_end_date
+
     swings = []
     for assign in assignments:
         emp = emp_map.get(assign.employee_id)
@@ -719,9 +734,10 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
         proj_airport = proj.nearest_airport
         start = assign.date_from
         is_ongoing = assign.date_to is None
-        # For ongoing assignments, use project planned_end_date if set, otherwise cutoff
+        # For ongoing assignments, use Gantt projected finish date, then planned_end_date, then cutoff
         if is_ongoing:
-            end = proj.planned_end_date or cutoff
+            proj_finish = projected_finish_dates.get(proj.id)
+            end = proj_finish or proj.planned_end_date or cutoff
         else:
             end = assign.date_to
 
