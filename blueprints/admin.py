@@ -1117,3 +1117,20 @@ def admin_save_locations():
     save_settings(settings)
     flash(f'{len(locations)} locations saved.', 'success')
     return redirect(url_for('admin.admin_settings'))
+
+
+@admin_bp.route('/admin/settings/drive-pairs', methods=['POST'])
+@require_role('admin')
+def admin_save_drive_pairs():
+    settings = load_settings()
+    cities_a = request.form.getlist('pair_a')
+    cities_b = request.form.getlist('pair_b')
+    pairs = []
+    for a, b in zip(cities_a, cities_b):
+        a, b = a.strip(), b.strip()
+        if a and b:
+            pairs.append([a, b])
+    settings['drive_pairs'] = pairs
+    save_settings(settings)
+    flash(f'{len(pairs)} drive routes saved.', 'success')
+    return redirect(url_for('admin.admin_settings'))

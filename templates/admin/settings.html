@@ -138,6 +138,34 @@
       </div>
     </div>
 
+    <!-- Drive Pairs -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-car-front me-2 text-warning"></i>Driveable Routes</h5>
+        <button class="btn btn-sm btn-outline-warning" onclick="addDrivePairRow()"><i class="bi bi-plus-lg me-1"></i>Add</button>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">City pairs where people drive instead of fly. If someone is based in Melbourne and the project is in Geelong, the system will suggest "Drive" instead of "Fly".</p>
+        <form method="POST" action="{{ url_for('admin.admin_save_drive_pairs') }}">
+          <table class="table table-sm align-middle mb-3" id="drivePairsTable">
+            <thead class="table-light">
+              <tr><th>City A</th><th>City B</th><th style="width:50px"></th></tr>
+            </thead>
+            <tbody>
+              {% for pair in settings.get('drive_pairs', []) %}
+              <tr>
+                <td><input name="pair_a" class="form-control form-control-sm" value="{{ pair[0] }}" required></td>
+                <td><input name="pair_b" class="form-control form-control-sm" value="{{ pair[1] }}" required></td>
+                <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-save me-1"></i>Save Routes</button>
+        </form>
+      </div>
+    </div>
+
   </div>
 
   <div class="col-lg-5">
@@ -236,6 +264,18 @@ function addAirportRow() {
   tr.innerHTML = `
     <td><input name="airport_code" class="form-control form-control-sm" placeholder="e.g. MKY" required style="text-transform:uppercase"></td>
     <td><input name="airport_name" class="form-control form-control-sm" placeholder="e.g. Mackay" required></td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+  `;
+  tbody.appendChild(tr);
+  tr.querySelector('input').focus();
+}
+
+function addDrivePairRow() {
+  const tbody = document.querySelector('#drivePairsTable tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input name="pair_a" class="form-control form-control-sm" placeholder="e.g. Melbourne" required></td>
+    <td><input name="pair_b" class="form-control form-control-sm" placeholder="e.g. Geelong" required></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
   `;
   tbody.appendChild(tr);

@@ -43,6 +43,8 @@ def load_settings():
             data['airports'] = _DEFAULT_AIRPORTS
         if 'locations' not in data:
             data['locations'] = _DEFAULT_LOCATIONS
+        if 'drive_pairs' not in data:
+            data['drive_pairs'] = _DEFAULT_DRIVE_PAIRS
         return data
     return {
         'company_name': '',
@@ -54,6 +56,7 @@ def load_settings():
         'from_email': '',
         'airports': _DEFAULT_AIRPORTS,
         'locations': _DEFAULT_LOCATIONS,
+        'drive_pairs': _DEFAULT_DRIVE_PAIRS,
     }
 
 
@@ -67,6 +70,21 @@ def get_locations():
     """Return sorted list of location name strings."""
     settings = load_settings()
     return sorted(settings.get('locations', _DEFAULT_LOCATIONS))
+
+
+_DEFAULT_DRIVE_PAIRS = [
+    ['Sydney', 'Wollongong'],
+    ['Sydney', 'Newcastle'],
+    ['Melbourne', 'Geelong'],
+    ['Brisbane', 'Gold Coast'],
+    ['Brisbane', 'Sunshine Coast'],
+]
+
+
+def get_drive_pairs():
+    """Return list of [city_a, city_b] pairs where driving is the default transport."""
+    settings = load_settings()
+    return settings.get('drive_pairs', _DEFAULT_DRIVE_PAIRS)
 
 
 def save_settings(data):

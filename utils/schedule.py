@@ -497,18 +497,12 @@ def detect_travel_needs(employees, date_list, grid=None, look_ahead_days=90):
             accom_dates[ab.employee_id].add(d)
             d += timedelta(days=1)
 
-    # Short-distance cities (can drive between them)
-    _DRIVE_PAIRS = {
-        frozenset({'Sydney', 'Wollongong'}),
-        frozenset({'Sydney', 'Newcastle'}),
-        frozenset({'Melbourne', 'Geelong'}),
-        frozenset({'Brisbane', 'Gold Coast'}),
-        frozenset({'Brisbane', 'Sunshine Coast'}),
-    }
+    # Driveable city pairs from settings
+    from utils.settings import get_drive_pairs
+    _DRIVE_PAIRS = {frozenset(pair) for pair in get_drive_pairs()}
 
     def _suggest_transport(from_city, to_city, emp):
         """Suggest transport mode: 'drives', 'local', 'drive', 'fly', or 'unknown'."""
-        # Employee explicitly set to DRIVES — never suggest flying
         if emp.home_airport and emp.home_airport.upper() == 'DRIVES':
             if not from_city or not to_city:
                 return 'drives'
@@ -679,12 +673,9 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
         if prop.date_to and today <= prop.date_to <= cutoff
     ]
 
-    # Drive pair config
-    _DRIVE_PAIRS = {
-        frozenset({'Sydney', 'Wollongong'}), frozenset({'Sydney', 'Newcastle'}),
-        frozenset({'Melbourne', 'Geelong'}), frozenset({'Brisbane', 'Gold Coast'}),
-        frozenset({'Brisbane', 'Sunshine Coast'}),
-    }
+    # Driveable city pairs from settings
+    from utils.settings import get_drive_pairs
+    _DRIVE_PAIRS = {frozenset(pair) for pair in get_drive_pairs()}
 
     def _transport(from_city, to_city, emp):
         if emp.home_airport and emp.home_airport.upper() == 'DRIVES':
