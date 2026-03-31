@@ -774,11 +774,54 @@ def travel_overview():
         proj_properties = [p for p in properties if p.project_id == proj.id]
         # Issues count
         issues_count = sum(1 for s in proj_swings if s['has_issues'])
+
+        # Timeline data for properties
+        # Date range: earliest start to latest end across all swings for this project
+        all_starts = [s['start_date'] for s in proj_swings]
+        all_ends = [s['end_date'] for s in proj_swings]
+        timeline_start = min(all_starts) if all_starts else today
+        timeline_end = max(all_ends) if all_ends else today + timedelta(days=90)
+        timeline_days = max((timeline_end - timeline_start).days, 1)
+
+        # Build timeline entries per property
+        prop_timelines = []
+        for prop in proj_properties:
+            bookings_data = []
+            for b in sorted(prop.bookings, key=lambda b: b.date_from):
+                if b.date_to < timeline_start or b.date_from > timeline_end:
+                    continue
+                bar_start = max(b.date_from, timeline_start)
+                bar_end = min(b.date_to, timeline_end)
+                left_pct = round(((bar_start - timeline_start).days / timeline_days) * 100, 1)
+                width_pct = round(max(((bar_end - bar_start).days + 1) / timeline_days * 100, 1), 1)
+                bookings_data.append({
+                    'booking': b,
+                    'left_pct': left_pct,
+                    'width_pct': width_pct,
+                })
+            # Capacity check per week
+            over_capacity_weeks = []
+            d = timeline_start
+            while d <= timeline_end:
+                count = sum(1 for b in prop.bookings if b.date_from <= d <= b.date_to)
+                if count > prop.bedrooms:
+                    over_capacity_weeks.append(d)
+                d += timedelta(days=7)
+            prop_timelines.append({
+                'property': prop,
+                'bookings': bookings_data,
+                'over_capacity': len(over_capacity_weeks) > 0,
+            })
+
         project_sections.append({
             'project': proj,
             'swings': sorted(proj_swings, key=lambda s: s['employee_name']),
             'properties': proj_properties,
             'issues_count': issues_count,
+            'prop_timelines': prop_timelines,
+            'timeline_start': timeline_start,
+            'timeline_end': timeline_end,
+            'timeline_days': timeline_days,
         })
     project_sections.sort(key=lambda ps: ps['project'].name)
 

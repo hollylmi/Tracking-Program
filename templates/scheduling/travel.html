@@ -96,6 +96,56 @@
     </div>
     {% endif %}
 
+    <!-- Property Timeline -->
+    {% if ps.prop_timelines %}
+    <div class="card-body border-bottom py-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0 fw-bold small"><i class="bi bi-calendar-range me-1 text-primary"></i>Accommodation Timeline</h6>
+        <small class="text-muted">{{ ps.timeline_start.strftime('%d %b') }} — {{ ps.timeline_end.strftime('%d %b %Y') }}</small>
+      </div>
+      {% for pt in ps.prop_timelines %}
+      <div class="mb-2">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="small fw-semibold" style="min-width:140px;">
+            {{ pt.property.name }}
+            <span class="text-muted fw-normal">({{ pt.property.bedrooms }} bed{{ 's' if pt.property.bedrooms != 1 }})</span>
+            {% if pt.over_capacity %}<i class="bi bi-exclamation-triangle text-danger" title="Over capacity on some weeks"></i>{% endif %}
+          </span>
+        </div>
+        <div style="position:relative; height:24px; background:#f1f3f5; border-radius:4px; overflow:hidden;">
+          <!-- Today marker -->
+          {% set today_pct = ((today - ps.timeline_start).days / ps.timeline_days * 100) %}
+          {% if today_pct >= 0 and today_pct <= 100 %}
+          <div style="position:absolute; left:{{ today_pct }}%; top:0; bottom:0; width:1px; background:#0d6efd; z-index:3;" title="Today"></div>
+          {% endif %}
+          <!-- Booking bars -->
+          {% set colors = ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#00BCD4', '#E91E63', '#795548', '#607D8B'] %}
+          {% for bd in pt.bookings %}
+          <div style="position:absolute; left:{{ bd.left_pct }}%; width:{{ bd.width_pct }}%; top:2px; bottom:2px;
+                       background:{{ colors[loop.index0 % colors|length] }}; border-radius:3px; opacity:0.85; z-index:2;
+                       display:flex; align-items:center; padding:0 4px; overflow:hidden; cursor:default;"
+               title="{{ bd.booking.employee.name }}: {{ bd.booking.date_from.strftime('%d %b') }} — {{ bd.booking.date_to.strftime('%d %b') }}{% if bd.booking.room_info %} ({{ bd.booking.room_info }}){% endif %}">
+            <span style="font-size:.6rem; color:white; font-weight:600; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.3);">
+              {{ bd.booking.employee.name.split(' ')[0] }}
+            </span>
+          </div>
+          {% endfor %}
+          <!-- Property expiry marker -->
+          {% if pt.property.date_to and pt.property.date_to <= ps.timeline_end %}
+          {% set expiry_pct = ((pt.property.date_to - ps.timeline_start).days / ps.timeline_days * 100) %}
+          <div style="position:absolute; left:{{ expiry_pct }}%; top:0; bottom:0; width:2px; background:#dc3545; z-index:3;"
+               title="Property expires {{ pt.property.date_to.strftime('%d %b %Y') }}"></div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="d-flex gap-3 mt-1">
+        <small class="text-muted"><span style="display:inline-block;width:10px;height:10px;background:#0d6efd;border-radius:2px;"></span> Today</small>
+        <small class="text-muted"><span style="display:inline-block;width:10px;height:10px;background:#dc3545;border-radius:2px;"></span> Property expires</small>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- People on this project -->
     <div class="card-body p-0">
       <div class="table-responsive">
