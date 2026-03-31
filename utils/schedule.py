@@ -693,10 +693,8 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
         if not prop.date_to or prop.date_to < today:
             continue
         days_left = (prop.date_to - today).days
-        ptype = (prop.property_type or '').lower()
-        threshold = 2 if ptype in ('hotel', 'motel') else 14
-        if days_left <= threshold:
-            prop._days_left = days_left  # attach for template use
+        if days_left <= 7:
+            prop._days_left = days_left
             expiring_properties.append(prop)
     expiring_properties.sort(key=lambda p: p._days_left)
 
@@ -852,9 +850,10 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             total_days = (end - start).days + 1
             accom_gap_days = total_days - len(covered)
 
-        # Expiry check
+        # Expiry check — only flag if assignment extends past property AND within 7 days
         accom_expiring = any(
             a.property and a.property.date_to and a.property.date_to < end
+            and (a.property.date_to - today).days <= 7
             for a in accom_bookings
         )
 
@@ -886,13 +885,18 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             issues.append({'text': 'No accommodation booked', 'days': days_to_start})
         elif needs_accom and accom_gap_days > 0 and days_to_start <= 5:
             issues.append({'text': f'Accommodation gap: {accom_gap_days} day(s) uncovered', 'days': days_to_start})
-        # Property expiry: warning at 7 days for all types
+        # Property expiry: only warn if assignment extends past the property AND
+        # we're within 7 days of the property expiring
         for a in accom_bookings:
             if a.property and a.property.date_to:
-                prop_days = (a.property.date_to - today).days
-                if prop_days <= 7:
-                    warnings.append({'text': f'{a.property.name} expires in {prop_days} day{"s" if prop_days != 1 else ""}',
-                                     'days': prop_days})
+                prop_expiry = a.property.date_to
+                prop_days_left = (prop_expiry - today).days
+                assignment_extends_past = end > prop_expiry
+                if assignment_extends_past and prop_days_left <= 7:
+                    warnings.append({
+                        'text': f'{a.property.name} expires in {prop_days_left} day{"s" if prop_days_left != 1 else ""} — need new accommodation after {prop_expiry.strftime("%d %b")}',
+                        'days': prop_days_left,
+                    })
 
         # Earliest action date for sorting
         action_dates = []
