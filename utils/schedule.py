@@ -721,9 +721,8 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
         end = assign.date_to or cutoff  # ongoing = show to end of window
         is_ongoing = assign.date_to is None
 
-        # Calculate working days (rough — just weekdays in range)
-        num_days = sum(1 for i in range((end - start).days + 1)
-                       if (start + timedelta(days=i)).weekday() < 6)
+        # Total calendar days on site (includes weekends — they stay on site)
+        num_days = (end - start).days + 1
 
         # Travel TO — look for flights on start date or day before
         travel_to_date = start

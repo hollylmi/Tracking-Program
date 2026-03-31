@@ -49,7 +49,7 @@
           </td>
           <td class="text-nowrap">
             {{ s.start_date.strftime('%d %b') }} — {% if s.is_ongoing %}<span class="text-info">Ongoing</span>{% else %}{{ s.end_date.strftime('%d %b') }}{% endif %}
-            <br><small class="text-muted">~{{ s.num_days }} work days</small>
+            <br><small class="text-muted">{{ s.num_days }} days</small>
           </td>
           <!-- Travel TO -->
           <td>
