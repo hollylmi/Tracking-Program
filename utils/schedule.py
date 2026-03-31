@@ -615,6 +615,26 @@ def detect_travel_needs(employees, date_list, grid=None, look_ahead_days=90):
     return travel_needs
 
 
+def _swing_status(transport_to, transport_from, flights_to, flights_from,
+                   needs_accom, has_accom, accom_gap_days, is_ongoing, issues):
+    """Determine overall swing status: 'sorted', 'upcoming', or 'urgent'."""
+    # Check if everything that needs booking is booked
+    needs_flight_to = transport_to == 'fly'
+    needs_flight_from = not is_ongoing and transport_from == 'fly'
+
+    flight_to_ok = not needs_flight_to or len(flights_to) > 0
+    flight_from_ok = not needs_flight_from or len(flights_from) > 0
+    accom_ok = not needs_accom or (has_accom and accom_gap_days == 0)
+
+    all_booked = flight_to_ok and flight_from_ok and accom_ok
+
+    if all_booked:
+        return 'sorted'
+    if issues:
+        return 'urgent'
+    return 'upcoming'
+
+
 def build_swing_planner(employees, look_ahead_days=90, **_ignored):
     """Build a per-employee swing planner from ProjectAssignment records.
 
@@ -702,8 +722,26 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             parts.append(f.departure_time)
         return ' '.join(parts) if parts else 'Flight booked'
 
-    # Build employee lookup
+    # Build employee lookup and find previous assignments for project-to-project travel
     emp_map = {e.id: e for e in employees}
+
+    # Group assignments by employee and sort by date to detect project-to-project transfers
+    assigns_by_emp = defaultdict(list)
+    for a in assignments:
+        assigns_by_emp[a.employee_id].append(a)
+    for emp_id in assigns_by_emp:
+        assigns_by_emp[emp_id].sort(key=lambda a: a.date_from)
+
+    # Map assignment_id -> previous assignment (for project-to-project travel)
+    prev_assignment_map = {}
+    for emp_id, emp_assigns in assigns_by_emp.items():
+        for i in range(1, len(emp_assigns)):
+            curr = emp_assigns[i]
+            prev = emp_assigns[i - 1]
+            if prev.date_to:
+                gap_days = (curr.date_from - prev.date_to).days
+                if gap_days <= 3:  # 0-3 day gap = travelling between projects
+                    prev_assignment_map[curr.id] = prev
 
     # Compute projected finish dates from Gantt for each project with ongoing assignments
     projected_finish_dates = {}
@@ -744,6 +782,19 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
         # Total calendar days on site (includes weekends — they stay on site)
         num_days = (end - start).days + 1
 
+        # Check for project-to-project transfer
+        prev_assign = prev_assignment_map.get(assign.id)
+        if prev_assign:
+            prev_proj = project_map.get(prev_assign.project_id)
+            from_location = prev_proj.city if prev_proj else emp_home
+            from_airport = prev_proj.nearest_airport if prev_proj else (
+                emp.home_airport if emp.home_airport != 'DRIVES' else None)
+            from_project_name = prev_proj.name if prev_proj else None
+        else:
+            from_location = emp_home
+            from_airport = emp.home_airport if emp.home_airport and emp.home_airport != 'DRIVES' else None
+            from_project_name = None
+
         # Travel TO — look for flights on start date or day before
         travel_to_date = start
         flights_to = flight_map.get((emp.id, start), [])
@@ -752,7 +803,7 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             flights_to = flight_map.get((emp.id, day_before), [])
             if flights_to:
                 travel_to_date = day_before
-        transport_to = _transport(emp_home, proj_city, emp)
+        transport_to = _transport(from_location, proj_city, emp)
 
         # Travel FROM — look for flights on end date or day after
         travel_from_date = end
@@ -842,6 +893,9 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             # Travel TO
             'travel_to_date': travel_to_date,
             'transport_to': transport_to,
+            'from_location': from_location,
+            'from_airport': from_airport,
+            'from_project_name': from_project_name,  # set if project-to-project transfer
             'flights_to': [_fmt_flight(f) for f in flights_to],
             'has_flight_to': len(flights_to) > 0,
             # Travel FROM
@@ -859,6 +913,10 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             # Issues
             'issues': issues,
             'has_issues': len(issues) > 0,
+            # Status: 'sorted' = everything booked, 'upcoming' = needs action but not urgent, 'urgent' = within 5 days
+            'status': _swing_status(
+                transport_to, transport_from, flights_to, flights_from,
+                needs_accom, has_accom, accom_gap_days, is_ongoing, issues),
         })
 
     swings.sort(key=lambda s: (s['start_date'], s['employee_name']))
