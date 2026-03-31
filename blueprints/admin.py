@@ -1129,11 +1129,17 @@ def admin_save_drive_pairs():
     settings = load_settings()
     cities_a = request.form.getlist('pair_a')
     cities_b = request.form.getlist('pair_b')
+    hours_list = request.form.getlist('pair_hours')
     pairs = []
-    for a, b in zip(cities_a, cities_b):
+    for i, (a, b) in enumerate(zip(cities_a, cities_b)):
         a, b = a.strip(), b.strip()
         if a and b:
-            pairs.append([a, b])
+            h = hours_list[i].strip() if i < len(hours_list) else ''
+            hours = float(h) if h else None
+            pair = [a, b]
+            if hours is not None:
+                pair.append(hours)
+            pairs.append(pair)
     settings['drive_pairs'] = pairs
     save_settings(settings)
     flash(f'{len(pairs)} drive routes saved.', 'success')

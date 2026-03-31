@@ -149,13 +149,14 @@
         <form method="POST" action="{{ url_for('admin.admin_save_drive_pairs') }}">
           <table class="table table-sm align-middle mb-3" id="drivePairsTable">
             <thead class="table-light">
-              <tr><th>City A</th><th>City B</th><th style="width:50px"></th></tr>
+              <tr><th>City A</th><th>City B</th><th style="width:80px">Hours</th><th style="width:50px"></th></tr>
             </thead>
             <tbody>
               {% for pair in settings.get('drive_pairs', []) %}
               <tr>
                 <td><input name="pair_a" class="form-control form-control-sm" value="{{ pair[0] }}" required></td>
                 <td><input name="pair_b" class="form-control form-control-sm" value="{{ pair[1] }}" required></td>
+                <td><input name="pair_hours" type="number" step="0.5" min="0" class="form-control form-control-sm" value="{{ pair[2] if pair|length > 2 else '' }}" placeholder="hrs"></td>
                 <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
               </tr>
               {% endfor %}
@@ -276,6 +277,7 @@ function addDrivePairRow() {
   tr.innerHTML = `
     <td><input name="pair_a" class="form-control form-control-sm" placeholder="e.g. Melbourne" required></td>
     <td><input name="pair_b" class="form-control form-control-sm" placeholder="e.g. Geelong" required></td>
+    <td><input name="pair_hours" type="number" step="0.5" min="0" class="form-control form-control-sm" placeholder="hrs"></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
   `;
   tbody.appendChild(tr);

@@ -73,18 +73,30 @@ def get_locations():
 
 
 _DEFAULT_DRIVE_PAIRS = [
-    ['Sydney', 'Wollongong'],
-    ['Sydney', 'Newcastle'],
-    ['Melbourne', 'Geelong'],
-    ['Brisbane', 'Gold Coast'],
-    ['Brisbane', 'Sunshine Coast'],
+    ['Sydney', 'Wollongong', 1.5],
+    ['Sydney', 'Newcastle', 2.5],
+    ['Melbourne', 'Geelong', 1.0],
+    ['Brisbane', 'Gold Coast', 1.0],
+    ['Brisbane', 'Sunshine Coast', 1.5],
 ]
 
 
 def get_drive_pairs():
-    """Return list of [city_a, city_b] pairs where driving is the default transport."""
+    """Return list of [city_a, city_b, hours] where driving is the default transport."""
     settings = load_settings()
     return settings.get('drive_pairs', _DEFAULT_DRIVE_PAIRS)
+
+
+def get_drive_time(city_a, city_b):
+    """Return drive time in hours between two cities, or None if not a drive pair."""
+    if not city_a or not city_b:
+        return None
+    for pair in get_drive_pairs():
+        a, b = pair[0], pair[1]
+        hours = pair[2] if len(pair) > 2 else None
+        if frozenset({a.lower(), b.lower()}) == frozenset({city_a.lower(), city_b.lower()}):
+            return hours
+    return None
 
 
 def save_settings(data):

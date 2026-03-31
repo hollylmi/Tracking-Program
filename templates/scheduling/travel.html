@@ -109,9 +109,9 @@
                 {% endif %}
               {% endif %}
             {% elif s.transport_to == 'drive' %}
-              <span class="badge bg-success-subtle text-success"><i class="bi bi-car-front"></i> Drive</span>
+              <span class="badge bg-success-subtle text-success"><i class="bi bi-car-front"></i> Drive{% if s.drive_time_to %} ~{{ s.drive_time_to }}h{% endif %}</span>
             {% elif s.transport_to == 'drives' %}
-              <span class="badge bg-light text-muted border"><i class="bi bi-car-front"></i> Drives</span>
+              <span class="badge bg-light text-muted border"><i class="bi bi-car-front"></i> Drives{% if s.drive_time_to %} ~{{ s.drive_time_to }}h{% endif %}</span>
             {% elif s.transport_to == 'local' %}
               <span class="badge bg-light text-muted border"><i class="bi bi-geo-alt"></i> Local</span>
             {% else %}
@@ -161,9 +161,9 @@
                 {% endif %}
               {% endif %}
             {% elif s.transport_from == 'drive' %}
-              <span class="badge bg-success-subtle text-success"><i class="bi bi-car-front"></i> Drive</span>
+              <span class="badge bg-success-subtle text-success"><i class="bi bi-car-front"></i> Drive{% if s.drive_time_from %} ~{{ s.drive_time_from }}h{% endif %}</span>
             {% elif s.transport_from == 'drives' %}
-              <span class="badge bg-light text-muted border"><i class="bi bi-car-front"></i> Drives</span>
+              <span class="badge bg-light text-muted border"><i class="bi bi-car-front"></i> Drives{% if s.drive_time_from %} ~{{ s.drive_time_from }}h{% endif %}</span>
             {% elif s.transport_from == 'local' %}
               <span class="badge bg-light text-muted border"><i class="bi bi-geo-alt"></i> Local</span>
             {% else %}
@@ -269,8 +269,8 @@
                     <p class="mb-1"><strong>Route:</strong> {{ s.from_location or '?' }}{% if s.from_project_name %} ({{ s.from_project_name }}){% endif %} &rarr; {{ s.project_city or '?' }}</p>
                     <p class="mb-2"><strong>Mode:</strong>
                       {% if s.transport_to == 'fly' %}<i class="bi bi-airplane"></i> Fly
-                      {% elif s.transport_to == 'drive' %}<i class="bi bi-car-front"></i> Drive
-                      {% elif s.transport_to == 'drives' %}<i class="bi bi-car-front"></i> Drives (always)
+                      {% elif s.transport_to == 'drive' %}<i class="bi bi-car-front"></i> Drive{% if s.drive_time_to %} (~{{ s.drive_time_to }} hrs){% endif %}
+                      {% elif s.transport_to == 'drives' %}<i class="bi bi-car-front"></i> Drives{% if s.drive_time_to %} (~{{ s.drive_time_to }} hrs){% endif %}
                       {% elif s.transport_to == 'local' %}<i class="bi bi-geo-alt"></i> Local
                       {% else %}TBD{% endif %}
                     </p>
@@ -433,8 +433,8 @@
                       <p class="mb-1"><strong>Route:</strong> {{ s.project_city or '?' }} &rarr; {{ s.home_location or '?' }}</p>
                       <p class="mb-2"><strong>Mode:</strong>
                         {% if s.transport_from == 'fly' %}<i class="bi bi-airplane"></i> Fly
-                        {% elif s.transport_from == 'drive' %}<i class="bi bi-car-front"></i> Drive
-                        {% elif s.transport_from == 'drives' %}<i class="bi bi-car-front"></i> Drives (always)
+                        {% elif s.transport_from == 'drive' %}<i class="bi bi-car-front"></i> Drive{% if s.drive_time_from %} (~{{ s.drive_time_from }} hrs){% endif %}
+                        {% elif s.transport_from == 'drives' %}<i class="bi bi-car-front"></i> Drives{% if s.drive_time_from %} (~{{ s.drive_time_from }} hrs){% endif %}
                         {% elif s.transport_from == 'local' %}<i class="bi bi-geo-alt"></i> Local
                         {% else %}TBD{% endif %}
                       </p>
