@@ -48,8 +48,8 @@
             {% if s.project_city %}<br><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ s.project_city }}{% if s.project_airport %} ({{ s.project_airport }}){% endif %}</small>{% endif %}
           </td>
           <td class="text-nowrap">
-            {{ s.start_date.strftime('%d %b') }} — {{ s.end_date.strftime('%d %b') }}
-            <br><small class="text-muted">{{ s.num_days }} days</small>
+            {{ s.start_date.strftime('%d %b') }} — {% if s.is_ongoing %}<span class="text-info">Ongoing</span>{% else %}{{ s.end_date.strftime('%d %b') }}{% endif %}
+            <br><small class="text-muted">~{{ s.num_days }} work days</small>
           </td>
           <!-- Travel TO -->
           <td>
@@ -101,6 +101,10 @@
           </td>
           <!-- Travel FROM -->
           <td>
+            {% if s.is_ongoing %}
+              <span class="badge bg-info-subtle text-info"><i class="bi bi-arrow-repeat"></i> Ongoing</span>
+              <br><small class="text-muted">No end date set</small>
+            {% else %}
             <small class="text-muted">{{ s.travel_from_date.strftime('%a %d %b') }}</small><br>
             {% if s.transport_from == 'fly' %}
               {% if s.has_flight_from %}
@@ -120,6 +124,7 @@
               <span class="badge bg-light text-muted border"><i class="bi bi-geo-alt"></i> Local</span>
             {% else %}
               <span class="badge bg-warning-subtle text-warning">TBD</span>
+            {% endif %}
             {% endif %}
           </td>
           <!-- Issues -->

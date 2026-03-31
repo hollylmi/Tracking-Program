@@ -700,10 +700,8 @@ def travel_overview():
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
-    # Build swing planner — per-employee view of travel in, accom, travel out
-    date_list = [today + timedelta(days=i) for i in range(91)]
-    grid = build_schedule_grid(employees, date_list)
-    planner = build_swing_planner(employees, date_list, grid=grid, look_ahead_days=90)
+    # Build swing planner from project assignments
+    planner = build_swing_planner(employees, look_ahead_days=90)
     swings = planner['swings']
     expiring_properties = planner['expiring_properties']
 
