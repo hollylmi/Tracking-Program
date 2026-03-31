@@ -715,15 +715,21 @@
 <div class="card border-0 shadow-sm mb-4 border-start border-success border-3">
   <div class="card-header bg-white py-3">
     <h5 class="mb-0 fw-semibold text-success"><i class="bi bi-people me-2"></i>Travelling Together <span class="badge bg-success-subtle text-success">{{ carpool_groups|length }}</span></h5>
+    <small class="text-muted">People travelling the same route on the same day — can share flights, cars, or transport</small>
   </div>
   <div class="card-body p-0">
     <table class="table table-hover align-middle mb-0">
-      <thead class="table-light"><tr><th>Date</th><th>Route</th><th>People</th></tr></thead>
+      <thead class="table-light"><tr><th>Date</th><th>Route</th><th>Mode</th><th>People</th></tr></thead>
       <tbody>
         {% for grp in carpool_groups %}
         <tr>
           <td class="fw-semibold text-nowrap">{{ grp.date.strftime('%a %d %b') }}</td>
           <td><span class="badge bg-secondary-subtle text-secondary">{{ grp['from'] }}</span> <i class="bi bi-arrow-right mx-1"></i> <span class="badge bg-primary-subtle text-primary">{{ grp['to'] }}</span></td>
+          <td>
+            {% if grp.transport == 'fly' %}<span class="badge bg-info-subtle text-info"><i class="bi bi-airplane"></i></span>
+            {% elif grp.transport in ('drive', 'drives') %}<span class="badge bg-success-subtle text-success"><i class="bi bi-car-front"></i></span>
+            {% else %}<span class="badge bg-light text-muted border">{{ grp.transport or '?' }}</span>{% endif %}
+          </td>
           <td>{% for m in grp.members %}<span class="badge bg-light text-dark border me-1">{{ m.employee_name }}</span>{% endfor %}</td>
         </tr>
         {% endfor %}
@@ -732,6 +738,96 @@
   </div>
 </div>
 {% endif %}
+
+<!-- All Properties -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h5 class="mb-0 fw-semibold"><i class="bi bi-houses me-2 text-success"></i>All Properties <span class="badge bg-secondary-subtle text-secondary">{{ properties|length }}</span></h5>
+    <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#addPropertyModal">
+      <i class="bi bi-plus-lg me-1"></i>Add Property
+    </button>
+  </div>
+  {% if properties %}
+  <div class="card-body p-0">
+    <table class="table table-hover align-middle mb-0" style="font-size:.85rem;">
+      <thead class="table-light">
+        <tr><th>Name</th><th>Type</th><th>Project</th><th>Address</th><th>Beds</th><th>Dates</th><th>Occupants</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for prop in properties %}
+        <tr id="propRow{{ prop.id }}">
+          <td class="fw-semibold">{{ prop.name }}</td>
+          <td><span class="badge bg-light text-dark border">{{ (prop.property_type or 'other')|title }}</span></td>
+          <td class="small">{{ prop.project.name if prop.project else '—' }}</td>
+          <td class="small text-muted">{{ prop.address or '—' }}</td>
+          <td>{{ prop.occupancy }}/{{ prop.bedrooms }}</td>
+          <td class="small text-nowrap">
+            {% if prop.date_from or prop.date_to %}
+              {{ prop.date_from.strftime('%d %b') if prop.date_from else '?' }} — {{ prop.date_to.strftime('%d %b %Y') if prop.date_to else 'ongoing' }}
+              {% if prop.date_to %}
+                {% set pl = (prop.date_to - today).days %}
+                {% if pl <= 0 %}<br><span class="badge bg-danger">Expired</span>
+                {% elif pl <= 5 %}<br><span class="badge bg-danger">{{ pl }}d left</span>
+                {% elif pl <= 30 %}<br><small class="text-warning">{{ pl }}d left</small>{% endif %}
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% for b in prop.current_occupants %}
+            <span class="badge bg-light text-dark border me-1" style="font-size:.7rem;">{{ b.employee.name }}</span>
+            {% else %}<span class="text-muted small">—</span>{% endfor %}
+          </td>
+          <td>
+            <button class="btn btn-outline-secondary py-0 px-1" style="font-size:.65rem;" type="button"
+                    onclick="document.getElementById('editAllProp{{ prop.id }}').classList.toggle('d-none')">
+              <i class="bi bi-pencil"></i>
+            </button>
+          </td>
+        </tr>
+        <tr class="d-none" id="editAllProp{{ prop.id }}">
+          <td colspan="8" class="bg-light p-2">
+            <form method="POST" action="{{ url_for('scheduling.property_edit', prop_id=prop.id) }}" class="row g-1 align-items-end small">
+              <div class="col-2"><input name="prop_name" class="form-control form-control-sm" value="{{ prop.name }}" placeholder="Name"></div>
+              <div class="col-1">
+                <select name="property_type" class="form-select form-select-sm">
+                  {% for t in ['house','apartment','hotel','motel','other'] %}
+                  <option value="{{ t }}" {{ 'selected' if prop.property_type == t }}>{{ t|title }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-1"><input name="bedrooms" type="number" class="form-control form-control-sm" value="{{ prop.bedrooms }}" min="1"></div>
+              <div class="col-2"><input name="prop_address" class="form-control form-control-sm" value="{{ prop.address or '' }}" placeholder="Address"></div>
+              <div class="col-1"><input name="prop_date_from" type="date" class="form-control form-control-sm" value="{{ prop.date_from.isoformat() if prop.date_from else '' }}"></div>
+              <div class="col-1"><input name="prop_date_to" type="date" class="form-control form-control-sm" value="{{ prop.date_to.isoformat() if prop.date_to else '' }}"></div>
+              <div class="col-1"><input name="prop_phone" class="form-control form-control-sm" value="{{ prop.phone or '' }}" placeholder="Phone"></div>
+              <div class="col-1">
+                <select name="project_id" class="form-select form-select-sm">
+                  <option value="">—</option>
+                  {% for p in projects %}
+                  <option value="{{ p.id }}" {{ 'selected' if prop.project_id == p.id }}>{{ p.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-1"><button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-check-lg"></i></button></div>
+              <div class="col-6"><textarea name="prop_instructions" class="form-control form-control-sm" rows="1" placeholder="Instructions">{{ prop.instructions or '' }}</textarea></div>
+              <div class="col-5"><input name="prop_notes" class="form-control form-control-sm" value="{{ prop.notes or '' }}" placeholder="Notes"></div>
+              <div class="col-1">
+                <form method="POST" action="{{ url_for('scheduling.property_delete', prop_id=prop.id) }}" class="d-inline"
+                      onsubmit="return confirm('Delete {{ prop.name }}?')">
+                  <button type="submit" class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-trash"></i></button>
+                </form>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body text-center py-4 text-muted">No properties. Click "Add Property" to get started.</div>
+  {% endif %}
+</div>
 
 <!-- No assignments message -->
 {% if not project_sections %}

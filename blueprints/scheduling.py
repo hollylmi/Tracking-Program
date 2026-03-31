@@ -782,23 +782,35 @@ def travel_overview():
         })
     project_sections.sort(key=lambda ps: ps['project'].name)
 
-    # Carpool groups
+    # Carpool / travelling together groups
+    # Group by (date, from_label, to_label) — uses project name for project-to-project transfers
     carpool_groups = []
     travel_groups_map = {}
     for s in swings:
         for direction in ('to', 'from'):
             transport = s[f'transport_{direction}']
-            if transport not in ('fly', 'drive'):
-                continue
+            if transport == 'local':
+                continue  # skip local — no travel needed
             if direction == 'to':
-                key = (s['travel_to_date'], s.get('home_location', ''), s.get('project_city', ''))
+                travel_date = s['travel_to_date']
+                from_label = s.get('from_project_name') or s.get('from_location') or s.get('home_location', '')
+                to_label = s.get('project_city') or s.get('project_name', '')
             else:
-                key = (s['travel_from_date'], s.get('project_city', ''), s.get('home_location', ''))
-            if key[1] and key[2]:
+                if s['is_ongoing']:
+                    continue
+                travel_date = s['travel_from_date']
+                from_label = s.get('project_city') or s.get('project_name', '')
+                to_label = s.get('home_location', '')
+            if from_label and to_label:
+                key = (travel_date, from_label, to_label)
                 travel_groups_map.setdefault(key, []).append(s)
     for (d, frm, to), members in sorted(travel_groups_map.items()):
         if len(members) > 1:
-            carpool_groups.append({'date': d, 'from': frm, 'to': to, 'members': members})
+            carpool_groups.append({
+                'date': d, 'from': frm, 'to': to,
+                'members': members,
+                'transport': members[0][f'transport_to'] if members[0].get('from_location') == frm else members[0]['transport_from'],
+            })
 
     return render_template(
         'scheduling/travel.html',
