@@ -1006,6 +1006,8 @@ def flight_add():
     if is_ajax:
         return jsonify({'ok': True, 'flight_id': fb.id})
     flash('Flight booking added.', 'success')
+    if request.form.get('redirect_to') == 'travel':
+        return redirect(url_for('scheduling.travel_overview'))
     return redirect(url_for('scheduling.scheduling_overview'))
 
 

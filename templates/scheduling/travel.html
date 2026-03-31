@@ -251,8 +251,12 @@
               <!-- Travel TO detail -->
               <div class="col-md-4">
                 <div class="card h-100 border">
-                  <div class="card-header bg-white py-2">
+                  <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold small"><i class="bi bi-box-arrow-in-right me-1 text-success"></i>Travel TO Site</h6>
+                    <button class="btn btn-outline-primary py-0 px-1" style="font-size:.7rem;" type="button"
+                            onclick="event.stopPropagation(); this.closest('.card').querySelector('.flight-form').classList.toggle('d-none')">
+                      <i class="bi bi-plus-lg"></i> Flight
+                    </button>
                   </div>
                   <div class="card-body small">
                     <p class="mb-1"><strong>Date:</strong> {{ s.travel_to_date.strftime('%A %d %b %Y') }}</p>
@@ -265,12 +269,52 @@
                       {% else %}TBD{% endif %}
                     </p>
                     {% if s.has_flight_to %}
-                      <div class="alert alert-success py-1 px-2 mb-0 small"><i class="bi bi-check-circle me-1"></i>{{ s.flights_to|join(', ') }}</div>
+                      <div class="alert alert-success py-1 px-2 mb-2 small"><i class="bi bi-check-circle me-1"></i>{{ s.flights_to|join(', ') }}</div>
                     {% elif s.transport_to == 'fly' %}
-                      <div class="alert alert-danger py-1 px-2 mb-0 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
+                      <div class="alert alert-danger py-1 px-2 mb-2 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
                         {% if s.home_airport and s.project_airport %}<br>Need: {{ s.home_airport }} &rarr; {{ s.project_airport }}{% endif %}
                       </div>
                     {% endif %}
+                    <!-- Inline add flight form -->
+                    <div class="flight-form d-none border-top pt-2 mt-2" onclick="event.stopPropagation()">
+                      <form method="POST" action="{{ url_for('scheduling.flight_add') }}">
+                        <input type="hidden" name="employee_id" value="{{ s.employee_id }}">
+                        <input type="hidden" name="date" value="{{ s.travel_to_date.isoformat() }}">
+                        <input type="hidden" name="direction" value="inbound">
+                        <input type="hidden" name="redirect_to" value="travel">
+                        <div class="row g-1 mb-1">
+                          <div class="col-6">
+                            <input name="departure_airport" class="form-control form-control-sm" placeholder="From" value="{{ s.home_airport or '' }}">
+                          </div>
+                          <div class="col-6">
+                            <input name="arrival_airport" class="form-control form-control-sm" placeholder="To" value="{{ s.project_airport or '' }}">
+                          </div>
+                        </div>
+                        <div class="row g-1 mb-1">
+                          <div class="col-6">
+                            <input name="airline" class="form-control form-control-sm" placeholder="Airline">
+                          </div>
+                          <div class="col-6">
+                            <input name="flight_number" class="form-control form-control-sm" placeholder="Flight #">
+                          </div>
+                        </div>
+                        <div class="row g-1 mb-1">
+                          <div class="col-6">
+                            <input name="departure_time" type="time" class="form-control form-control-sm" placeholder="Depart">
+                          </div>
+                          <div class="col-6">
+                            <input name="arrival_time" type="time" class="form-control form-control-sm" placeholder="Arrive">
+                          </div>
+                        </div>
+                        <div class="mb-1">
+                          <input name="booking_reference" class="form-control form-control-sm" placeholder="Booking reference">
+                        </div>
+                        <div class="mb-1">
+                          <input name="flight_notes" class="form-control form-control-sm" placeholder="Notes (e.g. pickup instructions)">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-success w-100"><i class="bi bi-airplane me-1"></i>Add Flight</button>
+                      </form>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -290,6 +334,20 @@
                         <strong>{{ a.display_name }}</strong>
                         {% if a.room_info %}<span class="text-muted">({{ a.room_info }})</span>{% endif %}
                         <br><span class="text-muted">{{ a.date_from.strftime('%d %b') }} — {{ a.date_to.strftime('%d %b %Y') }}</span>
+                        {% set days_left = (a.date_to - today).days %}
+                        {% if days_left <= 5 and days_left >= 0 %}
+                          <br><span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Expiring soon — {{ days_left }} day{{ 's' if days_left != 1 }} left</span>
+                        {% elif days_left > 5 and days_left <= 30 %}
+                          <br><small class="text-muted">{{ days_left }} days remaining</small>
+                        {% endif %}
+                        {% if a.property and a.property.date_to %}
+                          {% set prop_days_left = (a.property.date_to - today).days %}
+                          {% if prop_days_left <= 5 and prop_days_left >= 0 %}
+                            <br><span class="badge bg-danger" style="font-size:.65rem;"><i class="bi bi-house-exclamation me-1"></i>Property lease expires in {{ prop_days_left }} day{{ 's' if prop_days_left != 1 }}</span>
+                          {% elif prop_days_left > 5 and prop_days_left <= 30 %}
+                            <br><small class="text-warning"><i class="bi bi-clock-history me-1"></i>Property lease: {{ prop_days_left }} days left</small>
+                          {% endif %}
+                        {% endif %}
                       </div>
                       {% endfor %}
                       {% if s.housemates %}
@@ -314,8 +372,14 @@
               <!-- Travel FROM detail -->
               <div class="col-md-4">
                 <div class="card h-100 border">
-                  <div class="card-header bg-white py-2">
+                  <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold small"><i class="bi bi-box-arrow-right me-1 text-danger"></i>Travel FROM Site</h6>
+                    {% if not s.is_ongoing %}
+                    <button class="btn btn-outline-primary py-0 px-1" style="font-size:.7rem;" type="button"
+                            onclick="event.stopPropagation(); this.closest('.card').querySelector('.flight-form').classList.toggle('d-none')">
+                      <i class="bi bi-plus-lg"></i> Flight
+                    </button>
+                    {% endif %}
                   </div>
                   <div class="card-body small">
                     {% if s.is_ongoing %}
@@ -331,12 +395,52 @@
                         {% else %}TBD{% endif %}
                       </p>
                       {% if s.has_flight_from %}
-                        <div class="alert alert-success py-1 px-2 mb-0 small"><i class="bi bi-check-circle me-1"></i>{{ s.flights_from|join(', ') }}</div>
+                        <div class="alert alert-success py-1 px-2 mb-2 small"><i class="bi bi-check-circle me-1"></i>{{ s.flights_from|join(', ') }}</div>
                       {% elif s.transport_from == 'fly' %}
-                        <div class="alert alert-danger py-1 px-2 mb-0 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
+                        <div class="alert alert-danger py-1 px-2 mb-2 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
                           {% if s.project_airport and s.home_airport %}<br>Need: {{ s.project_airport }} &rarr; {{ s.home_airport }}{% endif %}
                         </div>
                       {% endif %}
+                      <!-- Inline add flight form -->
+                      <div class="flight-form d-none border-top pt-2 mt-2" onclick="event.stopPropagation()">
+                        <form method="POST" action="{{ url_for('scheduling.flight_add') }}">
+                          <input type="hidden" name="employee_id" value="{{ s.employee_id }}">
+                          <input type="hidden" name="date" value="{{ s.travel_from_date.isoformat() }}">
+                          <input type="hidden" name="direction" value="outbound">
+                          <input type="hidden" name="redirect_to" value="travel">
+                          <div class="row g-1 mb-1">
+                            <div class="col-6">
+                              <input name="departure_airport" class="form-control form-control-sm" placeholder="From" value="{{ s.project_airport or '' }}">
+                            </div>
+                            <div class="col-6">
+                              <input name="arrival_airport" class="form-control form-control-sm" placeholder="To" value="{{ s.home_airport or '' }}">
+                            </div>
+                          </div>
+                          <div class="row g-1 mb-1">
+                            <div class="col-6">
+                              <input name="airline" class="form-control form-control-sm" placeholder="Airline">
+                            </div>
+                            <div class="col-6">
+                              <input name="flight_number" class="form-control form-control-sm" placeholder="Flight #">
+                            </div>
+                          </div>
+                          <div class="row g-1 mb-1">
+                            <div class="col-6">
+                              <input name="departure_time" type="time" class="form-control form-control-sm" placeholder="Depart">
+                            </div>
+                            <div class="col-6">
+                              <input name="arrival_time" type="time" class="form-control form-control-sm" placeholder="Arrive">
+                            </div>
+                          </div>
+                          <div class="mb-1">
+                            <input name="booking_reference" class="form-control form-control-sm" placeholder="Booking reference">
+                          </div>
+                          <div class="mb-1">
+                            <input name="flight_notes" class="form-control form-control-sm" placeholder="Notes (e.g. pickup instructions)">
+                          </div>
+                          <button type="submit" class="btn btn-sm btn-success w-100"><i class="bi bi-airplane me-1"></i>Add Flight</button>
+                        </form>
+                      </div>
                     {% endif %}
                   </div>
                 </div>
