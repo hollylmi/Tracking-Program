@@ -354,6 +354,42 @@ def scheduling_assign_add():
     return redirect(url_for('scheduling.scheduling_overview'))
 
 
+@scheduling_bp.route('/scheduling/assign/<int:pa_id>/edit', methods=['POST'])
+@require_role('admin', 'supervisor')
+def scheduling_assign_edit(pa_id):
+    pa = ProjectAssignment.query.get_or_404(pa_id)
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    date_from_str = request.form.get('date_from', '').strip()
+    date_to_str = request.form.get('date_to', '').strip()
+    try:
+        if date_from_str:
+            pa.date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+        if date_to_str:
+            pa.date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+        elif 'clear_end_date' in request.form:
+            pa.date_to = None
+    except ValueError:
+        pass
+
+    notes = request.form.get('notes', '').strip()
+    pa.notes = notes or pa.notes
+
+    project_id_str = request.form.get('project_id', '').strip()
+    if project_id_str:
+        pa.project_id = int(project_id_str)
+
+    db.session.commit()
+
+    if is_ajax:
+        return jsonify({'ok': True})
+    flash('Assignment updated.', 'success')
+    redirect_to = request.form.get('redirect_to', '')
+    if redirect_to == 'travel':
+        return redirect(url_for('scheduling.travel_overview'))
+    return redirect(url_for('scheduling.scheduling_overview'))
+
+
 @scheduling_bp.route('/scheduling/assign/<int:pa_id>/delete', methods=['POST'])
 @require_role('admin')
 def scheduling_assign_delete(pa_id):
@@ -365,6 +401,8 @@ def scheduling_assign_delete(pa_id):
     flash('Assignment removed.', 'success')
     if redirect_to == 'scheduling_project':
         return redirect(url_for('scheduling.scheduling_project', project_id=project_id))
+    if redirect_to == 'travel':
+        return redirect(url_for('scheduling.travel_overview'))
     return redirect(url_for('scheduling.scheduling_overview'))
 
 

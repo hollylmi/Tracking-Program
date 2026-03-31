@@ -956,6 +956,8 @@ def project_settings_save(project_id):
     project.city = request.form.get('city', '').strip() or None
     project.nearest_airport = request.form.get('nearest_airport', '').strip().upper() or None
     project.site_address = request.form.get('site_address', '').strip() or project.site_address
+    end_date_str = request.form.get('planned_end_date', '').strip()
+    project.planned_end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else None
     db.session.commit()
     flash('Project settings saved.', 'success')
     return redirect(url_for('projects.project_dashboard', project_id=project_id) + '#tab-settings')

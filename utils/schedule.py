@@ -718,8 +718,12 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
         proj_city = proj.city
         proj_airport = proj.nearest_airport
         start = assign.date_from
-        end = assign.date_to or cutoff  # ongoing = show to end of window
         is_ongoing = assign.date_to is None
+        # For ongoing assignments, use project planned_end_date if set, otherwise cutoff
+        if is_ongoing:
+            end = proj.planned_end_date or cutoff
+        else:
+            end = assign.date_to
 
         # Total calendar days on site (includes weekends — they stay on site)
         num_days = (end - start).days + 1
@@ -796,6 +800,7 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             issues.append('Property expires during assignment')
 
         swings.append({
+            'assignment_id': assign.id,
             'employee_id': emp.id,
             'employee_name': emp.name,
             'employee_role': emp.role,

@@ -62,6 +62,7 @@ class Project(db.Model):
     planned_crew = db.Column(db.Integer)      # Estimated crew size for efficiency calculations
     hours_per_day = db.Column(db.Float)       # Quoted hours per working day
     quoted_days = db.Column(db.Integer)       # Total quoted working days for the job
+    planned_end_date = db.Column(db.Date)    # Planned finish date — used for ongoing assignment accommodation
     state = db.Column(db.String(10))              # Australian state code e.g. 'QLD'
     is_cfmeu = db.Column(db.Boolean, default=False)
     track_by_lot = db.Column(db.Boolean, default=True)  # False = track by material only (no lot field)

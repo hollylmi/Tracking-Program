@@ -281,6 +281,7 @@ with app.app_context():
         "ALTER TABLE employee ADD COLUMN home_airport VARCHAR(10)",
         "ALTER TABLE project ADD COLUMN city VARCHAR(100)",
         "ALTER TABLE project ADD COLUMN nearest_airport VARCHAR(10)",
+        "ALTER TABLE project ADD COLUMN planned_end_date DATE",
     ]:
         try:
             db.session.execute(db.text(stmt))

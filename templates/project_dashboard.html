@@ -1232,6 +1232,12 @@
             <input type="number" name="quoted_days" class="form-control form-control-sm"
                    min="0" value="{{ project.quoted_days or '' }}" placeholder="e.g. 30">
           </div>
+          <div class="col-sm-4">
+            <label class="form-label fw-semibold small mb-1">Planned Finish Date</label>
+            <input type="date" name="planned_end_date" class="form-control form-control-sm"
+                   value="{{ project.planned_end_date.isoformat() if project.planned_end_date else '' }}">
+            <div class="form-text">Used for ongoing assignment accommodation planning.</div>
+          </div>
           <div class="col-12">
             <div class="mb-3">
               <label class="form-label fw-semibold">State</label>

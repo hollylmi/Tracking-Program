@@ -204,6 +204,47 @@
                     <i class="bi bi-house-door me-1"></i>{{ s.home_location or 'Home' }}
                   </span>
                   {% endif %}
+
+                  <!-- Edit assignment controls -->
+                  <div class="ms-auto d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-secondary" type="button"
+                            onclick="event.stopPropagation(); this.closest('.swing-detail').querySelector('.edit-assign-form').classList.toggle('d-none')">
+                      <i class="bi bi-pencil me-1"></i>Edit Assignment
+                    </button>
+                    <form method="POST" action="{{ url_for('scheduling.scheduling_assign_delete', pa_id=s.assignment_id) }}" class="d-inline"
+                          onsubmit="event.stopPropagation(); return confirm('Remove {{ s.employee_name }} from {{ s.project_name }}?')">
+                      <input type="hidden" name="redirect_to" value="travel">
+                      <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                  </div>
+                </div>
+
+                <!-- Inline edit assignment form (hidden by default) -->
+                <div class="edit-assign-form d-none mb-3">
+                  <form method="POST" action="{{ url_for('scheduling.scheduling_assign_edit', pa_id=s.assignment_id) }}" class="row g-2 align-items-end" onclick="event.stopPropagation()">
+                    <input type="hidden" name="redirect_to" value="travel">
+                    <div class="col-auto">
+                      <label class="form-label small mb-1">Start Date</label>
+                      <input type="date" name="date_from" class="form-control form-control-sm" value="{{ s.start_date.isoformat() }}">
+                    </div>
+                    <div class="col-auto">
+                      <label class="form-label small mb-1">End Date</label>
+                      <input type="date" name="date_to" class="form-control form-control-sm" value="{{ '' if s.is_ongoing else s.end_date.isoformat() }}" placeholder="Leave blank = ongoing">
+                    </div>
+                    <div class="col-auto">
+                      <div class="form-check mt-2">
+                        <input type="checkbox" name="clear_end_date" class="form-check-input" id="clearEnd{{ s.assignment_id }}" value="1">
+                        <label class="form-check-label small" for="clearEnd{{ s.assignment_id }}">Ongoing (no end date)</label>
+                      </div>
+                    </div>
+                    <div class="col-auto">
+                      <label class="form-label small mb-1">Notes</label>
+                      <input type="text" name="notes" class="form-control form-control-sm" placeholder="Optional notes">
+                    </div>
+                    <div class="col-auto">
+                      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg me-1"></i>Save</button>
+                    </div>
+                  </form>
                 </div>
               </div>
 
