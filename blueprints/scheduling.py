@@ -705,29 +705,51 @@ def travel_overview():
     swings = planner['swings']
     expiring_properties = planner['expiring_properties']
 
-    # Group swings by travel date for carpooling detection
-    travel_to_groups = {}
+    # Group swings by project
+    swings_by_project = {}
     for s in swings:
-        if s['transport_to'] in ('fly', 'drive') and s['home_location'] and s['project_city']:
-            key = (s['travel_to_date'], s['home_location'], s['project_city'])
-            travel_to_groups.setdefault(key, []).append(s)
-    carpool_to = [{'date': k[0], 'from': k[1], 'to': k[2], 'members': v}
-                  for k, v in sorted(travel_to_groups.items()) if len(v) > 1]
+        swings_by_project.setdefault(s['project_id'], []).append(s)
 
-    travel_from_groups = {}
+    # Build project sections with accommodation info
+    project_sections = []
+    for proj in projects:
+        proj_swings = swings_by_project.get(proj.id, [])
+        if not proj_swings:
+            continue
+        # Properties linked to this project
+        proj_properties = [p for p in properties if p.project_id == proj.id]
+        # Issues count
+        issues_count = sum(1 for s in proj_swings if s['has_issues'])
+        project_sections.append({
+            'project': proj,
+            'swings': sorted(proj_swings, key=lambda s: s['employee_name']),
+            'properties': proj_properties,
+            'issues_count': issues_count,
+        })
+    project_sections.sort(key=lambda ps: ps['project'].name)
+
+    # Carpool groups
+    carpool_groups = []
+    travel_groups_map = {}
     for s in swings:
-        if s['transport_from'] in ('fly', 'drive') and s['project_city'] and s['home_location']:
-            key = (s['travel_from_date'], s['project_city'], s['home_location'])
-            travel_from_groups.setdefault(key, []).append(s)
-    carpool_from = [{'date': k[0], 'from': k[1], 'to': k[2], 'members': v}
-                    for k, v in sorted(travel_from_groups.items()) if len(v) > 1]
-
-    carpool_groups = carpool_to + carpool_from
-    carpool_groups.sort(key=lambda g: g['date'])
+        for direction in ('to', 'from'):
+            transport = s[f'transport_{direction}']
+            if transport not in ('fly', 'drive'):
+                continue
+            if direction == 'to':
+                key = (s['travel_to_date'], s.get('home_location', ''), s.get('project_city', ''))
+            else:
+                key = (s['travel_from_date'], s.get('project_city', ''), s.get('home_location', ''))
+            if key[1] and key[2]:
+                travel_groups_map.setdefault(key, []).append(s)
+    for (d, frm, to), members in sorted(travel_groups_map.items()):
+        if len(members) > 1:
+            carpool_groups.append({'date': d, 'from': frm, 'to': to, 'members': members})
 
     return render_template(
         'scheduling/travel.html',
         today=today,
+        expiry_warn_date=today + timedelta(days=30),
         travel_groups=travel_groups,
         solo_flights=solo_flights,
         upcoming_flights=upcoming_flights,
@@ -736,6 +758,7 @@ def travel_overview():
         properties=properties,
         employees=employees,
         projects=projects,
+        project_sections=project_sections,
         swings=swings,
         expiring_properties=expiring_properties,
         carpool_groups=carpool_groups,

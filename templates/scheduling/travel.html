@@ -2,7 +2,7 @@
 {% block title %}Travel & Accommodation{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="fw-bold mb-0"><i class="bi bi-airplane me-2 text-primary"></i>Travel & Accommodation</h2>
   <div class="d-flex gap-2">
     <a href="{{ url_for('scheduling.scheduling_overview') }}" class="btn btn-outline-secondary btn-sm">
@@ -14,38 +14,82 @@
   </div>
 </div>
 
-<!-- Swing Planner — per-employee travel overview -->
-{% if swings %}
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-signpost-split me-2 text-primary"></i>Upcoming Swings <span class="badge bg-primary-subtle text-primary">{{ swings|length }}</span></h5>
-    <small class="text-muted">Each row is one work period on site — showing travel to, accommodation, and travel home</small>
+<!-- Project filter -->
+{% if project_sections|length > 1 %}
+<div class="mb-3">
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <span class="small text-muted fw-medium">Filter:</span>
+    <button class="btn btn-sm btn-outline-primary active" onclick="filterProject('all', this)">All Projects</button>
+    {% for ps in project_sections %}
+    <button class="btn btn-sm btn-outline-primary" onclick="filterProject('proj-{{ ps.project.id }}', this)">
+      {{ ps.project.name }}
+      {% if ps.issues_count %}<span class="badge bg-warning text-dark ms-1">{{ ps.issues_count }}</span>{% endif %}
+    </button>
+    {% endfor %}
   </div>
-  <div class="card-body p-0">
-    <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0" style="font-size:.85rem;">
-      <thead class="table-light">
-        <tr>
-          <th>Employee</th>
-          <th>Project / Site</th>
-          <th>Dates</th>
-          <th>Travel TO Site</th>
-          <th>Accommodation</th>
-          <th>Travel FROM Site</th>
-          <th>Issues</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for s in swings %}
-        <tr class="{{ 'table-warning' if s.has_issues else '' }}">
+</div>
+{% endif %}
+
+<!-- Project Sections -->
+{% for ps in project_sections %}
+<div class="project-section mb-4" data-project="proj-{{ ps.project.id }}">
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+      <div>
+        <h5 class="mb-0 fw-bold"><i class="bi bi-building me-2 text-primary"></i>{{ ps.project.name }}</h5>
+        <small class="text-muted">
+          {% if ps.project.city %}<i class="bi bi-geo-alt"></i> {{ ps.project.city }}{% endif %}
+          {% if ps.project.nearest_airport %} ({{ ps.project.nearest_airport }}){% endif %}
+          &mdash; {{ ps.swings|length }} people assigned
+          {% if ps.issues_count %}<span class="badge bg-warning text-dark ms-1">{{ ps.issues_count }} issue{{ 's' if ps.issues_count > 1 }}</span>{% endif %}
+        </small>
+      </div>
+      <div class="d-flex gap-1">
+        {% if ps.properties %}
+        <span class="badge bg-success-subtle text-success"><i class="bi bi-houses me-1"></i>{{ ps.properties|length }} propert{{ 'ies' if ps.properties|length > 1 else 'y' }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Properties for this project -->
+    {% if ps.properties %}
+    <div class="card-body border-bottom py-2 bg-light">
+      <div class="d-flex flex-wrap gap-3">
+        {% for prop in ps.properties %}
+        <div class="small">
+          <i class="bi bi-house-door text-success"></i>
+          <strong>{{ prop.name }}</strong>
+          <span class="text-muted">({{ prop.occupancy }}/{{ prop.bedrooms }} beds)</span>
+          {% if prop.date_to and prop.date_to <= expiry_warn_date %}
+            <span class="badge bg-danger-subtle text-danger" style="font-size:.65rem;">Expires {{ prop.date_to.strftime('%d %b') }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- People on this project -->
+    <div class="card-body p-0">
+      <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:.85rem;">
+        <thead class="table-light">
+          <tr>
+            <th>Employee</th>
+            <th>On Site</th>
+            <th>Travel TO</th>
+            <th>Accommodation</th>
+            <th>Travel FROM</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for s in ps.swings %}
+        <tr class="{{ 'table-warning' if s.has_issues else '' }} swing-row" style="cursor:pointer;" onclick="toggleSwingDetail(this)">
           <td>
             <span class="fw-semibold">{{ s.employee_name }}</span>
             {% if s.employee_role %}<br><small class="text-muted">{{ s.employee_role }}</small>{% endif %}
-            {% if s.home_location %}<br><small class="text-muted"><i class="bi bi-house-door"></i> {{ s.home_location }}{% if s.home_airport and s.home_airport != 'DRIVES' %} ({{ s.home_airport }}){% elif s.home_airport == 'DRIVES' %} <i class="bi bi-car-front"></i>{% endif %}</small>{% endif %}
-          </td>
-          <td>
-            <span class="fw-semibold">{{ s.project_name }}</span>
-            {% if s.project_city %}<br><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ s.project_city }}{% if s.project_airport %} ({{ s.project_airport }}){% endif %}</small>{% endif %}
+            <br><small class="text-muted"><i class="bi bi-house-door"></i> {{ s.home_location or '?' }}{% if s.home_airport and s.home_airport != 'DRIVES' %} ({{ s.home_airport }}){% elif s.home_airport == 'DRIVES' %} <i class="bi bi-car-front"></i>{% endif %}</small>
           </td>
           <td class="text-nowrap">
             {{ s.start_date.strftime('%d %b') }} — {% if s.is_ongoing %}<span class="text-info">Ongoing</span>{% else %}{{ s.end_date.strftime('%d %b') }}{% endif %}
@@ -127,53 +171,170 @@
             {% endif %}
             {% endif %}
           </td>
-          <!-- Issues -->
+          <!-- Status -->
           <td>
             {% if s.issues %}
               {% for issue in s.issues %}
               <span class="badge bg-warning text-dark d-block mb-1" style="font-size:.7rem;"><i class="bi bi-exclamation-triangle me-1"></i>{{ issue }}</span>
               {% endfor %}
             {% else %}
-              <i class="bi bi-check-circle text-success"></i>
+              <span class="badge bg-success-subtle text-success"><i class="bi bi-check-circle me-1"></i>All sorted</span>
             {% endif %}
           </td>
         </tr>
+        <!-- Expandable detail row (hidden by default) -->
+        <tr class="swing-detail" style="display:none;">
+          <td colspan="6" class="bg-light p-3">
+            <div class="row g-3">
+              <!-- Journey overview -->
+              <div class="col-12">
+                <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                  <span class="badge bg-secondary px-3 py-2">
+                    <i class="bi bi-house-door me-1"></i>{{ s.home_location or 'Home' }}
+                    {% if s.home_airport and s.home_airport != 'DRIVES' %}({{ s.home_airport }}){% endif %}
+                  </span>
+                  <i class="bi bi-arrow-right text-primary"></i>
+                  <span class="badge bg-primary px-3 py-2">
+                    <i class="bi bi-building me-1"></i>{{ s.project_name }} — {{ s.project_city or '?' }}
+                    {% if s.project_airport %}({{ s.project_airport }}){% endif %}
+                  </span>
+                  {% if not s.is_ongoing %}
+                  <i class="bi bi-arrow-right text-primary"></i>
+                  <span class="badge bg-secondary px-3 py-2">
+                    <i class="bi bi-house-door me-1"></i>{{ s.home_location or 'Home' }}
+                  </span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <!-- Travel TO detail -->
+              <div class="col-md-4">
+                <div class="card h-100 border">
+                  <div class="card-header bg-white py-2">
+                    <h6 class="mb-0 fw-bold small"><i class="bi bi-box-arrow-in-right me-1 text-success"></i>Travel TO Site</h6>
+                  </div>
+                  <div class="card-body small">
+                    <p class="mb-1"><strong>Date:</strong> {{ s.travel_to_date.strftime('%A %d %b %Y') }}</p>
+                    <p class="mb-1"><strong>Route:</strong> {{ s.home_location or '?' }} &rarr; {{ s.project_city or '?' }}</p>
+                    <p class="mb-2"><strong>Mode:</strong>
+                      {% if s.transport_to == 'fly' %}<i class="bi bi-airplane"></i> Fly
+                      {% elif s.transport_to == 'drive' %}<i class="bi bi-car-front"></i> Drive
+                      {% elif s.transport_to == 'drives' %}<i class="bi bi-car-front"></i> Drives (always)
+                      {% elif s.transport_to == 'local' %}<i class="bi bi-geo-alt"></i> Local
+                      {% else %}TBD{% endif %}
+                    </p>
+                    {% if s.has_flight_to %}
+                      <div class="alert alert-success py-1 px-2 mb-0 small"><i class="bi bi-check-circle me-1"></i>{{ s.flights_to|join(', ') }}</div>
+                    {% elif s.transport_to == 'fly' %}
+                      <div class="alert alert-danger py-1 px-2 mb-0 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
+                        {% if s.home_airport and s.project_airport %}<br>Need: {{ s.home_airport }} &rarr; {{ s.project_airport }}{% endif %}
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Accommodation detail -->
+              <div class="col-md-4">
+                <div class="card h-100 border">
+                  <div class="card-header bg-white py-2">
+                    <h6 class="mb-0 fw-bold small"><i class="bi bi-house me-1 text-primary"></i>Accommodation</h6>
+                  </div>
+                  <div class="card-body small">
+                    {% if not s.needs_accommodation %}
+                      <p class="text-muted mb-0">Local — no accommodation needed</p>
+                    {% elif s.has_accommodation %}
+                      {% for a in s.accom_bookings %}
+                      <div class="mb-2">
+                        <strong>{{ a.display_name }}</strong>
+                        {% if a.room_info %}<span class="text-muted">({{ a.room_info }})</span>{% endif %}
+                        <br><span class="text-muted">{{ a.date_from.strftime('%d %b') }} — {{ a.date_to.strftime('%d %b %Y') }}</span>
+                      </div>
+                      {% endfor %}
+                      {% if s.housemates %}
+                        <p class="mb-1"><i class="bi bi-people me-1"></i><strong>Staying with:</strong> {{ s.housemates|join(', ') }}</p>
+                      {% endif %}
+                      {% if s.accom_gap_days > 0 %}
+                        <div class="alert alert-warning py-1 px-2 mb-0 small"><i class="bi bi-exclamation-triangle me-1"></i>{{ s.accom_gap_days }} day(s) not covered</div>
+                      {% endif %}
+                      {% if s.accom_expiring %}
+                        <div class="alert alert-danger py-1 px-2 mb-1 small"><i class="bi bi-clock-history me-1"></i>Property lease expires during stay</div>
+                      {% endif %}
+                    {% else %}
+                      <div class="alert alert-danger py-1 px-2 mb-1 small"><i class="bi bi-house-x me-1"></i>No accommodation booked</div>
+                      <button class="btn btn-sm btn-outline-primary" onclick="openQuickAssign({{ s.employee_id }}, '{{ s.employee_name|replace("'", "\\'") }}')">
+                        <i class="bi bi-house-add me-1"></i>Assign Accommodation
+                      </button>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Travel FROM detail -->
+              <div class="col-md-4">
+                <div class="card h-100 border">
+                  <div class="card-header bg-white py-2">
+                    <h6 class="mb-0 fw-bold small"><i class="bi bi-box-arrow-right me-1 text-danger"></i>Travel FROM Site</h6>
+                  </div>
+                  <div class="card-body small">
+                    {% if s.is_ongoing %}
+                      <p class="text-info mb-0"><i class="bi bi-arrow-repeat me-1"></i>Assignment is ongoing — no end date set</p>
+                    {% else %}
+                      <p class="mb-1"><strong>Date:</strong> {{ s.travel_from_date.strftime('%A %d %b %Y') }}</p>
+                      <p class="mb-1"><strong>Route:</strong> {{ s.project_city or '?' }} &rarr; {{ s.home_location or '?' }}</p>
+                      <p class="mb-2"><strong>Mode:</strong>
+                        {% if s.transport_from == 'fly' %}<i class="bi bi-airplane"></i> Fly
+                        {% elif s.transport_from == 'drive' %}<i class="bi bi-car-front"></i> Drive
+                        {% elif s.transport_from == 'drives' %}<i class="bi bi-car-front"></i> Drives (always)
+                        {% elif s.transport_from == 'local' %}<i class="bi bi-geo-alt"></i> Local
+                        {% else %}TBD{% endif %}
+                      </p>
+                      {% if s.has_flight_from %}
+                        <div class="alert alert-success py-1 px-2 mb-0 small"><i class="bi bi-check-circle me-1"></i>{{ s.flights_from|join(', ') }}</div>
+                      {% elif s.transport_from == 'fly' %}
+                        <div class="alert alert-danger py-1 px-2 mb-0 small"><i class="bi bi-exclamation-triangle me-1"></i>No flight booked
+                          {% if s.project_airport and s.home_airport %}<br>Need: {{ s.project_airport }} &rarr; {{ s.home_airport }}{% endif %}
+                        </div>
+                      {% endif %}
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
         {% endfor %}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+      </div>
     </div>
   </div>
 </div>
-{% endif %}
+{% endfor %}
 
 <!-- Expiring Properties -->
 {% if expiring_properties %}
 <div class="card border-0 shadow-sm mb-4 border-start border-danger border-3">
   <div class="card-header bg-white py-3">
     <h5 class="mb-0 fw-semibold text-danger"><i class="bi bi-clock-history me-2"></i>Expiring Properties <span class="badge bg-danger">{{ expiring_properties|length }}</span></h5>
-    <small class="text-muted">Accommodation leases/bookings expiring in the next 90 days — action needed</small>
+    <small class="text-muted">Accommodation leases/bookings expiring soon — action needed</small>
   </div>
   <div class="card-body p-0">
     <table class="table table-hover align-middle mb-0">
       <thead class="table-light">
-        <tr><th>Property</th><th>Type</th><th>Expires</th><th>Beds</th><th>Current Occupants</th></tr>
+        <tr><th>Property</th><th>Project</th><th>Expires</th><th>Beds</th><th>Occupants</th></tr>
       </thead>
       <tbody>
         {% for prop in expiring_properties %}
         <tr>
           <td class="fw-semibold">{{ prop.name }}{% if prop.address %}<br><small class="text-muted">{{ prop.address }}</small>{% endif %}</td>
-          <td><span class="badge bg-light text-dark border">{{ prop.property_type|title }}</span></td>
+          <td>{{ prop.project.name if prop.project else '—' }}</td>
           <td class="fw-semibold text-danger">{{ prop.date_to.strftime('%d %b %Y') }}</td>
           <td>{{ prop.bedrooms }}</td>
           <td>
-            {% set residents = prop.current_occupants %}
-            {% if residents %}
-              {% for b in residents %}
-              <span class="badge bg-light text-dark border me-1">{{ b.employee.name }}</span>
-              {% endfor %}
-            {% else %}
-              <span class="text-muted">None</span>
-            {% endif %}
+            {% for b in prop.current_occupants %}
+            <span class="badge bg-light text-dark border me-1">{{ b.employee.name }}</span>
+            {% else %}<span class="text-muted">None</span>{% endfor %}
           </td>
         </tr>
         {% endfor %}
@@ -183,32 +344,21 @@
 </div>
 {% endif %}
 
-<!-- Carpool / Group Travel -->
+<!-- Travelling Together -->
 {% if carpool_groups %}
 <div class="card border-0 shadow-sm mb-4 border-start border-success border-3">
   <div class="card-header bg-white py-3">
     <h5 class="mb-0 fw-semibold text-success"><i class="bi bi-people me-2"></i>Travelling Together <span class="badge bg-success-subtle text-success">{{ carpool_groups|length }}</span></h5>
-    <small class="text-muted">People travelling the same route on the same day — can share transport or book same flights</small>
   </div>
   <div class="card-body p-0">
     <table class="table table-hover align-middle mb-0">
-      <thead class="table-light">
-        <tr><th>Date</th><th>Route</th><th>People</th></tr>
-      </thead>
+      <thead class="table-light"><tr><th>Date</th><th>Route</th><th>People</th></tr></thead>
       <tbody>
         {% for grp in carpool_groups %}
         <tr>
           <td class="fw-semibold text-nowrap">{{ grp.date.strftime('%a %d %b') }}</td>
-          <td>
-            <span class="badge bg-secondary-subtle text-secondary">{{ grp['from'] }}</span>
-            <i class="bi bi-arrow-right mx-1"></i>
-            <span class="badge bg-primary-subtle text-primary">{{ grp['to'] }}</span>
-          </td>
-          <td>
-            {% for m in grp.members %}
-            <span class="badge bg-light text-dark border me-1">{{ m.employee_name }}</span>
-            {% endfor %}
-          </td>
+          <td><span class="badge bg-secondary-subtle text-secondary">{{ grp['from'] }}</span> <i class="bi bi-arrow-right mx-1"></i> <span class="badge bg-primary-subtle text-primary">{{ grp['to'] }}</span></td>
+          <td>{% for m in grp.members %}<span class="badge bg-light text-dark border me-1">{{ m.employee_name }}</span>{% endfor %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -216,26 +366,6 @@
   </div>
 </div>
 {% endif %}
-
-<!-- Upcoming Travel Groups -->
-{% if travel_groups %}
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-people me-2 text-info"></i>Travel Groups <span class="badge bg-info-subtle text-info">{{ travel_groups|length }}</span></h5>
-    <small class="text-muted">People travelling the same route on the same day — can share transport</small>
-  </div>
-  <div class="card-body p-0">
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light">
-        <tr><th>Date</th><th>Route</th><th>People</th><th>Flight Details</th></tr>
-      </thead>
-      <tbody>
-        {% for group in travel_groups %}
-        <tr>
-          <td class="fw-semibold text-nowrap">{{ group.date.strftime('%a %d %b') }}</td>
-          <td>
-            <span class="badge bg-primary-subtle text-primary">{{ group.departure }}</span>
-            <i class="bi bi-arrow-right mx-1"></i>
             <span class="badge bg-success-subtle text-success">{{ group.arrival }}</span>
           </td>
           <td>
@@ -256,225 +386,15 @@
 </div>
 {% endif %}
 
-<!-- All Upcoming Flights -->
+<!-- No assignments message -->
+{% if not project_sections %}
 <div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3">
-    <h5 class="mb-0 fw-semibold"><i class="bi bi-airplane me-2"></i>Upcoming Flights <span class="badge bg-secondary-subtle text-secondary">{{ upcoming_flights|length }}</span></h5>
-  </div>
-  <div class="card-body p-0">
-    {% if upcoming_flights %}
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light">
-        <tr><th>Date</th><th>Employee</th><th>Direction</th><th>From</th><th>To</th><th>Flight</th><th>Time</th><th>Ref</th></tr>
-      </thead>
-      <tbody>
-        {% for f in upcoming_flights %}
-        <tr>
-          <td class="fw-semibold text-nowrap">{{ f.date.strftime('%a %d %b') }}</td>
-          <td>{{ f.employee.name }}</td>
-          <td>
-            {% if f.direction == 'inbound' %}
-            <span class="badge bg-success-subtle text-success"><i class="bi bi-box-arrow-in-right"></i> In</span>
-            {% else %}
-            <span class="badge bg-warning-subtle text-warning"><i class="bi bi-box-arrow-right"></i> Out</span>
-            {% endif %}
-          </td>
-          <td>{{ f.departure_airport or '—' }}</td>
-          <td>{{ f.arrival_airport or '—' }}</td>
-          <td class="small">{{ f.airline or '' }} {{ f.flight_number or '' }}</td>
-          <td class="small text-nowrap">{{ f.departure_time or '' }}{% if f.arrival_time %} - {{ f.arrival_time }}{% endif %}</td>
-          <td class="small text-muted">{{ f.booking_reference or '' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="text-center py-4 text-muted">No upcoming flights booked.</div>
-    {% endif %}
-  </div>
-</div>
-
-<!-- Accommodation Needed -->
-{% if unbooked %}
-<div class="card border-0 shadow-sm mb-4 border-start border-warning border-3">
-  <div class="card-header bg-white py-3">
-    <h5 class="mb-0 fw-semibold text-warning"><i class="bi bi-exclamation-triangle me-2"></i>Accommodation Needed <span class="badge bg-warning text-dark">{{ unbooked|length }}</span></h5>
-    <small class="text-muted">Employees assigned to projects who require accommodation but have no current booking</small>
-  </div>
-  <div class="card-body p-0">
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light">
-        <tr><th>Employee</th><th>Role</th><th>Home Base</th><th>Action</th></tr>
-      </thead>
-      <tbody>
-        {% for emp in unbooked %}
-        <tr>
-          <td class="fw-semibold">{{ emp.name }}</td>
-          <td class="text-muted">{{ emp.role or '—' }}</td>
-          <td>{{ (emp.home_base or '—')|title }}</td>
-          <td>
-            <button class="btn btn-sm btn-outline-primary" onclick="openQuickAssign({{ emp.id }}, '{{ emp.name|replace("'", "\\'") }}')">
-              <i class="bi bi-house-add me-1"></i>Assign
-            </button>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="card-body text-center py-5 text-muted">
+    <i class="bi bi-airplane fs-1 d-block mb-2"></i>
+    No active project assignments found. Assign employees to projects on the <a href="{{ url_for('scheduling.scheduling_overview') }}">scheduling page</a> first.
   </div>
 </div>
 {% endif %}
-
-<!-- Accommodation Properties -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-    <div>
-      <h5 class="mb-0 fw-semibold"><i class="bi bi-houses me-2 text-success"></i>Properties <span class="badge bg-secondary-subtle text-secondary">{{ properties|length }}</span></h5>
-    </div>
-    <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#addPropertyModal">
-      <i class="bi bi-plus-lg me-1"></i>Add Property
-    </button>
-  </div>
-  <div class="card-body">
-    {% if properties %}
-    <div class="row g-3">
-      {% for prop in properties %}
-      <div class="col-lg-6">
-        <div class="card h-100 border">
-          <div class="card-header bg-white d-flex justify-content-between align-items-start">
-            <div>
-              <h6 class="fw-bold mb-1">{{ prop.name }}</h6>
-              {% if prop.address %}<small class="text-muted"><i class="bi bi-geo-alt"></i> {{ prop.address }}</small>{% endif %}
-            </div>
-            <div class="d-flex gap-1">
-              <span class="badge bg-{{ 'success' if prop.occupancy < prop.bedrooms else 'danger' }}-subtle text-{{ 'success' if prop.occupancy < prop.bedrooms else 'danger' }}">
-                {{ prop.occupancy }}/{{ prop.bedrooms }} beds
-              </span>
-              <span class="badge bg-light text-dark border">{{ prop.property_type|title }}</span>
-            </div>
-          </div>
-          <div class="card-body">
-            <!-- Current residents -->
-            {% set residents = prop.current_occupants %}
-            {% if residents %}
-            <p class="small fw-semibold mb-2">Current Residents:</p>
-            <div class="mb-3">
-              {% for b in residents %}
-              <div class="d-flex justify-content-between align-items-center mb-1">
-                <span><i class="bi bi-person-fill me-1"></i>{{ b.employee.name }}{% if b.room_info %} <small class="text-muted">({{ b.room_info }})</small>{% endif %}</span>
-                <small class="text-muted">{{ b.date_from.strftime('%d %b') }} - {{ b.date_to.strftime('%d %b') }}</small>
-              </div>
-              {% endfor %}
-            </div>
-            {% else %}
-            <p class="small text-muted mb-3"><i class="bi bi-house"></i> No current residents</p>
-            {% endif %}
-
-            <!-- All bookings for this property -->
-            {% set all_bookings = prop.bookings %}
-            {% if all_bookings|length > residents|length %}
-            <details class="mb-3">
-              <summary class="small fw-semibold">All Bookings ({{ all_bookings|length }})</summary>
-              {% for b in all_bookings|sort(attribute='date_from') %}
-              <div class="d-flex justify-content-between align-items-center mt-1 small">
-                <span>{{ b.employee.name }}{% if b.room_info %} ({{ b.room_info }}){% endif %}</span>
-                <span class="text-muted">{{ b.date_from.strftime('%d %b') }} - {{ b.date_to.strftime('%d %b %Y') }}</span>
-              </div>
-              {% endfor %}
-            </details>
-            {% endif %}
-
-            {% if prop.instructions %}
-            <details class="mb-3">
-              <summary class="small fw-semibold">Instructions</summary>
-              <div class="small mt-1 bg-light rounded p-2">{{ prop.instructions }}</div>
-            </details>
-            {% endif %}
-
-            <!-- Documents -->
-            {% if prop.documents %}
-            <p class="small fw-semibold mb-1">Documents:</p>
-            {% for doc in prop.documents %}
-            <a href="{{ url_for('scheduling.accommodation_document', filename=doc.filename) }}"
-               class="badge bg-light text-dark border me-1 text-decoration-none" target="_blank">
-              <i class="bi bi-file-earmark me-1"></i>{{ doc.title or doc.original_name }}
-            </a>
-            {% endfor %}
-            {% endif %}
-          </div>
-          <div class="card-footer bg-white d-flex gap-1">
-            <button class="btn btn-sm btn-outline-primary" onclick="openAssignToProperty({{ prop.id }}, '{{ prop.name|replace("'", "\\'") }}')">
-              <i class="bi bi-person-plus"></i> Assign
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="openUploadDoc({{ prop.id }}, '{{ prop.name|replace("'", "\\'") }}')">
-              <i class="bi bi-upload"></i> Upload Doc
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#editProp{{ prop.id }}">
-              <i class="bi bi-pencil"></i>
-            </button>
-            <form method="POST" action="{{ url_for('scheduling.property_delete', prop_id=prop.id) }}" class="d-inline"
-                  onsubmit="return confirm('Delete property \'{{ prop.name }}\'?')">
-              <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-            </form>
-          </div>
-          <!-- Inline edit form (collapsed) -->
-          <div class="collapse" id="editProp{{ prop.id }}">
-            <div class="card-body border-top bg-light">
-              <form method="POST" action="{{ url_for('scheduling.property_edit', prop_id=prop.id) }}">
-                <div class="row g-2 mb-2">
-                  <div class="col-8"><input name="prop_name" class="form-control form-control-sm" value="{{ prop.name }}" placeholder="Name"></div>
-                  <div class="col-4">
-                    <select name="property_type" class="form-select form-select-sm">
-                      {% for t in ['house','apartment','hotel','motel','other'] %}
-                      <option value="{{ t }}" {{ 'selected' if prop.property_type == t }}>{{ t|title }}</option>
-                      {% endfor %}
-                    </select>
-                  </div>
-                </div>
-                <div class="row g-2 mb-2">
-                  <div class="col-8"><input name="prop_address" class="form-control form-control-sm" value="{{ prop.address or '' }}" placeholder="Address"></div>
-                  <div class="col-4"><input name="bedrooms" type="number" class="form-control form-control-sm" value="{{ prop.bedrooms }}" min="1" placeholder="Beds"></div>
-                </div>
-                <div class="row g-2 mb-2">
-                  <div class="col-6"><input name="prop_phone" class="form-control form-control-sm" value="{{ prop.phone or '' }}" placeholder="Phone"></div>
-                  <div class="col-6"><input name="prop_booking_ref" class="form-control form-control-sm" value="{{ prop.booking_reference or '' }}" placeholder="Booking Ref"></div>
-                </div>
-                <div class="row g-2 mb-2">
-                  <div class="col-6"><input name="prop_date_from" type="date" class="form-control form-control-sm" value="{{ prop.date_from.isoformat() if prop.date_from else '' }}"></div>
-                  <div class="col-6"><input name="prop_date_to" type="date" class="form-control form-control-sm" value="{{ prop.date_to.isoformat() if prop.date_to else '' }}"></div>
-                </div>
-                <div class="row g-2 mb-2">
-                  <div class="col-6"><input name="prop_check_in" class="form-control form-control-sm" value="{{ prop.check_in_time or '' }}" placeholder="Check-in (HH:MM)"></div>
-                  <div class="col-6"><input name="prop_check_out" class="form-control form-control-sm" value="{{ prop.check_out_time or '' }}" placeholder="Check-out (HH:MM)"></div>
-                </div>
-                <div class="row g-2 mb-2">
-                  <div class="col-6">
-                    <select name="project_id" class="form-select form-select-sm">
-                      <option value="">— No project —</option>
-                      {% for p in projects %}
-                      <option value="{{ p.id }}" {{ 'selected' if prop.project_id == p.id }}>{{ p.name }}</option>
-                      {% endfor %}
-                    </select>
-                  </div>
-                </div>
-                <textarea name="prop_instructions" class="form-control form-control-sm mb-2" rows="2" placeholder="Check-in instructions...">{{ prop.instructions or '' }}</textarea>
-                <textarea name="prop_notes" class="form-control form-control-sm mb-2" rows="1" placeholder="Notes">{{ prop.notes or '' }}</textarea>
-                <button type="submit" class="btn btn-sm btn-primary">Save Changes</button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <div class="text-center py-4 text-muted">
-      <i class="bi bi-houses fs-1 d-block mb-2"></i>
-      No properties added yet. Click "Add Property" to get started.
-    </div>
-    {% endif %}
-  </div>
-</div>
 
 <!-- Add Property Modal -->
 <div class="modal fade" id="addPropertyModal" tabindex="-1">
@@ -699,6 +619,22 @@
     document.getElementById('uploadDocForm').action = `/scheduling/property/${propId}/document/upload`;
     document.getElementById('uploadDocTitle').textContent = `Upload Document for ${propName}`;
     new bootstrap.Modal(document.getElementById('uploadDocModal')).show();
+  }
+
+  function toggleSwingDetail(row) {
+    const detail = row.nextElementSibling;
+    if (detail && detail.classList.contains('swing-detail')) {
+      detail.style.display = detail.style.display === 'none' ? '' : 'none';
+    }
+  }
+
+  function filterProject(projectClass, btn) {
+    document.querySelectorAll('.project-section').forEach(el => {
+      el.style.display = projectClass === 'all' || el.dataset.project === projectClass ? '' : 'none';
+    });
+    // Update active button
+    btn.closest('.d-flex').querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
   }
 </script>
 {% endblock %}
