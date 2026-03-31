@@ -619,3 +619,287 @@ def detect_travel_needs(employees, date_list, grid=None, look_ahead_days=90):
     # Sort by date then employee name
     travel_needs.sort(key=lambda t: (t['date'], t['employee_name']))
     return travel_needs
+
+
+def build_swing_planner(employees, date_list, grid=None, look_ahead_days=90):
+    """Build a per-employee swing planner showing travel in, accommodation, travel out.
+
+    A "swing" is a continuous period on a project site. For each swing we find:
+    - Travel TO site (first day of assignment after being elsewhere)
+    - Accommodation during the swing
+    - Travel FROM site (first day after assignment ends / R&R starts)
+    - Flags: missing flights, missing accommodation, expiring properties
+
+    Returns list of swing dicts sorted by swing start date then employee name.
+    """
+    if not employees or not date_list:
+        return []
+
+    today = date.today()
+    cutoff = today + timedelta(days=look_ahead_days)
+    base_city_map = _get_base_city_map()
+
+    if grid is None:
+        grid = build_schedule_grid(employees, date_list)
+
+    # Build lookups
+    project_ids = set()
+    for emp in employees:
+        for d in date_list:
+            pid = grid.get(emp.id, {}).get(d.isoformat(), {}).get('project_id')
+            if pid:
+                project_ids.add(pid)
+
+    project_info = {}
+    project_cities = {}
+    project_airports = {}
+    if project_ids:
+        for p in Project.query.filter(Project.id.in_(project_ids)).all():
+            project_info[p.id] = p
+            if p.city:
+                project_cities[p.id] = p.city
+            if p.nearest_airport:
+                project_airports[p.id] = p.nearest_airport
+
+    emp_ids = [e.id for e in employees]
+    min_date = min(date_list)
+    max_date = max(date_list)
+
+    # Flight bookings indexed by (emp_id, date)
+    flight_map = defaultdict(list)
+    for fb in FlightBooking.query.filter(
+            FlightBooking.employee_id.in_(emp_ids),
+            FlightBooking.date >= min_date,
+            FlightBooking.date <= max_date).all():
+        flight_map[(fb.employee_id, fb.date)].append(fb)
+
+    # Accommodation bookings by employee
+    accom_by_emp = defaultdict(list)
+    for ab in AccommodationBooking.query.filter(
+            AccommodationBooking.employee_id.in_(emp_ids),
+            AccommodationBooking.date_from <= max_date,
+            AccommodationBooking.date_to >= min_date).all():
+        accom_by_emp[ab.employee_id].append(ab)
+
+    # Accommodation properties — for expiry check
+    expiring_properties = []
+    for prop in AccommodationProperty.query.filter_by(active=True).all():
+        if prop.date_to and prop.date_to >= today and prop.date_to <= cutoff:
+            expiring_properties.append(prop)
+
+    # Drive pair config
+    _DRIVE_PAIRS = {
+        frozenset({'Sydney', 'Wollongong'}),
+        frozenset({'Sydney', 'Newcastle'}),
+        frozenset({'Melbourne', 'Geelong'}),
+        frozenset({'Brisbane', 'Gold Coast'}),
+        frozenset({'Brisbane', 'Sunshine Coast'}),
+    }
+
+    def _transport(from_city, to_city, emp):
+        if emp.home_airport and emp.home_airport.upper() == 'DRIVES':
+            if not from_city or not to_city:
+                return 'drives'
+            return 'local' if from_city.lower() == to_city.lower() else 'drives'
+        if not from_city or not to_city:
+            return 'unknown'
+        if from_city.lower() == to_city.lower():
+            return 'local'
+        if frozenset({from_city, to_city}) in _DRIVE_PAIRS:
+            return 'drive'
+        return 'fly'
+
+    swings = []
+
+    for emp in employees:
+        emp_home = base_city_map.get(emp.home_base)
+        emp_accoms = accom_by_emp.get(emp.id, [])
+
+        # Walk the schedule and find continuous project blocks
+        current_project_id = None
+        swing_start = None
+        swing_dates = []
+
+        for d in date_list:
+            if d > cutoff:
+                break
+            cell = grid.get(emp.id, {}).get(d.isoformat(), {})
+            status = cell.get('status', '')
+            pid = cell.get('project_id')
+
+            is_on_project = status in ('assigned', 'travel_half') and pid
+
+            if is_on_project:
+                if current_project_id != pid:
+                    # New project block — close previous if any
+                    if current_project_id and swing_start and swing_start >= today:
+                        swings.append(_build_swing(
+                            emp, emp_home, current_project_id, swing_start, swing_dates,
+                            project_info, project_cities, project_airports,
+                            flight_map, emp_accoms, _transport, base_city_map, grid, date_list))
+                    current_project_id = pid
+                    swing_start = d
+                    swing_dates = [d]
+                else:
+                    swing_dates.append(d)
+            else:
+                # Not on project — close current swing
+                if current_project_id and swing_start and swing_start >= today:
+                    swings.append(_build_swing(
+                        emp, emp_home, current_project_id, swing_start, swing_dates,
+                        project_info, project_cities, project_airports,
+                        flight_map, emp_accoms, _transport, base_city_map, grid, date_list))
+                current_project_id = None
+                swing_start = None
+                swing_dates = []
+
+        # Close any open swing at end of date range
+        if current_project_id and swing_start and swing_start >= today:
+            swings.append(_build_swing(
+                emp, emp_home, current_project_id, swing_start, swing_dates,
+                project_info, project_cities, project_airports,
+                flight_map, emp_accoms, _transport, base_city_map, grid, date_list))
+
+    # Sort by start date then employee
+    swings.sort(key=lambda s: (s['start_date'], s['employee_name']))
+
+    return {
+        'swings': swings,
+        'expiring_properties': expiring_properties,
+    }
+
+
+def _build_swing(emp, emp_home, project_id, start_date, swing_dates,
+                 project_info, project_cities, project_airports,
+                 flight_map, emp_accoms, transport_fn, base_city_map, grid, date_list):
+    """Build a single swing dict with travel in/out and accommodation info."""
+    proj = project_info.get(project_id)
+    proj_city = project_cities.get(project_id)
+    proj_airport = project_airports.get(project_id)
+    end_date = swing_dates[-1] if swing_dates else start_date
+
+    # Find the travel day TO site — day before swing starts or first day
+    travel_to_date = start_date
+    # Check if the day before start has a travel override
+    day_before = start_date - timedelta(days=1)
+    prev_cell = grid.get(emp.id, {}).get(day_before.isoformat(), {})
+    if prev_cell.get('status') in ('travel', 'travel_half'):
+        travel_to_date = day_before
+
+    # Find the travel day FROM site — day after swing ends
+    travel_from_date = end_date
+    day_after = end_date + timedelta(days=1)
+    next_cell = grid.get(emp.id, {}).get(day_after.isoformat(), {})
+    if next_cell.get('status') in ('travel', 'travel_half', 'r_and_r'):
+        travel_from_date = day_after
+
+    # Flight info
+    flights_to = flight_map.get((emp.id, travel_to_date), [])
+    flights_from = flight_map.get((emp.id, travel_from_date), [])
+    # Also check the actual start/end dates
+    if not flights_to and travel_to_date != start_date:
+        flights_to = flight_map.get((emp.id, start_date), [])
+    if not flights_from and travel_from_date != end_date:
+        flights_from = flight_map.get((emp.id, end_date), [])
+
+    # Transport mode
+    transport_to = transport_fn(emp_home, proj_city, emp)
+    transport_from = transport_fn(proj_city, emp_home, emp)
+
+    # Accommodation during swing
+    accom_bookings = [a for a in emp_accoms
+                      if a.date_from <= end_date and a.date_to >= start_date]
+
+    needs_accom = emp.requires_accommodation if emp.requires_accommodation is not None else True
+    has_accom = len(accom_bookings) > 0
+
+    # Check for accommodation gaps — days on site with no booking
+    accom_gap_days = 0
+    if needs_accom and swing_dates:
+        covered = set()
+        for a in accom_bookings:
+            d = max(a.date_from, start_date)
+            while d <= min(a.date_to, end_date):
+                covered.add(d)
+                d += timedelta(days=1)
+        accom_gap_days = len([d for d in swing_dates if d not in covered])
+
+    # Accommodation property expiry warning
+    accom_expiring = False
+    for a in accom_bookings:
+        if a.property and a.property.date_to:
+            if a.property.date_to < end_date:
+                accom_expiring = True
+
+    # Housemates
+    housemates = set()
+    for a in accom_bookings:
+        if a.property_id:
+            for hm in AccommodationBooking.query.filter(
+                    AccommodationBooking.property_id == a.property_id,
+                    AccommodationBooking.id != a.id,
+                    AccommodationBooking.date_from <= end_date,
+                    AccommodationBooking.date_to >= start_date).all():
+                if hm.employee:
+                    housemates.add(hm.employee.name)
+
+    # Issues list
+    issues = []
+    if transport_to == 'fly' and not flights_to:
+        issues.append('No flight booked TO site')
+    if transport_from == 'fly' and not flights_from:
+        issues.append('No flight booked FROM site')
+    if needs_accom and not has_accom:
+        issues.append('No accommodation booked')
+    elif needs_accom and accom_gap_days > 0:
+        issues.append(f'Accommodation gap: {accom_gap_days} day(s) uncovered')
+    if accom_expiring:
+        issues.append('Property lease/booking expires during swing')
+
+    # Format flight details
+    def _fmt_flight(f):
+        parts = []
+        if f.airline:
+            parts.append(f.airline)
+        if f.flight_number:
+            parts.append(f.flight_number)
+        if f.departure_airport and f.arrival_airport:
+            parts.append(f'{f.departure_airport}→{f.arrival_airport}')
+        if f.departure_time:
+            parts.append(f.departure_time)
+        return ' '.join(parts) if parts else 'Flight booked'
+
+    return {
+        'employee_id': emp.id,
+        'employee_name': emp.name,
+        'employee_role': emp.role,
+        'home_airport': emp.home_airport,
+        'home_location': emp_home,
+        'project_id': project_id,
+        'project_name': proj.name if proj else '?',
+        'project_city': proj_city,
+        'project_airport': proj_airport,
+        'start_date': start_date,
+        'end_date': end_date,
+        'num_days': len(swing_dates),
+        # Travel TO
+        'travel_to_date': travel_to_date,
+        'transport_to': transport_to,
+        'flights_to': [_fmt_flight(f) for f in flights_to],
+        'has_flight_to': len(flights_to) > 0,
+        # Travel FROM
+        'travel_from_date': travel_from_date,
+        'transport_from': transport_from,
+        'flights_from': [_fmt_flight(f) for f in flights_from],
+        'has_flight_from': len(flights_from) > 0,
+        # Accommodation
+        'needs_accommodation': needs_accom,
+        'has_accommodation': has_accom,
+        'accom_bookings': accom_bookings,
+        'accom_gap_days': accom_gap_days,
+        'accom_expiring': accom_expiring,
+        'housemates': sorted(housemates),
+        # Issues
+        'issues': issues,
+        'has_issues': len(issues) > 0,
+    }

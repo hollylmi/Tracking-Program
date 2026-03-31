@@ -19,7 +19,7 @@ from models import (
     ProjectMachine, MachineBreakdown,
     FlightBooking, AccommodationBooking, AccommodationProperty, AccommodationDocument, User,
 )
-from utils.schedule import build_schedule_grid, detect_travel_needs
+from utils.schedule import build_schedule_grid, detect_travel_needs, build_swing_planner
 
 scheduling_bp = Blueprint('scheduling', __name__)
 
@@ -700,27 +700,32 @@ def travel_overview():
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
-    # Detected travel needs from schedule transitions (next 90 days)
+    # Build swing planner — per-employee view of travel in, accom, travel out
     date_list = [today + timedelta(days=i) for i in range(91)]
     grid = build_schedule_grid(employees, date_list)
-    detected_travel = detect_travel_needs(employees, date_list, grid=grid, look_ahead_days=90)
+    planner = build_swing_planner(employees, date_list, grid=grid, look_ahead_days=90)
+    swings = planner['swings']
+    expiring_properties = planner['expiring_properties']
 
-    # Group detected travel by (date, from_location, to_location) for carpooling
-    travel_route_groups = {}
-    for t in detected_travel:
-        key = (t['date'], t['from_location'], t['to_location'])
-        travel_route_groups.setdefault(key, []).append(t)
+    # Group swings by travel date for carpooling detection
+    travel_to_groups = {}
+    for s in swings:
+        if s['transport_to'] in ('fly', 'drive') and s['home_location'] and s['project_city']:
+            key = (s['travel_to_date'], s['home_location'], s['project_city'])
+            travel_to_groups.setdefault(key, []).append(s)
+    carpool_to = [{'date': k[0], 'from': k[1], 'to': k[2], 'members': v}
+                  for k, v in sorted(travel_to_groups.items()) if len(v) > 1]
 
-    carpool_groups = []
-    for (tdate, from_loc, to_loc), members in sorted(travel_route_groups.items()):
-        if len(members) > 1:
-            carpool_groups.append({
-                'date': tdate,
-                'from_location': from_loc,
-                'to_location': to_loc,
-                'members': members,
-                'transport': members[0]['transport_suggestion'],
-            })
+    travel_from_groups = {}
+    for s in swings:
+        if s['transport_from'] in ('fly', 'drive') and s['project_city'] and s['home_location']:
+            key = (s['travel_from_date'], s['project_city'], s['home_location'])
+            travel_from_groups.setdefault(key, []).append(s)
+    carpool_from = [{'date': k[0], 'from': k[1], 'to': k[2], 'members': v}
+                    for k, v in sorted(travel_from_groups.items()) if len(v) > 1]
+
+    carpool_groups = carpool_to + carpool_from
+    carpool_groups.sort(key=lambda g: g['date'])
 
     return render_template(
         'scheduling/travel.html',
@@ -733,7 +738,8 @@ def travel_overview():
         properties=properties,
         employees=employees,
         projects=projects,
-        detected_travel=detected_travel,
+        swings=swings,
+        expiring_properties=expiring_properties,
         carpool_groups=carpool_groups,
     )
 
