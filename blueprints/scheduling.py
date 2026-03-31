@@ -916,8 +916,28 @@ def property_assign(prop_id):
         flash(f'Property "{prop.name}" has expired ({prop.date_to.strftime("%d %b %Y")}). Cannot assign.', 'danger')
         return redirect(url_for('scheduling.travel_overview'))
 
-    # "Duration of stay" — use assignment dates if checkbox is ticked
-    if request.form.get('use_assignment_dates'):
+    # "Duration of stay" — use assignment dates
+    assignment_id = request.form.get('use_assignment_id', '').strip()
+    if assignment_id:
+        assign = ProjectAssignment.query.get(int(assignment_id))
+        if assign and assign.employee_id == employee_id:
+            d_from = assign.date_from
+            if assign.date_to:
+                d_to = assign.date_to
+            else:
+                # Ongoing — try Gantt projected finish, then planned_end_date
+                proj = assign.project
+                try:
+                    from utils.gantt import compute_gantt_data
+                    gantt = compute_gantt_data(proj) if proj and proj.start_date else None
+                    d_to = (gantt.get('est_finish_date') if gantt else None) or proj.planned_end_date or (date.today() + timedelta(days=90))
+                except Exception:
+                    d_to = proj.planned_end_date or (date.today() + timedelta(days=90))
+        else:
+            flash('Assignment not found.', 'danger')
+            return redirect(url_for('scheduling.travel_overview'))
+    elif request.form.get('use_assignment_dates'):
+        # Legacy checkbox fallback — use first matching assignment
         from utils.schedule import build_swing_planner
         emps = Employee.query.filter(Employee.id == employee_id).all()
         planner = build_swing_planner(emps, look_ahead_days=365)

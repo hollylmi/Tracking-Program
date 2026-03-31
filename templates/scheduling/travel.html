@@ -535,7 +535,7 @@
                     {% else %}
                       <div class="alert alert-danger py-1 px-2 mb-1 small"><i class="bi bi-house-x me-1"></i>No accommodation booked</div>
                       <div class="d-flex gap-1 flex-wrap" onclick="event.stopPropagation()">
-                        <button class="btn btn-sm btn-outline-primary" onclick="openQuickAssign({{ s.employee_id }}, '{{ s.employee_name|replace("'", "\\'") }}')">
+                        <button class="btn btn-sm btn-outline-primary" onclick="openQuickAssign({{ s.employee_id }}, '{{ s.employee_name|replace("'", "\\'") }}', {{ s.assignment_id }})">
                           <i class="bi bi-house-add me-1"></i>Assign Accommodation
                         </button>
                         <form method="POST" action="{{ url_for('scheduling.scheduling_assign_edit', pa_id=s.assignment_id) }}" class="d-inline">
@@ -987,12 +987,19 @@
             </select>
           </div>
           <!-- On-site dates info -->
+          <input type="hidden" name="use_assignment_id" id="assignAssignmentId" value="">
+          <!-- Assignment selector (shown when employee has multiple) -->
+          <div class="mb-3 d-none" id="assignmentSelectDiv">
+            <label class="form-label fw-semibold">Assignment</label>
+            <select id="assignmentSelect" class="form-select" onchange="onAssignmentSelected(this)">
+            </select>
+          </div>
           <div class="alert alert-info py-2 small mb-3 d-none" id="assignOnSiteInfo">
             <i class="bi bi-info-circle me-1"></i>On site: <strong id="assignOnSiteDates"></strong>
           </div>
           <div class="mb-3">
             <div class="form-check">
-              <input type="checkbox" name="use_assignment_dates" value="1" class="form-check-input" id="assignUseDuration"
+              <input type="checkbox" class="form-check-input" id="assignUseDuration"
                      onchange="toggleAssignDates(this)">
               <label class="form-check-label fw-semibold" for="assignUseDuration">For duration of stay</label>
             </div>
@@ -1074,38 +1081,112 @@
 
 {% block scripts %}
 <script>
-  // Employee on-site dates lookup from swings
-  const EMP_SWINGS = {
-    {% for s in swings %}
-    {{ s.employee_id }}: { from: '{{ s.start_date.isoformat() }}', to: '{{ s.end_date.isoformat() }}', ongoing: {{ 'true' if s.is_ongoing else 'false' }}, project: '{{ s.project_name }}' },
-    {% endfor %}
-  };
+  // Employee swings lookup — multiple per employee
+  const EMP_SWINGS = {};
+  {% for s in swings %}
+  if (!EMP_SWINGS[{{ s.employee_id }}]) EMP_SWINGS[{{ s.employee_id }}] = [];
+  EMP_SWINGS[{{ s.employee_id }}].push({
+    assignmentId: {{ s.assignment_id }},
+    from: '{{ s.start_date.isoformat() }}',
+    to: '{{ s.end_date.isoformat() }}',
+    ongoing: {{ 'true' if s.is_ongoing else 'false' }},
+    project: '{{ s.project_name|replace("'", "\\'") }}',
+    projectId: {{ s.project_id }},
+  });
+  {% endfor %}
 
-  function showOnSiteInfo(empId) {
-    const info = EMP_SWINGS[empId];
+  // Property -> project mapping
+  const PROP_PROJECT = {};
+  {% for prop in properties %}
+  PROP_PROJECT[{{ prop.id }}] = {{ prop.project_id or 'null' }};
+  {% endfor %}
+
+  function showOnSiteInfo(empId, assignmentId) {
+    const swings = EMP_SWINGS[empId] || [];
     const el = document.getElementById('assignOnSiteInfo');
     const datesEl = document.getElementById('assignOnSiteDates');
-    if (info) {
-      const from = new Date(info.from).toLocaleDateString('en-AU', {day:'numeric',month:'short'});
-      const to = info.ongoing ? 'Ongoing' : new Date(info.to).toLocaleDateString('en-AU', {day:'numeric',month:'short',year:'numeric'});
-      datesEl.textContent = `${from} — ${to} (${info.project})`;
-      el.classList.remove('d-none');
-      // Pre-fill dates
-      document.getElementById('assignDateFrom').value = info.from;
-      if (!info.ongoing) document.getElementById('assignDateTo').value = info.to;
-    } else {
+    const selectDiv = document.getElementById('assignmentSelectDiv');
+    const select = document.getElementById('assignmentSelect');
+    const hiddenId = document.getElementById('assignAssignmentId');
+
+    if (swings.length === 0) {
       el.classList.add('d-none');
+      selectDiv.classList.add('d-none');
+      hiddenId.value = '';
+      return;
     }
+
+    // If multiple assignments, show selector
+    if (swings.length > 1) {
+      select.innerHTML = '';
+      swings.forEach(s => {
+        const from = new Date(s.from).toLocaleDateString('en-AU', {day:'numeric',month:'short'});
+        const to = s.ongoing ? 'Ongoing' : new Date(s.to).toLocaleDateString('en-AU', {day:'numeric',month:'short'});
+        const opt = document.createElement('option');
+        opt.value = s.assignmentId;
+        opt.textContent = `${s.project} (${from} — ${to})`;
+        opt.dataset.from = s.from;
+        opt.dataset.to = s.to;
+        opt.dataset.ongoing = s.ongoing;
+        opt.dataset.projectId = s.projectId;
+        if (assignmentId && s.assignmentId == assignmentId) opt.selected = true;
+        select.appendChild(opt);
+      });
+      selectDiv.classList.remove('d-none');
+    } else {
+      selectDiv.classList.add('d-none');
+    }
+
+    // Use specified assignment or first one
+    const info = assignmentId ? swings.find(s => s.assignmentId == assignmentId) || swings[0] : swings[0];
+    hiddenId.value = info.assignmentId;
+
+    const from = new Date(info.from).toLocaleDateString('en-AU', {day:'numeric',month:'short'});
+    const to = info.ongoing ? 'Ongoing' : new Date(info.to).toLocaleDateString('en-AU', {day:'numeric',month:'short',year:'numeric'});
+    datesEl.textContent = `${from} — ${to} (${info.project})`;
+    el.classList.remove('d-none');
+
+    document.getElementById('assignDateFrom').value = info.from;
+    if (!info.ongoing) document.getElementById('assignDateTo').value = info.to;
+
+    // Filter properties to show only those linked to this project
+    filterPropertiesForProject(info.projectId);
+  }
+
+  function onAssignmentSelected(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    document.getElementById('assignAssignmentId').value = sel.value;
+    document.getElementById('assignDateFrom').value = opt.dataset.from;
+    if (opt.dataset.ongoing !== 'true') document.getElementById('assignDateTo').value = opt.dataset.to;
+    filterPropertiesForProject(parseInt(opt.dataset.projectId));
+    // Update info text
+    const from = new Date(opt.dataset.from).toLocaleDateString('en-AU', {day:'numeric',month:'short'});
+    const to = opt.dataset.ongoing === 'true' ? 'Ongoing' : new Date(opt.dataset.to).toLocaleDateString('en-AU', {day:'numeric',month:'short'});
+    document.getElementById('assignOnSiteDates').textContent = `${from} — ${to}`;
+  }
+
+  function filterPropertiesForProject(projectId) {
+    const propSelect = document.getElementById('assignPropertySelect');
+    for (const opt of propSelect.options) {
+      const propProjId = PROP_PROJECT[parseInt(opt.value)];
+      // Show if property is linked to this project, or has no project
+      opt.style.display = (!propProjId || propProjId === projectId) ? '' : 'none';
+      opt.disabled = (propProjId && propProjId !== projectId);
+    }
+    // Select first visible option and update form action
+    for (const opt of propSelect.options) {
+      if (!opt.disabled) { propSelect.value = opt.value; break; }
+    }
+    updateAssignAction(propSelect);
   }
 
   function toggleAssignDates(cb) {
     const div = document.getElementById('assignDatesDiv');
-    const inputs = div.querySelectorAll('input');
     if (cb.checked) {
       div.style.opacity = '0.5';
-      inputs.forEach(i => i.removeAttribute('required'));
     } else {
       div.style.opacity = '1';
+      document.getElementById('assignAssignmentId').value = '';
     }
   }
 
@@ -1114,25 +1195,21 @@
     document.getElementById('assignModalTitle').textContent = `Assign to ${propName}`;
     document.getElementById('assignPropertyDiv').style.display = 'none';
     document.getElementById('assignUseDuration').checked = false;
+    document.getElementById('assignAssignmentId').value = '';
     toggleAssignDates(document.getElementById('assignUseDuration'));
     new bootstrap.Modal(document.getElementById('assignModal')).show();
   }
 
-  function openQuickAssign(empId, empName) {
+  function openQuickAssign(empId, empName, assignmentId) {
     document.getElementById('assignEmpSelect').value = empId;
     document.getElementById('assignModalTitle').textContent = `Assign Accommodation for ${empName}`;
     document.getElementById('assignPropertyDiv').style.display = '';
     document.getElementById('assignUseDuration').checked = false;
     toggleAssignDates(document.getElementById('assignUseDuration'));
-    const propSelect = document.getElementById('assignPropertySelect');
-    if (propSelect.options.length > 0) {
-      document.getElementById('assignForm').action = `/scheduling/property/${propSelect.value}/assign`;
-    }
-    showOnSiteInfo(empId);
+    showOnSiteInfo(empId, assignmentId);
     new bootstrap.Modal(document.getElementById('assignModal')).show();
   }
 
-  // Update on-site info when employee selection changes
   document.getElementById('assignEmpSelect').addEventListener('change', function() {
     showOnSiteInfo(parseInt(this.value));
   });
