@@ -1252,12 +1252,22 @@
             <div class="row g-2 mb-3">
               <div class="col-4">
                 <label class="form-label fw-semibold">City / Location</label>
-                <input name="city" class="form-control" value="{{ project.city or '' }}" placeholder="e.g. Brisbane, Karratha">
+                <select name="city" class="form-select">
+                  <option value="">— None —</option>
+                  {% for loc in setting_locations %}
+                  <option value="{{ loc }}" {{ 'selected' if project.city == loc }}>{{ loc }}</option>
+                  {% endfor %}
+                </select>
                 <div class="form-text">For travel planning.</div>
               </div>
               <div class="col-3">
                 <label class="form-label fw-semibold">Nearest Airport</label>
-                <input name="nearest_airport" class="form-control" value="{{ project.nearest_airport or '' }}" placeholder="e.g. BNE, KTA">
+                <select name="nearest_airport" class="form-select">
+                  <option value="">— None —</option>
+                  {% for ap in setting_airports %}
+                  <option value="{{ ap.code }}" {{ 'selected' if project.nearest_airport == ap.code }}>{{ ap.code }} — {{ ap.name }}</option>
+                  {% endfor %}
+                </select>
                 <div class="form-text">Airport code.</div>
               </div>
               <div class="col-5">

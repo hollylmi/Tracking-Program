@@ -682,7 +682,9 @@ def admin_projects():
         return redirect(url_for('admin.admin_projects'))
 
     projects = Project.query.order_by(Project.name).all()
-    return render_template('admin/projects.html', projects=projects)
+    from utils.settings import get_airports, get_locations
+    return render_template('admin/projects.html', projects=projects,
+                           airports=get_airports(), locations=get_locations())
 
 
 @admin_bp.route('/admin/users/<int:user_id>/projects', methods=['GET', 'POST'])

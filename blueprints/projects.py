@@ -10,7 +10,7 @@ from models import (db, Project, Machine, MachineGroup, DailyEntry, HiredMachine
 from utils.progress import compute_project_progress, compute_delay_summary, compute_material_productivity
 from utils.gantt import compute_gantt_data
 from utils.reports import generate_project_report_pdf, generate_weekly_report_pdf
-from utils.settings import load_settings
+from utils.settings import load_settings, get_airports, get_locations
 from utils.helpers import _natural_key
 
 try:
@@ -381,7 +381,9 @@ def project_dashboard(project_id):
                            assignable_hired=assignable_hired,
                            machine_groups=machine_groups,
                            state_holidays=state_holidays,
-                           today=date.today())
+                           today=date.today(),
+                           setting_airports=get_airports(),
+                           setting_locations=get_locations())
 
 
 @projects_bp.route('/project/<int:project_id>/non-work-dates/add', methods=['POST'])

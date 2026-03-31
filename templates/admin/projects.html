@@ -172,15 +172,23 @@
           <div class="row g-3 mb-3">
             <div class="col-md-3">
               <label class="form-label fw-semibold">City / Location</label>
-              <input type="text" name="city" id="projectCity" class="form-control"
-                     placeholder="e.g. Brisbane">
-              <div class="form-text">For travel planning.</div>
+              <select name="city" id="projectCity" class="form-select">
+                <option value="">— None —</option>
+                {% for loc in locations %}
+                <option value="{{ loc }}">{{ loc }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">For travel planning. <a href="{{ url_for('admin.admin_settings') }}">Manage</a></div>
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Nearest Airport</label>
-              <input type="text" name="nearest_airport" id="projectAirport" class="form-control"
-                     placeholder="e.g. BNE" style="text-transform:uppercase">
-              <div class="form-text">Airport code.</div>
+              <select name="nearest_airport" id="projectAirport" class="form-select">
+                <option value="">— None —</option>
+                {% for ap in airports %}
+                <option value="{{ ap.code }}">{{ ap.code }} — {{ ap.name }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Airport code. <a href="{{ url_for('admin.admin_settings') }}">Manage</a></div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">Site Address <span class="text-muted fw-normal">(optional)</span></label>
