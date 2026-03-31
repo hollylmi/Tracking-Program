@@ -870,8 +870,9 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
                     if hm.employee:
                         housemates.add(hm.employee.name)
 
-        # Issues — urgency-based thresholds
+        # Issues (urgent, within 5 days) and warnings (heads up, not blocking)
         issues = []
+        warnings = []
         days_to_start = (start - today).days
         days_to_end = (end - today).days if not is_ongoing else 999
 
@@ -885,15 +886,13 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             issues.append({'text': 'No accommodation booked', 'days': days_to_start})
         elif needs_accom and accom_gap_days > 0 and days_to_start <= 5:
             issues.append({'text': f'Accommodation gap: {accom_gap_days} day(s) uncovered', 'days': days_to_start})
-        # Property expiry: 14 days for house/apartment, 2 days for hotel/motel
+        # Property expiry: warning at 7 days for all types
         for a in accom_bookings:
             if a.property and a.property.date_to:
                 prop_days = (a.property.date_to - today).days
-                ptype = (a.property.property_type or '').lower()
-                threshold = 2 if ptype in ('hotel', 'motel') else 14
-                if prop_days <= threshold:
-                    issues.append({'text': f'{a.property.name} ({ptype}) expires in {prop_days} day{"s" if prop_days != 1 else ""}',
-                                   'days': prop_days})
+                if prop_days <= 7:
+                    warnings.append({'text': f'{a.property.name} expires in {prop_days} day{"s" if prop_days != 1 else ""}',
+                                     'days': prop_days})
 
         # Earliest action date for sorting
         action_dates = []
@@ -946,6 +945,7 @@ def build_swing_planner(employees, look_ahead_days=90, **_ignored):
             'housemates': sorted(housemates),
             # Issues & urgency
             'issues': issues,
+            'warnings': warnings,
             'has_issues': len(issues) > 0,
             'earliest_action_days': earliest_action_days,
             'days_to_start': days_to_start,
