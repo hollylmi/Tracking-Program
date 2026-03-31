@@ -1130,6 +1130,8 @@ def accommodation_edit(accom_id):
     if is_ajax:
         return jsonify({'ok': True})
     flash('Accommodation booking updated.', 'success')
+    if request.form.get('redirect_to') == 'travel':
+        return redirect(url_for('scheduling.travel_overview'))
     return redirect(url_for('scheduling.scheduling_overview'))
 
 
@@ -1147,6 +1149,8 @@ def accommodation_delete(accom_id):
     if is_ajax:
         return jsonify({'ok': True})
     flash('Accommodation booking deleted.', 'success')
+    if request.form.get('redirect_to') == 'travel':
+        return redirect(url_for('scheduling.travel_overview'))
     return redirect(url_for('scheduling.scheduling_overview'))
 
 

@@ -330,13 +330,28 @@
                       <p class="text-muted mb-0">Local — no accommodation needed</p>
                     {% elif s.has_accommodation %}
                       {% for a in s.accom_bookings %}
-                      <div class="mb-2">
-                        <strong>{{ a.display_name }}</strong>
-                        {% if a.room_info %}<span class="text-muted">({{ a.room_info }})</span>{% endif %}
-                        <br><span class="text-muted">{{ a.date_from.strftime('%d %b') }} — {{ a.date_to.strftime('%d %b %Y') }}</span>
+                      <div class="mb-2 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start">
+                          <div>
+                            <strong>{{ a.display_name }}</strong>
+                            {% if a.room_info %}<span class="text-muted">({{ a.room_info }})</span>{% endif %}
+                            <br><span class="text-muted">{{ a.date_from.strftime('%d %b') }} — {{ a.date_to.strftime('%d %b %Y') }}</span>
+                          </div>
+                          <div class="d-flex gap-1" onclick="event.stopPropagation()">
+                            <button class="btn btn-outline-secondary py-0 px-1" style="font-size:.65rem;" type="button"
+                                    onclick="this.closest('.mb-2').querySelector('.accom-edit-form').classList.toggle('d-none')">
+                              <i class="bi bi-pencil"></i>
+                            </button>
+                            <form method="POST" action="{{ url_for('scheduling.accommodation_delete', accom_id=a.id) }}" class="d-inline"
+                                  onsubmit="return confirm('Remove accommodation booking?')">
+                              <input type="hidden" name="redirect_to" value="travel">
+                              <button class="btn btn-outline-danger py-0 px-1" style="font-size:.65rem;"><i class="bi bi-trash"></i></button>
+                            </form>
+                          </div>
+                        </div>
                         {% set days_left = (a.date_to - today).days %}
                         {% if days_left <= 5 and days_left >= 0 %}
-                          <br><span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Expiring soon — {{ days_left }} day{{ 's' if days_left != 1 }} left</span>
+                          <span class="badge bg-danger mt-1"><i class="bi bi-exclamation-triangle me-1"></i>Expiring soon — {{ days_left }} day{{ 's' if days_left != 1 }} left</span>
                         {% elif days_left > 5 and days_left <= 30 %}
                           <br><small class="text-muted">{{ days_left }} days remaining</small>
                         {% endif %}
@@ -348,6 +363,29 @@
                             <br><small class="text-warning"><i class="bi bi-clock-history me-1"></i>Property lease: {{ prop_days_left }} days left</small>
                           {% endif %}
                         {% endif %}
+                        <!-- Inline edit form -->
+                        <div class="accom-edit-form d-none mt-2 border-top pt-2" onclick="event.stopPropagation()">
+                          <form method="POST" action="{{ url_for('scheduling.accommodation_edit', accom_id=a.id) }}">
+                            <input type="hidden" name="redirect_to" value="travel">
+                            <div class="row g-1 mb-1">
+                              <div class="col-6">
+                                <label class="form-label mb-0" style="font-size:.7rem;">From</label>
+                                <input type="date" name="accom_date_from" class="form-control form-control-sm" value="{{ a.date_from.isoformat() }}">
+                              </div>
+                              <div class="col-6">
+                                <label class="form-label mb-0" style="font-size:.7rem;">To</label>
+                                <input type="date" name="accom_date_to" class="form-control form-control-sm" value="{{ a.date_to.isoformat() }}">
+                              </div>
+                            </div>
+                            <div class="mb-1">
+                              <input name="room_info" class="form-control form-control-sm" value="{{ a.room_info or '' }}" placeholder="Room / Bed">
+                            </div>
+                            <div class="mb-1">
+                              <input name="accom_notes" class="form-control form-control-sm" value="{{ a.notes or '' }}" placeholder="Notes">
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-check-lg me-1"></i>Save</button>
+                          </form>
+                        </div>
                       </div>
                       {% endfor %}
                       {% if s.housemates %}
