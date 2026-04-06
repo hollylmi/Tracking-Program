@@ -1016,29 +1016,25 @@ def machine_edit_details(machine_id):
     # Handle photo upload
     photo = request.files.get('photo')
     if photo and photo.filename:
-        import uuid
         ext = os.path.splitext(photo.filename)[1].lower()
         if ext in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
             stored_name = f"machine_{uuid.uuid4().hex}{ext}"
-            photo_dir = os.path.join(UPLOAD_FOLDER, 'machine_photos')
-            os.makedirs(photo_dir, exist_ok=True)
-            photo.save(os.path.join(photo_dir, stored_name))
+            r2_key = f'machine_photos/{stored_name}'
+            local_path = os.path.join(UPLOAD_FOLDER, 'machine_photos', stored_name)
+            storage.upload_file(photo, r2_key, local_path)
             # Remove old photo if exists
             if m.photo_filename:
-                try:
-                    os.remove(os.path.join(photo_dir, m.photo_filename))
-                except OSError:
-                    pass
+                old_key = f'machine_photos/{m.photo_filename}'
+                old_local = os.path.join(UPLOAD_FOLDER, 'machine_photos', m.photo_filename)
+                storage.delete_file(old_key, old_local)
             m.photo_filename = stored_name
             m.photo_original_name = photo.filename
 
     # Handle photo removal
     if request.form.get('remove_photo') == '1' and m.photo_filename:
-        photo_dir = os.path.join(UPLOAD_FOLDER, 'machine_photos')
-        try:
-            os.remove(os.path.join(photo_dir, m.photo_filename))
-        except OSError:
-            pass
+        r2_key = f'machine_photos/{m.photo_filename}'
+        local_path = os.path.join(UPLOAD_FOLDER, 'machine_photos', m.photo_filename)
+        storage.delete_file(r2_key, local_path)
         m.photo_filename = None
         m.photo_original_name = None
 

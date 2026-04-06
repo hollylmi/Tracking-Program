@@ -1210,6 +1210,7 @@ def update_machine(machine_id):
 @jwt_required()
 def upload_machine_photo(machine_id):
     """Upload or replace the display photo for a machine."""
+    import storage as _storage
     user, err = _get_user()
     if err:
         return err
@@ -1217,20 +1218,19 @@ def upload_machine_photo(machine_id):
     photo = request.files.get('photo')
     if not photo or not photo.filename:
         return {'error': 'No photo provided'}, 400
-    import uuid as _uuid
     ext = os.path.splitext(photo.filename)[1].lower()
     if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
         return {'error': 'Invalid file type'}, 400
-    stored_name = f"machine_{_uuid.uuid4().hex}{ext}"
-    upload_dir = os.path.join(current_app.root_path, 'uploads', 'machine_photos')
-    os.makedirs(upload_dir, exist_ok=True)
-    photo.save(os.path.join(upload_dir, stored_name))
+    stored_name = f"machine_{uuid.uuid4().hex}{ext}"
+    r2_key = f'machine_photos/{stored_name}'
+    upload_dir = os.path.join(current_app.root_path, 'instance', 'uploads', 'machine_photos')
+    local_path = os.path.join(upload_dir, stored_name)
+    _storage.upload_file(photo, r2_key, local_path)
     # Remove old photo
     if machine.photo_filename:
-        try:
-            os.remove(os.path.join(upload_dir, machine.photo_filename))
-        except OSError:
-            pass
+        old_key = f'machine_photos/{machine.photo_filename}'
+        old_local = os.path.join(upload_dir, machine.photo_filename)
+        _storage.delete_file(old_key, old_local)
     machine.photo_filename = stored_name
     machine.photo_original_name = photo.filename
     db.session.commit()
