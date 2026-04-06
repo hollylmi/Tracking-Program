@@ -150,6 +150,7 @@ export interface Machine {
   active: boolean
   group_id: number | null
   group_name: string | null
+  photo_url: string | null
 }
 
 export interface Breakdown {
@@ -193,6 +194,7 @@ export interface MachineDetail {
   service_instructions: string | null
   spare_parts_notes: string | null
   disposal_procedure: string | null
+  photo_url: string | null
   breakdowns: BreakdownDetail[]
   daily_checks: DailyCheckRecord[]
   open_checklists: ChecklistItemRef[]

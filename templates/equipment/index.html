@@ -309,8 +309,16 @@
                 data-machine-type="{{ m.machine_type or '' }}"
                 data-project-ids="{{ proj_ids | join(',') }}">
               <td class="fw-semibold">
-                <a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="text-decoration-none">{{ m.name }}</a>{% if m.plant_id %} <small class="fw-normal text-muted">({{ m.plant_id }})</small>{% endif %}
-                {% if m.description %}<br><small class="text-muted fw-normal">{{ m.description }}</small>{% endif %}
+                <div class="d-flex align-items-center gap-2">
+                  {% if m.photo_filename %}
+                  <img src="{{ url_for('equipment.serve_machine_photo', filename=m.photo_filename) }}"
+                       class="rounded" style="width:36px; height:36px; object-fit:cover;">
+                  {% endif %}
+                  <div>
+                    <a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="text-decoration-none">{{ m.name }}</a>{% if m.plant_id %} <small class="fw-normal text-muted">({{ m.plant_id }})</small>{% endif %}
+                    {% if m.description %}<br><small class="text-muted fw-normal">{{ m.description }}</small>{% endif %}
+                  </div>
+                </div>
               </td>
               <td class="text-muted">{{ m.plant_id or '—' }}</td>
               <td class="text-muted">{{ m.machine_type or '—' }}</td>

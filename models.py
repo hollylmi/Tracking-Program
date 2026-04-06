@@ -171,6 +171,8 @@ class Machine(db.Model):
     serial_number = db.Column(db.String(200), nullable=True)
     manufacturer = db.Column(db.String(200), nullable=True)
     model_number = db.Column(db.String(200), nullable=True)
+    photo_filename = db.Column(db.String(500), nullable=True)       # UUID-based stored name
+    photo_original_name = db.Column(db.String(500), nullable=True)
 
     def __repr__(self):
         return f'<Machine {self.name}>'

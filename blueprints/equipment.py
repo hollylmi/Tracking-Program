@@ -1013,6 +1013,35 @@ def machine_edit_details(machine_id):
     interval = request.form.get('inspection_interval_days', '').strip()
     m.inspection_interval_days = int(interval) if interval else None
 
+    # Handle photo upload
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        import uuid
+        ext = os.path.splitext(photo.filename)[1].lower()
+        if ext in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
+            stored_name = f"machine_{uuid.uuid4().hex}{ext}"
+            photo_dir = os.path.join(UPLOAD_FOLDER, 'machine_photos')
+            os.makedirs(photo_dir, exist_ok=True)
+            photo.save(os.path.join(photo_dir, stored_name))
+            # Remove old photo if exists
+            if m.photo_filename:
+                try:
+                    os.remove(os.path.join(photo_dir, m.photo_filename))
+                except OSError:
+                    pass
+            m.photo_filename = stored_name
+            m.photo_original_name = photo.filename
+
+    # Handle photo removal
+    if request.form.get('remove_photo') == '1' and m.photo_filename:
+        photo_dir = os.path.join(UPLOAD_FOLDER, 'machine_photos')
+        try:
+            os.remove(os.path.join(photo_dir, m.photo_filename))
+        except OSError:
+            pass
+        m.photo_filename = None
+        m.photo_original_name = None
+
     db.session.commit()
     flash(f'Details updated for "{m.name}".', 'success')
 
@@ -1050,6 +1079,15 @@ def serve_daily_check_photo(filename):
     return storage.serve_file(
         f'daily_checks/{filename}',
         os.path.join(UPLOAD_FOLDER, 'daily_checks', filename)
+    )
+
+
+@equipment_bp.route('/equipment/machine-photo/<filename>')
+@require_role('admin', 'supervisor', 'site')
+def serve_machine_photo(filename):
+    return storage.serve_file(
+        f'machine_photos/{filename}',
+        os.path.join(UPLOAD_FOLDER, 'machine_photos', filename)
     )
 
 

@@ -19,10 +19,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import DateTimePicker from '@react-native-community/datetimepicker'
+import * as ImagePicker from 'expo-image-picker'
 import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
+import { API_BASE_URL } from '../../constants/api'
 import { api } from '../../lib/api'
 import { cachedQuery } from '../../lib/cachedQuery'
+import { compressImage } from '../../lib/compressImage'
 import { useAuthStore } from '../../store/auth'
 import { useToastStore } from '../../store/toast'
 import { BreakdownDetail, MachineDetail, DailyCheckRecord } from '../../types'
@@ -505,6 +508,7 @@ export default function MachineDetailScreen() {
   const [machineOverride, setMachineOverride] = useState<Partial<MachineDetail> | null>(null)
   const [bdOverrides, setBdOverrides] = useState<Record<number, BreakdownDetail>>({})
   const [deletingBdId, setDeletingBdId] = useState<number | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   const { data: machine, isLoading, isError, refetch } = useQuery({
     queryKey: ['machine', id],
@@ -529,6 +533,35 @@ export default function MachineDetailScreen() {
     setBdOverrides({})
     setMachineOverride(null)
     setRefreshing(false)
+  }
+
+  const handleChangePhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Photo library access is needed to select a photo.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    })
+    if (result.canceled || result.assets.length === 0) return
+    setUploadingPhoto(true)
+    try {
+      const compressed = await compressImage(result.assets[0].uri)
+      const filename = `machine_${id}_${Date.now()}.jpg`
+      const res = await api.equipment.uploadMachinePhoto(Number(id), compressed, filename)
+      if (res.photo_url) {
+        setMachineOverride(prev => ({ ...prev, photo_url: res.photo_url }))
+      }
+      show('Photo updated', 'success')
+      queryClient.invalidateQueries({ queryKey: ['machine', id] })
+      queryClient.invalidateQueries({ queryKey: ['machines'] })
+    } catch {
+      show('Failed to upload photo', 'error')
+    } finally {
+      setUploadingPhoto(false)
+    }
   }
 
   if (isLoading) {
@@ -591,6 +624,50 @@ export default function MachineDetailScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
         }
       >
+        {/* Machine photo */}
+        {display.photo_url ? (
+          <View style={styles.machinePhotoWrap}>
+            <Image
+              source={{ uri: `${API_BASE_URL}${display.photo_url}` }}
+              style={styles.machinePhoto}
+              resizeMode="cover"
+            />
+            {canEdit && (
+              <TouchableOpacity
+                style={styles.changePhotoBtn}
+                onPress={handleChangePhoto}
+                disabled={uploadingPhoto}
+                activeOpacity={0.85}
+              >
+                {uploadingPhoto ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <>
+                    <Ionicons name="camera-outline" size={16} color={Colors.white} />
+                    <Text style={styles.changePhotoBtnText}>Change Photo</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : canEdit ? (
+          <TouchableOpacity
+            style={styles.addPhotoBtn}
+            onPress={handleChangePhoto}
+            disabled={uploadingPhoto}
+            activeOpacity={0.85}
+          >
+            {uploadingPhoto ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <>
+                <Ionicons name="camera-outline" size={24} color={Colors.primary} />
+                <Text style={styles.addPhotoBtnText}>Add Photo</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : null}
+
         {/* Machine info card */}
         <Card style={styles.infoCard}>
           <View style={styles.infoTopRow}>
@@ -945,6 +1022,50 @@ const styles = StyleSheet.create({
 
   scroll: { flex: 1, backgroundColor: Colors.background },
   scrollContent: { padding: Spacing.md, gap: Spacing.md, paddingBottom: Spacing.xxl },
+
+  machinePhotoWrap: {
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+    position: 'relative' as const,
+  },
+  machinePhoto: {
+    width: '100%' as any,
+    height: 200,
+    borderRadius: BorderRadius.md,
+  },
+  changePhotoBtn: {
+    position: 'absolute' as const,
+    bottom: Spacing.sm,
+    right: Spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: Spacing.xs,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs + 2,
+  },
+  changePhotoBtnText: {
+    ...Typography.caption,
+    color: Colors.white,
+    fontWeight: '600' as const,
+  },
+  addPhotoBtn: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: Spacing.xs,
+    height: 120,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderStyle: 'dashed' as const,
+    backgroundColor: Colors.surface,
+  },
+  addPhotoBtnText: {
+    ...Typography.body,
+    color: Colors.primary,
+    fontWeight: '600' as const,
+  },
 
   infoCard: {},
   infoTopRow: {

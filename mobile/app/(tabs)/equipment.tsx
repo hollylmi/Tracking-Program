@@ -22,6 +22,7 @@ import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
+import { API_BASE_URL } from '../../constants/api'
 import { cachedQuery } from '../../lib/cachedQuery'
 import { compressImage } from '../../lib/compressImage'
 import { useAuthStore } from '../../store/auth'
@@ -62,14 +63,20 @@ function MachineCard({
     ? 'warning-outline'
     : 'checkmark-circle-outline'
 
+  const photoUri = machine.photo_url ? `${API_BASE_URL}${machine.photo_url}` : null
+
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
       <Card padding="none" style={{ overflow: 'hidden' }}>
         <View style={[styles.accentBar, { backgroundColor: borderColor }]} />
         <View style={styles.row}>
-          <View style={[styles.iconWrap, { backgroundColor: iconColor + '20' }]}>
-            <Ionicons name={iconName as any} size={22} color={iconColor} />
-          </View>
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={styles.machineThumb} />
+          ) : (
+            <View style={[styles.machineThumbPlaceholder, { backgroundColor: iconColor + '20' }]}>
+              <Ionicons name="camera-outline" size={18} color={iconColor} />
+            </View>
+          )}
           <View style={styles.info}>
             <Text style={styles.name}>{machine.name}</Text>
             {machine.type ? <Text style={styles.type}>{machine.type}</Text> : null}
@@ -757,6 +764,20 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  machineThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    flexShrink: 0,
+  },
+  machineThumbPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

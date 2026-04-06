@@ -1,7 +1,7 @@
 import os
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, make_response, request, url_for
+from flask import Blueprint, current_app, make_response, request, url_for
 from sqlalchemy import or_
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -950,6 +950,7 @@ def get_equipment():
                 'active': m.active,
                 'group_id': m.group_id,
                 'group_name': m.group.name if m.group else None,
+                'photo_url': f'/equipment/machine-photo/{m.photo_filename}' if m.photo_filename else None,
             }
             for m in machines
         ]
@@ -1120,6 +1121,10 @@ def get_machine(machine_id):
                   .order_by(MachineBreakdown.incident_date.desc())
                   .all())
 
+    photo_url = None
+    if machine.photo_filename:
+        photo_url = f'/equipment/machine-photo/{machine.photo_filename}'
+
     return {
         'id': machine.id,
         'name': machine.name,
@@ -1128,6 +1133,7 @@ def get_machine(machine_id):
         'description': machine.description,
         'delay_rate': machine.delay_rate,
         'active': machine.active,
+        'photo_url': photo_url,
         'breakdowns': [
             {
                 'id': bd.id,
@@ -1196,6 +1202,40 @@ def update_machine(machine_id):
         'description': machine.description,
         'delay_rate': machine.delay_rate,
         'active': machine.active,
+        'photo_url': f'/equipment/machine-photo/{machine.photo_filename}' if machine.photo_filename else None,
+    }, 200
+
+
+@api_data_bp.route('/equipment/<int:machine_id>/photo', methods=['POST'])
+@jwt_required()
+def upload_machine_photo(machine_id):
+    """Upload or replace the display photo for a machine."""
+    user, err = _get_user()
+    if err:
+        return err
+    machine = Machine.query.get_or_404(machine_id)
+    photo = request.files.get('photo')
+    if not photo or not photo.filename:
+        return {'error': 'No photo provided'}, 400
+    import uuid as _uuid
+    ext = os.path.splitext(photo.filename)[1].lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
+        return {'error': 'Invalid file type'}, 400
+    stored_name = f"machine_{_uuid.uuid4().hex}{ext}"
+    upload_dir = os.path.join(current_app.root_path, 'uploads', 'machine_photos')
+    os.makedirs(upload_dir, exist_ok=True)
+    photo.save(os.path.join(upload_dir, stored_name))
+    # Remove old photo
+    if machine.photo_filename:
+        try:
+            os.remove(os.path.join(upload_dir, machine.photo_filename))
+        except OSError:
+            pass
+    machine.photo_filename = stored_name
+    machine.photo_original_name = photo.filename
+    db.session.commit()
+    return {
+        'photo_url': f'/equipment/machine-photo/{stored_name}',
     }, 200
 
 

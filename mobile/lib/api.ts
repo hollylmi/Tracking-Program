@@ -163,6 +163,18 @@ export const api = {
       if (!res.ok) throw new Error(`Photo upload failed: ${res.status}`)
       return res.json()
     },
+    uploadMachinePhoto: async (machineId: number, uri: string, filename: string) => {
+      const token = useAuthStore.getState().accessToken
+      const formData = new FormData()
+      formData.append('photo', { uri, name: filename, type: 'image/jpeg' } as any)
+      const res = await fetch(`${API_BASE_URL}/api/equipment/${machineId}/photo`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      if (!res.ok) throw new Error(`Photo upload failed: ${res.status}`)
+      return res.json()
+    },
 
     // Daily checks
     projectDailyChecks: (projectId: number, date?: string) =>

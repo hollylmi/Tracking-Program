@@ -3,19 +3,37 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <div>
-    <h3 class="fw-bold mb-1">{{ machine.name }}{% if machine.plant_id %} <span class="text-muted">({{ machine.plant_id }})</span>{% endif %}</h3>
-    <div class="small text-muted">
-      {% if machine.machine_type %}{{ machine.machine_type }} | {% endif %}
-      {% if machine.manufacturer %}{{ machine.manufacturer }}{% endif %}
-      {% if machine.model_number %} {{ machine.model_number }}{% endif %}
-      {% if machine.serial_number %} | S/N: {{ machine.serial_number }}{% endif %}
+  <div class="d-flex align-items-center gap-3">
+    {% if machine.photo_filename %}
+    <img src="{{ url_for('equipment.serve_machine_photo', filename=machine.photo_filename) }}"
+         alt="{{ machine.name }}" class="rounded shadow-sm" style="width:80px; height:80px; object-fit:cover; cursor:pointer;"
+         onclick="document.getElementById('photoLightbox').style.display='flex'">
+    {% else %}
+    <div class="rounded bg-light d-flex align-items-center justify-content-center text-muted" style="width:80px; height:80px;">
+      <i class="bi bi-camera fs-3"></i>
+    </div>
+    {% endif %}
+    <div>
+      <h3 class="fw-bold mb-1">{{ machine.name }}{% if machine.plant_id %} <span class="text-muted">({{ machine.plant_id }})</span>{% endif %}</h3>
+      <div class="small text-muted">
+        {% if machine.machine_type %}{{ machine.machine_type }} | {% endif %}
+        {% if machine.manufacturer %}{{ machine.manufacturer }}{% endif %}
+        {% if machine.model_number %} {{ machine.model_number }}{% endif %}
+        {% if machine.serial_number %} | S/N: {{ machine.serial_number }}{% endif %}
+      </div>
     </div>
   </div>
   <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
     <i class="bi bi-arrow-left me-1"></i>Back
   </a>
 </div>
+
+{% if machine.photo_filename %}
+<!-- Photo lightbox -->
+<div id="photoLightbox" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center; cursor:pointer;" onclick="this.style.display='none'">
+  <img src="{{ url_for('equipment.serve_machine_photo', filename=machine.photo_filename) }}" style="max-width:90vw; max-height:90vh; border-radius:8px;">
+</div>
+{% endif %}
 
 <!-- Tabs -->
 <ul class="nav nav-tabs mb-4">
@@ -35,7 +53,27 @@
         <div class="card border-0 shadow-sm">
           <div class="card-header bg-white py-2 fw-semibold small">Machine Information</div>
           <div class="card-body">
-            <form method="POST" action="{{ url_for('equipment.machine_edit_details', machine_id=machine.id) }}">
+            <form method="POST" action="{{ url_for('equipment.machine_edit_details', machine_id=machine.id) }}" enctype="multipart/form-data">
+              <!-- Display Photo -->
+              <h6 class="fw-semibold small text-muted">Display Photo</h6>
+              <div class="mb-3">
+                {% if machine.photo_filename %}
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <img src="{{ url_for('equipment.serve_machine_photo', filename=machine.photo_filename) }}"
+                       class="rounded" style="width:120px; height:80px; object-fit:cover;">
+                  <div>
+                    <small class="text-muted d-block">{{ machine.photo_original_name }}</small>
+                    <label class="form-check mt-1">
+                      <input type="checkbox" name="remove_photo" value="1" class="form-check-input">
+                      <span class="form-check-label small text-danger">Remove photo</span>
+                    </label>
+                  </div>
+                </div>
+                {% endif %}
+                <input type="file" name="photo" class="form-control form-control-sm" accept="image/*">
+                <div class="form-text">Upload a photo to identify this equipment. JPG, PNG, GIF, WebP.</div>
+              </div>
+              <hr>
               <div class="row g-3">
                 <div class="col-sm-6"><label class="form-label small fw-semibold">Serial Number</label><input type="text" name="serial_number" class="form-control form-control-sm" value="{{ machine.serial_number or '' }}"></div>
                 <div class="col-sm-6"><label class="form-label small fw-semibold">Manufacturer</label><input type="text" name="manufacturer" class="form-control form-control-sm" value="{{ machine.manufacturer or '' }}"></div>
