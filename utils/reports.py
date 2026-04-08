@@ -1065,6 +1065,50 @@ def generate_client_delay_report_pdf(project, settings):
     pdf.ln(4)
 
     # ════════════════════════════════════════════════════════════════════
+    # REPORT OVERVIEW — what this report is and what each section means
+    # ════════════════════════════════════════════════════════════════════
+    section_header('REPORT OVERVIEW')
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(50, 50, 50)
+    pdf.multi_cell(page_w, 3.5, safe(
+        'This report provides a comprehensive record of all site delays and client-directed '
+        'variation works encountered during the project. It is intended to support project '
+        'scheduling discussions and demonstrate how delay time was managed on site.'
+    ), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(1.5)
+
+    pdf.set_font('Helvetica', 'B', 7)
+    pdf.cell(page_w, 3.5, 'Sections included:', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font('Helvetica', '', 7)
+    for section_desc in [
+        '* Delay Register - A chronological log of every delay event with full descriptions, '
+        'reasons, and hours lost.',
+        '* Variation Register - A chronological log of all client-directed variation works '
+        'including crew allocated and hours spent.',
+        '* Delay Day Utilisation - Shows how delay time was offset by productive work. On days '
+        'where delays prevented primary deployment, the crew were redeployed to client variations '
+        'and alternative material deployment/welding where possible.',
+        '* All-Time Delay Summary - Delays grouped by reason showing total events, hours, and '
+        'equivalent schedule days lost.',
+        '* All-Time Variation Summary - Variations grouped by number showing total events, hours, '
+        'person-hours, and schedule impact.',
+    ]:
+        pdf.multi_cell(page_w, 3.5, safe(section_desc), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    pdf.ln(1.5)
+    pdf.set_font('Helvetica', 'I', 6.5)
+    pdf.set_text_color(100, 100, 100)
+    pdf.multi_cell(page_w, 3.5, safe(
+        'Note: This report only shows data pertinent to deployment progress and client works. '
+        'During delay periods, additional site activities such as site clean-ups, equipment '
+        'maintenance, safety inductions, and general housekeeping were also carried out but are '
+        'not included in this report. The delay day utilisation figures reflect only client '
+        'variation work and alternative material deployment/welding.'
+    ), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(4)
+
+    # ════════════════════════════════════════════════════════════════════
     # DELAY REGISTER — full descriptions using multi_cell
     # ════════════════════════════════════════════════════════════════════
     delay_entries = [e for e in all_entries
