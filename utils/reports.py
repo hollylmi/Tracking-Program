@@ -1266,7 +1266,7 @@ def generate_client_delay_report_pdf(project, settings):
             for pl in (e.production_lines or []):
                 recovery_production_hrs += pl.install_hours or 0
 
-    total_recovery_hrs = recovery_variation_hrs + recovery_other_hrs + recovery_production_hrs
+    total_recovery_hrs = recovery_variation_hrs + recovery_production_hrs
     recovery_pct = round(total_recovery_hrs / total_delay_hrs_all * 100, 1) if total_delay_hrs_all > 0 else 0
 
     # ── Delay Recovery Summary section ──
@@ -1326,8 +1326,7 @@ def generate_client_delay_report_pdf(project, settings):
 
         for label, hrs, color in [
             ('Client Variation Work', recovery_variation_hrs, (160, 100, 0)),
-            ('Alternative Material Deployment', recovery_production_hrs, (40, 120, 60)),
-            ('Other Activities (prep, inductions, etc.)', recovery_other_hrs, (80, 80, 120)),
+            ('Alternative Material Deployment / Welding', recovery_production_hrs, (40, 120, 60)),
         ]:
             if hrs > 0:
                 pct_r = round(hrs / total_delay_hrs_all * 100, 1) if total_delay_hrs_all > 0 else 0

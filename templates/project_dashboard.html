@@ -783,17 +783,13 @@
         <!-- Stacked bar -->
         {% set pct_var = (delay_recovery.recovery_variation / delay_recovery.total_delay_hrs * 100) if delay_recovery.total_delay_hrs > 0 else 0 %}
         {% set pct_prod = (delay_recovery.recovery_production / delay_recovery.total_delay_hrs * 100) if delay_recovery.total_delay_hrs > 0 else 0 %}
-        {% set pct_other = (delay_recovery.recovery_other / delay_recovery.total_delay_hrs * 100) if delay_recovery.total_delay_hrs > 0 else 0 %}
-        {% set pct_lost = 100 - pct_var - pct_prod - pct_other %}
+        {% set pct_lost = 100 - pct_var - pct_prod %}
         <div class="progress mb-2" style="height: 18px;">
           {% if pct_var > 0 %}
           <div class="progress-bar bg-warning" style="width:{{ pct_var }}%" title="Variations: {{ delay_recovery.recovery_variation }}h">{{ delay_recovery.recovery_variation }}h var</div>
           {% endif %}
           {% if pct_prod > 0 %}
-          <div class="progress-bar bg-success" style="width:{{ pct_prod }}%" title="Production: {{ delay_recovery.recovery_production }}h">{{ delay_recovery.recovery_production }}h deploy</div>
-          {% endif %}
-          {% if pct_other > 0 %}
-          <div class="progress-bar bg-info" style="width:{{ pct_other }}%" title="Other: {{ delay_recovery.recovery_other }}h">{{ delay_recovery.recovery_other }}h other</div>
+          <div class="progress-bar bg-success" style="width:{{ pct_prod }}%" title="Deployment/Welding: {{ delay_recovery.recovery_production }}h">{{ delay_recovery.recovery_production }}h deploy</div>
           {% endif %}
           {% if pct_lost > 0 %}
           <div class="progress-bar bg-danger bg-opacity-50" style="width:{{ pct_lost }}%" title="Lost: {{ delay_recovery.net_lost }}h">{{ delay_recovery.net_lost }}h lost</div>
@@ -801,9 +797,8 @@
         </div>
         <small class="text-muted">
           On {{ delay_recovery.delay_days }} day{{ 's' if delay_recovery.delay_days != 1 }} with delays, the crew recovered {{ delay_recovery.recovery_pct }}% of delay time
-          through client variations ({{ delay_recovery.recovery_variation }}h),
-          alternative deployment ({{ delay_recovery.recovery_production }}h),
-          and other activities ({{ delay_recovery.recovery_other }}h).
+          through client variations ({{ delay_recovery.recovery_variation }}h)
+          and alternative deployment/welding ({{ delay_recovery.recovery_production }}h).
         </small>
       </div>
     </div>

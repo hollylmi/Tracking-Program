@@ -376,8 +376,7 @@ def project_dashboard(project_id):
             for pl in (e.production_lines or []):
                 delay_recovery['recovery_production'] += pl.install_hours or 0
     delay_recovery['total_recovery'] = (delay_recovery['recovery_variation'] +
-                                         delay_recovery['recovery_production'] +
-                                         delay_recovery['recovery_other'])
+                                         delay_recovery['recovery_production'])
     delay_recovery['net_lost'] = max(0, delay_recovery['total_delay_hrs'] - delay_recovery['total_recovery'])
     if delay_recovery['total_delay_hrs'] > 0:
         delay_recovery['recovery_pct'] = round(
