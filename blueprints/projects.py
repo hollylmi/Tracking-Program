@@ -768,6 +768,23 @@ def project_report_pdf(project_id):
 
 
 # ---------------------------------------------------------------------------
+# Client Delay & Variation Report PDF
+# ---------------------------------------------------------------------------
+
+@projects_bp.route('/project/<int:project_id>/delay-report/pdf')
+@require_role('admin', 'supervisor')
+def project_delay_report_pdf(project_id):
+    from utils.reports import generate_client_delay_report_pdf
+    project = Project.query.get_or_404(project_id)
+    settings = load_settings()
+    pdf_bytes = generate_client_delay_report_pdf(project, settings)
+    safe_name = project.name.replace(' ', '_').replace('/', '-')
+    filename = f"Delay_Variation_Report_{safe_name}_{date.today().strftime('%Y%m%d')}.pdf"
+    return Response(pdf_bytes, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
+
+# ---------------------------------------------------------------------------
 # Weekly Progress Report PDF (client distribution)
 # ---------------------------------------------------------------------------
 

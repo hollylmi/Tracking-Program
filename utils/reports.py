@@ -1,5 +1,6 @@
 import os
 import tempfile
+from collections import defaultdict
 from datetime import date
 
 from fpdf import FPDF, XPos, YPos
@@ -996,6 +997,381 @@ def generate_weekly_report_pdf(project, week_start, week_end, entries, settings)
     pdf.set_font('Helvetica', '', 8)
     pdf.set_text_color(120, 120, 120)
     pdf.cell(0, 5, safe(f'Generated: {date.today().strftime("%d/%m/%Y")}'),
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+
+    return bytes(pdf.output())
+
+
+def generate_client_delay_report_pdf(project, settings):
+    """Generate a Client Delay & Variation Report PDF with full descriptions and schedule impact."""
+    today = date.today()
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_margins(12, 12, 12)
+
+    company = safe(settings.get('company_name', '') or 'Project Tracker')
+    hrs_per_day = project.hours_per_day or 8
+
+    all_entries = (DailyEntry.query
+                   .filter_by(project_id=project.id)
+                   .order_by(DailyEntry.entry_date)
+                   .all())
+
+    # ════════════════════════════════════════════════════════════════════
+    # PAGE 1 — Header + Delay Register
+    # ════════════════════════════════════════════════════════════════════
+    pdf.add_page()
+    page_w = pdf.w - pdf.l_margin - pdf.r_margin
+
+    def section_header(title):
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(page_w, 4, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_draw_color(135, 200, 235)
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + page_w, pdf.get_y())
+        pdf.ln(2)
+        pdf.set_text_color(0, 0, 0)
+
+    # ── Logo + Header ────────────────────────────────────────────────
+    _static = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
+    logo_path = None
+    for ext in ('png', 'jpg', 'jpeg', 'gif'):
+        _p = os.path.join(_static, f'logo.{ext}')
+        if os.path.exists(_p):
+            logo_path = _p
+            break
+
+    header_y = pdf.get_y()
+    text_x = pdf.l_margin
+    if logo_path:
+        pdf.image(logo_path, x=pdf.l_margin, y=header_y, h=14, keep_aspect_ratio=True)
+        text_x = pdf.l_margin + 38
+    pdf.set_xy(text_x, header_y)
+    tw = page_w - (38 if logo_path else 0)
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.cell(tw, 5, 'CLIENT DELAY & VARIATION REPORT', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_x(text_x)
+    pdf.set_font('Helvetica', '', 9)
+    pdf.cell(tw, 4, safe(project.name), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_x(text_x)
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(tw, 3, safe(f'Generated: {today.strftime("%d/%m/%Y")}'),
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(max(pdf.get_y(), header_y + 15))
+    pdf.set_draw_color(135, 200, 235)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + page_w, pdf.get_y())
+    pdf.ln(4)
+
+    # ════════════════════════════════════════════════════════════════════
+    # DELAY REGISTER — full descriptions using multi_cell
+    # ════════════════════════════════════════════════════════════════════
+    delay_entries = [e for e in all_entries
+                     if e.delay_lines or (e.delay_hours and e.delay_hours > 0)]
+
+    if delay_entries:
+        section_header('DELAY REGISTER')
+
+        col_date = 24
+        col_reason = 32
+        col_hours = 14
+        col_desc = page_w - col_date - col_reason - col_hours
+
+        def delay_table_header():
+            pdf.set_fill_color(50, 55, 65)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 7)
+            pdf.cell(col_date, 6, ' Date', border=1, fill=True)
+            pdf.cell(col_reason, 6, ' Reason', border=1, fill=True)
+            pdf.cell(col_hours, 6, ' Hours', border=1, fill=True, align='C')
+            pdf.cell(col_desc, 6, ' Description', border=1, fill=True)
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
+
+        delay_table_header()
+        ri = 0
+        total_delay_hrs = 0.0
+
+        for entry in delay_entries:
+            dt = entry.entry_date.strftime('%a %d/%m/%y')
+            lines = []
+            if entry.delay_lines:
+                for dl in entry.delay_lines:
+                    if (dl.hours or 0) > 0:
+                        lines.append((dl.reason or 'Delay', dl.hours, dl.description or '-'))
+            elif (entry.delay_hours or 0) > 0:
+                lines.append((entry.delay_reason or 'Delay', entry.delay_hours,
+                              entry.delay_description or '-'))
+
+            for reason, hrs, desc in lines:
+                total_delay_hrs += hrs or 0
+                # Calculate how many lines the description needs
+                desc_text = safe(desc)
+                pdf.set_font('Helvetica', '', 7)
+                desc_lines = pdf.multi_cell(col_desc, 4, desc_text, split_only=True)
+                row_h = max(5, len(desc_lines) * 4)
+
+                # Page break check
+                if pdf.get_y() + row_h > pdf.h - pdf.b_margin - 5:
+                    pdf.add_page()
+                    section_header('DELAY REGISTER (cont.)')
+                    delay_table_header()
+
+                bg = (245, 247, 252) if ri % 2 == 0 else (255, 255, 255)
+                pdf.set_fill_color(*bg)
+                y_start = pdf.get_y()
+
+                # Fixed-width cells for date, reason, hours
+                pdf.set_font('Helvetica', '', 7)
+                pdf.cell(col_date, row_h, safe(f' {dt}'), border=1, fill=True)
+                pdf.set_font('Helvetica', 'B', 7)
+                pdf.set_text_color(180, 50, 50)
+                pdf.cell(col_reason, row_h, safe(f' {reason}'), border=1, fill=True)
+                pdf.set_text_color(0, 0, 0)
+                pdf.set_font('Helvetica', '', 7)
+                pdf.cell(col_hours, row_h, safe(f'{hrs}h'), border=1, fill=True, align='C')
+
+                # Multi-line description cell
+                x_desc = pdf.get_x()
+                pdf.multi_cell(col_desc, 4, safe(f' {desc_text}'), border=1, fill=True)
+
+                # Ensure we're at the right Y position
+                pdf.set_y(y_start + row_h)
+                ri += 1
+
+        # Delay total
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(255, 220, 200)
+        pdf.cell(col_date + col_reason, 6, ' TOTAL DELAYS', border=1, fill=True)
+        pdf.cell(col_hours, 6, safe(f'{round(total_delay_hrs, 1)}h'), border=1, fill=True, align='C')
+        impact_days = round(total_delay_hrs / hrs_per_day, 1) if hrs_per_day else 0
+        pdf.cell(col_desc, 6, safe(f' Schedule impact: ~{impact_days} day(s)'), border=1, fill=True)
+        pdf.ln()
+        pdf.ln(4)
+
+    # ════════════════════════════════════════════════════════════════════
+    # VARIATION REGISTER — full descriptions
+    # ════════════════════════════════════════════════════════════════════
+    variation_entries = [e for e in all_entries if e.variation_lines]
+
+    if variation_entries:
+        if pdf.get_y() + 40 > pdf.h - pdf.b_margin:
+            pdf.add_page()
+        section_header('VARIATION REGISTER')
+
+        col_date_v = 24
+        col_var = 20
+        col_hours_v = 14
+        col_crew_v = 14
+        col_desc_v = page_w - col_date_v - col_var - col_hours_v - col_crew_v
+
+        def var_table_header():
+            pdf.set_fill_color(50, 55, 65)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 7)
+            pdf.cell(col_date_v, 6, ' Date', border=1, fill=True)
+            pdf.cell(col_var, 6, ' Variation', border=1, fill=True)
+            pdf.cell(col_hours_v, 6, ' Hours', border=1, fill=True, align='C')
+            pdf.cell(col_crew_v, 6, ' Crew', border=1, fill=True, align='C')
+            pdf.cell(col_desc_v, 6, ' Description', border=1, fill=True)
+            pdf.ln()
+            pdf.set_text_color(0, 0, 0)
+
+        var_table_header()
+        ri = 0
+        total_var_hrs = 0.0
+        total_var_p_hrs = 0.0
+
+        for entry in variation_entries:
+            dt = entry.entry_date.strftime('%a %d/%m/%y')
+            for vl in entry.variation_lines:
+                if (vl.hours or 0) <= 0:
+                    continue
+                vn = f'V{vl.variation_number}' if vl.variation_number else 'Var'
+                desc_text = safe(vl.description or '-')
+                crew = vl.num_crew or 0
+                p_hrs = vl.person_hours or 0
+                total_var_hrs += vl.hours
+                total_var_p_hrs += p_hrs
+
+                pdf.set_font('Helvetica', '', 7)
+                desc_lines = pdf.multi_cell(col_desc_v, 4, desc_text, split_only=True)
+                row_h = max(5, len(desc_lines) * 4)
+
+                if pdf.get_y() + row_h > pdf.h - pdf.b_margin - 5:
+                    pdf.add_page()
+                    section_header('VARIATION REGISTER (cont.)')
+                    var_table_header()
+
+                bg = (245, 247, 252) if ri % 2 == 0 else (255, 255, 255)
+                pdf.set_fill_color(*bg)
+                y_start = pdf.get_y()
+
+                pdf.set_font('Helvetica', '', 7)
+                pdf.cell(col_date_v, row_h, safe(f' {dt}'), border=1, fill=True)
+                pdf.set_font('Helvetica', 'B', 7)
+                pdf.set_text_color(160, 100, 0)
+                pdf.cell(col_var, row_h, safe(f' {vn}'), border=1, fill=True)
+                pdf.set_text_color(0, 0, 0)
+                pdf.set_font('Helvetica', '', 7)
+                pdf.cell(col_hours_v, row_h, safe(f'{vl.hours}h'), border=1, fill=True, align='C')
+                pdf.cell(col_crew_v, row_h, safe(str(crew)), border=1, fill=True, align='C')
+
+                x_desc = pdf.get_x()
+                pdf.multi_cell(col_desc_v, 4, safe(f' {desc_text}'), border=1, fill=True)
+                pdf.set_y(y_start + row_h)
+                ri += 1
+
+        # Variation total
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(255, 235, 200)
+        pdf.cell(col_date_v + col_var, 6, ' TOTAL VARIATIONS', border=1, fill=True)
+        pdf.cell(col_hours_v, 6, safe(f'{round(total_var_hrs, 1)}h'), border=1, fill=True, align='C')
+        pdf.cell(col_crew_v, 6, '', border=1, fill=True)
+        var_impact = round(total_var_hrs / hrs_per_day, 1) if hrs_per_day else 0
+        pdf.cell(col_desc_v, 6, safe(f' Total person-hours: {round(total_var_p_hrs, 1)} | Schedule impact: ~{var_impact} day(s)'),
+                 border=1, fill=True)
+        pdf.ln()
+        pdf.ln(4)
+
+    # ════════════════════════════════════════════════════════════════════
+    # ALL-TIME DELAY SUMMARY — grouped by reason
+    # ════════════════════════════════════════════════════════════════════
+    delay_by_reason = defaultdict(lambda: {'events': 0, 'hours': 0.0})
+    for e in all_entries:
+        if e.delay_lines:
+            for dl in e.delay_lines:
+                if (dl.hours or 0) > 0:
+                    reason = dl.reason or 'Other'
+                    delay_by_reason[reason]['events'] += 1
+                    delay_by_reason[reason]['hours'] += dl.hours
+        elif (e.delay_hours or 0) > 0:
+            reason = e.delay_reason or 'Other'
+            delay_by_reason[reason]['events'] += 1
+            delay_by_reason[reason]['hours'] += e.delay_hours
+
+    if delay_by_reason:
+        if pdf.get_y() + 30 > pdf.h - pdf.b_margin:
+            pdf.add_page()
+        section_header('ALL-TIME DELAY SUMMARY')
+
+        scw = [55, 22, 22, 30, 57]
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(220, 50, 50)
+        pdf.set_text_color(255, 255, 255)
+        for hdr, w in zip(['Reason', 'Events', 'Hours', 'Equiv. Days', '% of Total Delays'], scw):
+            pdf.cell(w, 6, safe(f' {hdr}'), border=1, fill=True)
+        pdf.ln()
+        pdf.set_text_color(0, 0, 0)
+
+        grand_delay_hrs = sum(v['hours'] for v in delay_by_reason.values())
+        ri = 0
+        for reason in sorted(delay_by_reason, key=lambda r: delay_by_reason[r]['hours'], reverse=True):
+            data = delay_by_reason[reason]
+            impact = round(data['hours'] / hrs_per_day, 1)
+            pct = round(data['hours'] / grand_delay_hrs * 100, 1) if grand_delay_hrs > 0 else 0
+            bg = (245, 247, 252) if ri % 2 == 0 else (255, 255, 255)
+            pdf.set_fill_color(*bg)
+            pdf.set_font('Helvetica', '', 8)
+            pdf.cell(scw[0], 5, safe(f' {reason}'), border=1, fill=True)
+            pdf.cell(scw[1], 5, str(data['events']), border=1, fill=True, align='R')
+            pdf.cell(scw[2], 5, safe(f"{round(data['hours'], 1)}h"), border=1, fill=True, align='R')
+            pdf.cell(scw[3], 5, safe(f"~{impact} day(s)"), border=1, fill=True, align='R')
+            # Percentage bar
+            x_bar = pdf.get_x()
+            pdf.cell(scw[4], 5, '', border=1, fill=True)
+            if pct > 0:
+                bar_w = scw[4] * min(pct, 100) / 100
+                pdf.set_fill_color(220, 80, 80)
+                pdf.rect(x_bar + 0.5, pdf.get_y() - 5 + 1.2, bar_w - 1, 2.6, 'F')
+                pdf.set_xy(x_bar, pdf.get_y() - 5)
+                pdf.set_font('Helvetica', 'B', 6)
+                pdf.cell(scw[4], 5, safe(f' {pct}%'), align='L')
+            pdf.ln()
+            ri += 1
+
+        # Grand total
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(255, 220, 200)
+        pdf.cell(scw[0], 6, ' TOTAL', border=1, fill=True)
+        pdf.cell(scw[1], 6, str(sum(v['events'] for v in delay_by_reason.values())), border=1, fill=True, align='R')
+        pdf.cell(scw[2], 6, safe(f'{round(grand_delay_hrs, 1)}h'), border=1, fill=True, align='R')
+        grand_impact = round(grand_delay_hrs / hrs_per_day, 1) if hrs_per_day else 0
+        pdf.cell(scw[3], 6, safe(f'~{grand_impact}d'), border=1, fill=True, align='R')
+        pdf.cell(scw[4], 6, '100%', border=1, fill=True, align='C')
+        pdf.ln()
+        pdf.ln(4)
+
+    # ════════════════════════════════════════════════════════════════════
+    # ALL-TIME VARIATION SUMMARY — grouped by variation number
+    # ════════════════════════════════════════════════════════════════════
+    var_by_num = defaultdict(lambda: {'events': 0, 'hours': 0.0, 'person_hours': 0.0, 'description': ''})
+    for e in all_entries:
+        for vl in (e.variation_lines or []):
+            if (vl.hours or 0) > 0:
+                vn = f'V{vl.variation_number}' if vl.variation_number else 'Unspecified'
+                var_by_num[vn]['events'] += 1
+                var_by_num[vn]['hours'] += vl.hours
+                var_by_num[vn]['person_hours'] += vl.person_hours or 0
+                if vl.description and len(vl.description) > len(var_by_num[vn]['description']):
+                    var_by_num[vn]['description'] = vl.description  # keep longest description
+
+    if var_by_num:
+        if pdf.get_y() + 30 > pdf.h - pdf.b_margin:
+            pdf.add_page()
+        section_header('ALL-TIME VARIATION SUMMARY')
+
+        vcw = [20, 60, 18, 24, 24, 40]
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(200, 130, 0)
+        pdf.set_text_color(255, 255, 255)
+        for hdr, w in zip(['Variation', 'Description', 'Events', 'Hours', 'Person-Hrs', 'Schedule Impact'], vcw):
+            pdf.cell(w, 6, safe(f' {hdr}'), border=1, fill=True)
+        pdf.ln()
+        pdf.set_text_color(0, 0, 0)
+
+        grand_var_hrs = sum(v['hours'] for v in var_by_num.values())
+        ri = 0
+        for vn in sorted(var_by_num.keys()):
+            data = var_by_num[vn]
+            impact = round(data['hours'] / hrs_per_day, 1)
+            bg = (245, 247, 252) if ri % 2 == 0 else (255, 255, 255)
+            pdf.set_fill_color(*bg)
+            pdf.set_font('Helvetica', 'B', 7)
+            pdf.cell(vcw[0], 5, safe(f' {vn}'), border=1, fill=True)
+            pdf.set_font('Helvetica', '', 7)
+            desc = safe(data['description'])
+            if len(desc) > 45:
+                desc = desc[:42] + '...'
+            pdf.cell(vcw[1], 5, safe(f' {desc}'), border=1, fill=True)
+            pdf.cell(vcw[2], 5, str(data['events']), border=1, fill=True, align='R')
+            pdf.cell(vcw[3], 5, safe(f"{round(data['hours'], 1)}h"), border=1, fill=True, align='R')
+            pdf.cell(vcw[4], 5, safe(f"{round(data['person_hours'], 1)}"), border=1, fill=True, align='R')
+            pdf.cell(vcw[5], 5, safe(f"~{impact} day(s) impact"), border=1, fill=True)
+            pdf.ln()
+            ri += 1
+
+        # Grand total
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(255, 235, 200)
+        pdf.cell(vcw[0] + vcw[1], 6, ' TOTAL', border=1, fill=True)
+        pdf.cell(vcw[2], 6, str(sum(v['events'] for v in var_by_num.values())), border=1, fill=True, align='R')
+        pdf.cell(vcw[3], 6, safe(f'{round(grand_var_hrs, 1)}h'), border=1, fill=True, align='R')
+        grand_p_hrs = sum(v['person_hours'] for v in var_by_num.values())
+        pdf.cell(vcw[4], 6, safe(f'{round(grand_p_hrs, 1)}'), border=1, fill=True, align='R')
+        grand_impact = round(grand_var_hrs / hrs_per_day, 1) if hrs_per_day else 0
+        pdf.cell(vcw[5], 6, safe(f'~{grand_impact}d total'), border=1, fill=True)
+        pdf.ln()
+        pdf.ln(4)
+
+    # ════════════════════════════════════════════════════════════════════
+    # Footer
+    # ════════════════════════════════════════════════════════════════════
+    pdf.ln(6)
+    pdf.set_font('Helvetica', '', 6)
+    pdf.set_text_color(160, 160, 160)
+    pdf.cell(0, 3, safe(f'Generated {today.strftime("%d/%m/%Y")} | {company}'),
              new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
 
     return bytes(pdf.output())

@@ -326,30 +326,16 @@ def compute_material_productivity(project_id):
         'weather_hours': round(total_weather_hours, 1),
     }
 
-    # Calculate per-material planned person-hours by sharing crew across materials
-    # on days where multiple materials are scheduled.
-    # For each planned day, find all materials on that day, split person-hours by SQM proportion.
+    # Calculate per-material planned person-hours.
+    # Each material gets a per-material rate based on its own planned SQM and its own
+    # number of scheduled days. When multiple materials share the same day, the crew
+    # works on both — but the planned RATE per material should reflect the expected
+    # output for that material alone (sqm / (days × hpd × crew)).
+    # This avoids diluting the rate when two materials happen to be on the same day.
     day_person_hours = hours_per_day * planned_crew  # person-hours available per day
-    mat_planned_person_hours = {mat: 0.0 for mat in mat_planned}
-
-    # Build day → {material: sqm} map from planned data
-    day_materials = {}
-    for p in planned:
-        mat = _norm(p.material) or 'UNKNOWN'
-        dn = p.day_number
-        if dn:
-            if dn not in day_materials:
-                day_materials[dn] = {}
-            day_materials[dn][mat] = day_materials[dn].get(mat, 0.0) + (p.planned_sqm or 0)
-
-    # Distribute person-hours proportionally per day
-    for dn, mats in day_materials.items():
-        total_day_sqm = sum(mats.values())
-        if total_day_sqm <= 0:
-            continue
-        for mat, sqm in mats.items():
-            share = sqm / total_day_sqm
-            mat_planned_person_hours[mat] = mat_planned_person_hours.get(mat, 0.0) + day_person_hours * share
+    mat_planned_person_hours = {}
+    for mat, info in mat_planned.items():
+        mat_planned_person_hours[mat] = len(info['day_numbers']) * day_person_hours
 
     materials = []
     for mat in sorted(mat_planned.keys(), key=_natural_key):
