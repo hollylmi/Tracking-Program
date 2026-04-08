@@ -1150,13 +1150,12 @@ def generate_client_delay_report_pdf(project, settings):
 
             for reason, hrs, desc in lines:
                 total_delay_hrs += hrs or 0
-                # Calculate how many lines the description needs
-                desc_text = safe(desc)
+                desc_text = safe(f' {desc}')
                 pdf.set_font('Helvetica', '', 7)
+                # Measure with the exact text we'll render
                 desc_lines = pdf.multi_cell(col_desc, 4, desc_text, split_only=True)
                 row_h = max(5, len(desc_lines) * 4)
 
-                # Page break check
                 if pdf.get_y() + row_h > pdf.h - pdf.b_margin - 5:
                     pdf.add_page()
                     section_header('DELAY REGISTER (cont.)')
@@ -1165,22 +1164,38 @@ def generate_client_delay_report_pdf(project, settings):
                 bg = (245, 247, 252) if ri % 2 == 0 else (255, 255, 255)
                 pdf.set_fill_color(*bg)
                 y_start = pdf.get_y()
+                x_start = pdf.get_x()
 
-                # Fixed-width cells for date, reason, hours
+                # Draw bordered background rects for the fixed cells
+                pdf.rect(x_start, y_start, col_date, row_h, 'D')
+                pdf.rect(x_start + col_date, y_start, col_reason, row_h, 'D')
+                pdf.rect(x_start + col_date + col_reason, y_start, col_hours, row_h, 'D')
+
+                # Fill backgrounds
+                pdf.set_fill_color(*bg)
+                pdf.rect(x_start + 0.2, y_start + 0.2, col_date - 0.4, row_h - 0.4, 'F')
+                pdf.rect(x_start + col_date + 0.2, y_start + 0.2, col_reason - 0.4, row_h - 0.4, 'F')
+                pdf.rect(x_start + col_date + col_reason + 0.2, y_start + 0.2, col_hours - 0.4, row_h - 0.4, 'F')
+
+                # Write text into fixed cells
+                pdf.set_xy(x_start, y_start)
                 pdf.set_font('Helvetica', '', 7)
-                pdf.cell(col_date, row_h, safe(f' {dt}'), border=1, fill=True)
+                pdf.cell(col_date, row_h, safe(f' {dt}'))
+                pdf.set_xy(x_start + col_date, y_start)
                 pdf.set_font('Helvetica', 'B', 7)
                 pdf.set_text_color(180, 50, 50)
-                pdf.cell(col_reason, row_h, safe(f' {reason}'), border=1, fill=True)
+                pdf.cell(col_reason, row_h, safe(f' {reason}'))
                 pdf.set_text_color(0, 0, 0)
+                pdf.set_xy(x_start + col_date + col_reason, y_start)
                 pdf.set_font('Helvetica', '', 7)
-                pdf.cell(col_hours, row_h, safe(f'{hrs}h'), border=1, fill=True, align='C')
+                pdf.cell(col_hours, row_h, safe(f'{hrs}h'), align='C')
 
-                # Multi-line description cell
-                x_desc = pdf.get_x()
-                pdf.multi_cell(col_desc, 4, safe(f' {desc_text}'), border=1, fill=True)
+                # Description multi_cell
+                pdf.set_xy(x_start + col_date + col_reason + col_hours, y_start)
+                pdf.set_fill_color(*bg)
+                pdf.set_font('Helvetica', '', 7)
+                pdf.multi_cell(col_desc, 4, desc_text, border=1, fill=True)
 
-                # Ensure we're at the right Y position
                 pdf.set_y(y_start + row_h)
                 ri += 1
 
@@ -1233,7 +1248,7 @@ def generate_client_delay_report_pdf(project, settings):
                 if (vl.hours or 0) <= 0:
                     continue
                 vn = f'V{vl.variation_number}' if vl.variation_number else 'Var'
-                desc_text = safe(vl.description or '-')
+                desc_text = safe(f' {vl.description or "-"}')
                 crew = vl.num_crew or 0
                 p_hrs = vl.person_hours or 0
                 total_var_hrs += vl.hours
@@ -1249,21 +1264,39 @@ def generate_client_delay_report_pdf(project, settings):
                     var_table_header()
 
                 bg = (245, 247, 252) if ri % 2 == 0 else (255, 255, 255)
-                pdf.set_fill_color(*bg)
                 y_start = pdf.get_y()
+                x_start = pdf.get_x()
+                fixed_w = col_date_v + col_var + col_hours_v + col_crew_v
 
+                # Draw bordered background rects for fixed cells
+                for offset, w in [(0, col_date_v), (col_date_v, col_var),
+                                   (col_date_v + col_var, col_hours_v),
+                                   (col_date_v + col_var + col_hours_v, col_crew_v)]:
+                    pdf.rect(x_start + offset, y_start, w, row_h, 'D')
+                    pdf.set_fill_color(*bg)
+                    pdf.rect(x_start + offset + 0.2, y_start + 0.2, w - 0.4, row_h - 0.4, 'F')
+
+                # Write text into fixed cells
+                pdf.set_xy(x_start, y_start)
                 pdf.set_font('Helvetica', '', 7)
-                pdf.cell(col_date_v, row_h, safe(f' {dt}'), border=1, fill=True)
+                pdf.cell(col_date_v, row_h, safe(f' {dt}'))
+                pdf.set_xy(x_start + col_date_v, y_start)
                 pdf.set_font('Helvetica', 'B', 7)
                 pdf.set_text_color(160, 100, 0)
-                pdf.cell(col_var, row_h, safe(f' {vn}'), border=1, fill=True)
+                pdf.cell(col_var, row_h, safe(f' {vn}'))
                 pdf.set_text_color(0, 0, 0)
+                pdf.set_xy(x_start + col_date_v + col_var, y_start)
                 pdf.set_font('Helvetica', '', 7)
-                pdf.cell(col_hours_v, row_h, safe(f'{vl.hours}h'), border=1, fill=True, align='C')
-                pdf.cell(col_crew_v, row_h, safe(str(crew)), border=1, fill=True, align='C')
+                pdf.cell(col_hours_v, row_h, safe(f'{vl.hours}h'), align='C')
+                pdf.set_xy(x_start + col_date_v + col_var + col_hours_v, y_start)
+                pdf.cell(col_crew_v, row_h, safe(str(crew)), align='C')
 
-                x_desc = pdf.get_x()
-                pdf.multi_cell(col_desc_v, 4, safe(f' {desc_text}'), border=1, fill=True)
+                # Description multi_cell
+                pdf.set_xy(x_start + fixed_w, y_start)
+                pdf.set_fill_color(*bg)
+                pdf.set_font('Helvetica', '', 7)
+                pdf.multi_cell(col_desc_v, 4, desc_text, border=1, fill=True)
+
                 pdf.set_y(y_start + row_h)
                 ri += 1
 
