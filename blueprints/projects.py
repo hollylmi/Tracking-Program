@@ -356,6 +356,37 @@ def project_dashboard(project_id):
     assignable_hired = [hm for hm in hired_machines_list if hm.id not in assigned_hired_ids]
     machine_groups = MachineGroup.query.order_by(MachineGroup.name).all()
 
+    # Delay recovery: on days with delays, how much productive work still happened
+    delay_recovery = {'total_delay_hrs': 0, 'recovery_variation': 0, 'recovery_production': 0,
+                      'recovery_other': 0, 'total_recovery': 0, 'recovery_pct': 0, 'net_lost': 0, 'delay_days': 0}
+    for e in all_entries_for_crew:
+        has_delay = False
+        if e.delay_lines:
+            for dl in e.delay_lines:
+                if (dl.hours or 0) > 0:
+                    has_delay = True
+                    delay_recovery['total_delay_hrs'] += dl.hours
+        elif (e.delay_hours or 0) > 0:
+            has_delay = True
+            delay_recovery['total_delay_hrs'] += e.delay_hours
+        if has_delay:
+            delay_recovery['delay_days'] += 1
+            delay_recovery['recovery_variation'] += e.total_variation_hours or 0
+            delay_recovery['recovery_other'] += e.total_other_activity_hours or 0
+            for pl in (e.production_lines or []):
+                delay_recovery['recovery_production'] += pl.install_hours or 0
+    delay_recovery['total_recovery'] = (delay_recovery['recovery_variation'] +
+                                         delay_recovery['recovery_production'] +
+                                         delay_recovery['recovery_other'])
+    delay_recovery['net_lost'] = max(0, delay_recovery['total_delay_hrs'] - delay_recovery['total_recovery'])
+    if delay_recovery['total_delay_hrs'] > 0:
+        delay_recovery['recovery_pct'] = round(
+            delay_recovery['total_recovery'] / delay_recovery['total_delay_hrs'] * 100, 1)
+    # Round all values
+    for k in ('total_delay_hrs', 'recovery_variation', 'recovery_production',
+              'recovery_other', 'total_recovery', 'net_lost'):
+        delay_recovery[k] = round(delay_recovery[k], 1)
+
     return render_template('project_dashboard.html',
                            project=project, progress=progress,
                            gantt_data=gantt_data,
@@ -381,6 +412,7 @@ def project_dashboard(project_id):
                            assignable_hired=assignable_hired,
                            machine_groups=machine_groups,
                            state_holidays=state_holidays,
+                           delay_recovery=delay_recovery,
                            today=date.today(),
                            setting_airports=get_airports(),
                            setting_locations=get_locations())

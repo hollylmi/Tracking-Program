@@ -1236,6 +1236,109 @@ def generate_client_delay_report_pdf(project, settings):
         pdf.ln(4)
 
     # ════════════════════════════════════════════════════════════════════
+    # DELAY RECOVERY — what productive work happened on delay days
+    # ════════════════════════════════════════════════════════════════════
+    # A "delay day" = any entry with delay lines/hours > 0
+    # Recovery = variation hours + other activity hours on those same days
+    delay_day_dates = set()
+    total_delay_hrs_all = 0.0
+    recovery_variation_hrs = 0.0
+    recovery_other_hrs = 0.0
+    recovery_production_hrs = 0.0
+
+    for e in all_entries:
+        has_delay = False
+        if e.delay_lines:
+            for dl in e.delay_lines:
+                if (dl.hours or 0) > 0:
+                    has_delay = True
+                    total_delay_hrs_all += dl.hours
+        elif (e.delay_hours or 0) > 0:
+            has_delay = True
+            total_delay_hrs_all += e.delay_hours
+
+        if has_delay:
+            delay_day_dates.add(e.entry_date)
+            # Count productive work on this delay day
+            recovery_variation_hrs += e.total_variation_hours or 0
+            recovery_other_hrs += e.total_other_activity_hours or 0
+            # Production lines on delay days (e.g. deploying geotextile during rain)
+            for pl in (e.production_lines or []):
+                recovery_production_hrs += pl.install_hours or 0
+
+    total_recovery_hrs = recovery_variation_hrs + recovery_other_hrs + recovery_production_hrs
+    recovery_pct = round(total_recovery_hrs / total_delay_hrs_all * 100, 1) if total_delay_hrs_all > 0 else 0
+
+    # ── Delay Recovery Summary section ──
+    if delay_day_dates:
+        if pdf.get_y() + 35 > pdf.h - pdf.b_margin:
+            pdf.add_page()
+        section_header('DELAY DAY UTILISATION')
+
+        pdf.set_font('Helvetica', '', 7)
+        pdf.set_text_color(80, 80, 80)
+        pdf.multi_cell(page_w, 3.5, safe(
+            'On days where site delays occurred, the crew were redeployed where possible '
+            'to maximise productive time. The table below summarises how delay hours were '
+            'offset by productive work including client variations, alternative material '
+            'deployment, and other site activities.'), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(2)
+        pdf.set_text_color(0, 0, 0)
+
+        # Summary boxes
+        box_w = page_w / 4
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.set_fill_color(255, 220, 220)
+        pdf.cell(box_w, 5, ' Total Delay Hours', border=1, fill=True)
+        pdf.set_fill_color(220, 245, 220)
+        pdf.cell(box_w, 5, ' Recovered Hours', border=1, fill=True)
+        pdf.set_fill_color(230, 240, 255)
+        pdf.cell(box_w, 5, ' Net Lost Hours', border=1, fill=True)
+        pdf.set_fill_color(245, 245, 245)
+        pdf.cell(box_w, 5, ' Recovery Rate', border=1, fill=True)
+        pdf.ln()
+
+        net_lost = max(0, total_delay_hrs_all - total_recovery_hrs)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.set_fill_color(255, 235, 235)
+        pdf.cell(box_w, 8, safe(f' {round(total_delay_hrs_all, 1)}h'), border=1, fill=True)
+        pdf.set_fill_color(235, 250, 235)
+        pdf.cell(box_w, 8, safe(f' {round(total_recovery_hrs, 1)}h'), border=1, fill=True)
+        pdf.set_fill_color(240, 245, 255)
+        pdf.cell(box_w, 8, safe(f' {round(net_lost, 1)}h'), border=1, fill=True)
+        pdf.set_fill_color(250, 250, 250)
+        pdf.cell(box_w, 8, safe(f' {recovery_pct}%'), border=1, fill=True)
+        pdf.ln()
+        pdf.ln(2)
+
+        # Breakdown of recovery
+        pdf.set_font('Helvetica', '', 7)
+        rcw = [page_w * 0.5, page_w * 0.25, page_w * 0.25]
+        pdf.set_fill_color(50, 55, 65)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(rcw[0], 5, ' Activity on Delay Days', border=1, fill=True)
+        pdf.cell(rcw[1], 5, ' Hours', border=1, fill=True, align='C')
+        pdf.cell(rcw[2], 5, ' % of Delay Time', border=1, fill=True, align='C')
+        pdf.ln()
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font('Helvetica', '', 7)
+
+        for label, hrs, color in [
+            ('Client Variation Work', recovery_variation_hrs, (160, 100, 0)),
+            ('Alternative Material Deployment', recovery_production_hrs, (40, 120, 60)),
+            ('Other Activities (prep, inductions, etc.)', recovery_other_hrs, (80, 80, 120)),
+        ]:
+            if hrs > 0:
+                pct_r = round(hrs / total_delay_hrs_all * 100, 1) if total_delay_hrs_all > 0 else 0
+                pdf.cell(rcw[0], 5, safe(f' {label}'), border=1)
+                pdf.cell(rcw[1], 5, safe(f'{round(hrs, 1)}h'), border=1, align='C')
+                pdf.cell(rcw[2], 5, safe(f'{pct_r}%'), border=1, align='C')
+                pdf.ln()
+
+        pdf.ln(4)
+
+    # ════════════════════════════════════════════════════════════════════
     # ALL-TIME DELAY SUMMARY — grouped by reason
     # ════════════════════════════════════════════════════════════════════
     delay_by_reason = defaultdict(lambda: {'events': 0, 'hours': 0.0})
@@ -1256,11 +1359,11 @@ def generate_client_delay_report_pdf(project, settings):
             pdf.add_page()
         section_header('ALL-TIME DELAY SUMMARY')
 
-        scw = [55, 22, 22, 30, 57]
-        pdf.set_font('Helvetica', 'B', 8)
+        scw = [65, 22, 22, 30, 47]
+        pdf.set_font('Helvetica', 'B', 7)
         pdf.set_fill_color(220, 50, 50)
         pdf.set_text_color(255, 255, 255)
-        for hdr, w in zip(['Reason', 'Events', 'Hours', 'Equiv. Days', '% of Total Delays'], scw):
+        for hdr, w in zip(['Reason', 'Events', 'Hours', 'Equiv. Days', '% of Total'], scw):
             pdf.cell(w, 6, safe(f' {hdr}'), border=1, fill=True)
         pdf.ln()
         pdf.set_text_color(0, 0, 0)
@@ -1273,21 +1376,12 @@ def generate_client_delay_report_pdf(project, settings):
             pct = round(data['hours'] / grand_delay_hrs * 100, 1) if grand_delay_hrs > 0 else 0
             bg = (245, 247, 252) if ri % 2 == 0 else (255, 255, 255)
             pdf.set_fill_color(*bg)
-            pdf.set_font('Helvetica', '', 8)
+            pdf.set_font('Helvetica', '', 7)
             pdf.cell(scw[0], 5, safe(f' {reason}'), border=1, fill=True)
             pdf.cell(scw[1], 5, str(data['events']), border=1, fill=True, align='R')
             pdf.cell(scw[2], 5, safe(f"{round(data['hours'], 1)}h"), border=1, fill=True, align='R')
             pdf.cell(scw[3], 5, safe(f"~{impact} day(s)"), border=1, fill=True, align='R')
-            # Percentage bar
-            x_bar = pdf.get_x()
-            pdf.cell(scw[4], 5, '', border=1, fill=True)
-            if pct > 0:
-                bar_w = scw[4] * min(pct, 100) / 100
-                pdf.set_fill_color(220, 80, 80)
-                pdf.rect(x_bar + 0.5, pdf.get_y() - 5 + 1.2, bar_w - 1, 2.6, 'F')
-                pdf.set_xy(x_bar, pdf.get_y() - 5)
-                pdf.set_font('Helvetica', 'B', 6)
-                pdf.cell(scw[4], 5, safe(f' {pct}%'), align='L')
+            pdf.cell(scw[4], 5, safe(f' {pct}%'), border=1, fill=True)
             pdf.ln()
             ri += 1
 
