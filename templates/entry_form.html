@@ -124,7 +124,20 @@
                       <input type="hidden" name="line_emp_ids[]" class="prod-emp-hidden" value="{{ pl.employee_ids_json or '[]' }}">
                       <div>
                         <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew on this line</div>
-                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light crew-list-container"></div>
+                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-light crew-list-container">
+                          {# Server-side render crew checkboxes for edit — JS will refresh these #}
+                          {% set line_emp_ids = (pl.employee_ids_json or '[]')|tojson %}
+                          {% for emp in employees %}
+                          {% set emp_selected = emp.id in (pl.crew_employee_ids or []) %}
+                          {% if emp_selected or emp.id in selected_employee_ids %}
+                          <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+                            <input type="checkbox" class="form-check-input mt-0 crew-cb" value="{{ emp.id }}"
+                              {{ 'checked' if emp_selected }} onchange="onCrewCbChange(this)">
+                            <span class="flex-grow-1">{{ emp.name }}{% if emp.role %} — {{ emp.role }}{% endif %}</span>
+                          </label>
+                          {% endif %}
+                          {% endfor %}
+                        </div>
                       </div>
                     </div>
                     {% endfor %}
@@ -235,7 +248,19 @@
                       <div class="d-flex gap-2">
                         <div class="flex-grow-1">
                           <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Bill People</div>
-                          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white crew-list-container"></div>
+                          <div style="max-height:100px;overflow-y:auto;" class="border rounded bg-white crew-list-container">
+                            {# Server-side render crew for variation edit #}
+                            {% for emp in employees %}
+                            {% set emp_selected = emp.id in (vl.billed_employee_ids or []) %}
+                            {% if emp_selected or emp.id in selected_employee_ids %}
+                            <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+                              <input type="checkbox" class="form-check-input mt-0 crew-cb" value="{{ emp.id }}"
+                                {{ 'checked' if emp_selected }} onchange="onCrewCbChange(this)">
+                              <span class="flex-grow-1">{{ emp.name }}{% if emp.role %} — {{ emp.role }}{% endif %}</span>
+                            </label>
+                            {% endif %}
+                            {% endfor %}
+                          </div>
                         </div>
                         <div class="flex-grow-1">
                           <div class="small text-muted fw-semibold mb-1"><i class="bi bi-tools me-1"></i>Bill Equipment</div>
@@ -378,7 +403,19 @@
                       <input type="hidden" name="other_emp_ids[]" class="other-emp-hidden" value="{{ ol.employee_ids_json or '[]' }}">
                       <div>
                         <div class="small text-muted fw-semibold mb-1"><i class="bi bi-people me-1"></i>Crew</div>
-                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-white crew-list-container"></div>
+                        <div style="max-height:80px;overflow-y:auto;" class="border rounded bg-white crew-list-container">
+                          {# Server-side render crew for other activity edit #}
+                          {% for emp in employees %}
+                          {% set emp_selected = emp.id in (ol.crew_employee_ids or []) %}
+                          {% if emp_selected or emp.id in selected_employee_ids %}
+                          <label class="d-flex align-items-center gap-1 px-2 py-1 border-bottom" style="cursor:pointer;font-size:.78rem;">
+                            <input type="checkbox" class="form-check-input mt-0 crew-cb" value="{{ emp.id }}"
+                              {{ 'checked' if emp_selected }} onchange="onCrewCbChange(this)">
+                            <span class="flex-grow-1">{{ emp.name }}{% if emp.role %} — {{ emp.role }}{% endif %}</span>
+                          </label>
+                          {% endif %}
+                          {% endfor %}
+                        </div>
                       </div>
                     </div>
                     {% endfor %}
