@@ -1074,6 +1074,10 @@
   filterMachinesByProject();
   filterEmployeesByProject();
 
+  // Ensure crew lists are populated after async employee filtering completes
+  // (filterEmployeesByProject is async and may hide employees after refreshAllCrewLists ran)
+  setTimeout(() => { refreshAllCrewLists(); }, 500);
+
   // Initial load — populate lot/material datalists
   fetchPlannedOptions('');
 
