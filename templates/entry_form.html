@@ -1218,25 +1218,28 @@
 
       let selectedIds = [];
       try { selectedIds = JSON.parse(hidden.value); } catch(e) {}
+      // Keep previously assigned people even if not on-site (they'll show as assigned)
 
-      // Remove anyone no longer on site from selected
-      selectedIds = selectedIds.filter(id => onSite.includes(id));
-      hidden.value = JSON.stringify(selectedIds);
-
-      // Build checkboxes for on-site employees only
+      // Build checkboxes — show on-site employees, plus any previously assigned
+      // employees (so they stay visible even if not ticked in the main crew panel)
       container.innerHTML = '';
-      if (onSite.length === 0) {
-        container.innerHTML = '<div class="px-2 py-1 text-muted small fst-italic">Select crew members on the right first</div>';
+
+      // Merge: on-site employees + anyone already assigned to this line
+      const showIds = [...new Set([...onSite, ...selectedIds])];
+      if (showIds.length === 0) {
+        container.innerHTML = '<div class="px-2 py-1 text-muted small fst-italic">Select crew members ' +
+          (window.innerWidth >= 992 ? 'on the right' : 'below') + ' first</div>';
         return;
       }
 
-      onSite.forEach(empId => {
+      showIds.forEach(empId => {
         const emp = VAR_EMP_OPTIONS.find(e => e.id === empId);
         if (!emp) return;
         // Skip project managers — they don't count towards person-hours
         if (isNonDeployRole(emp)) return;
 
         const isChecked = selectedIds.includes(empId);
+        const isOnSite = onSite.includes(empId);
 
         // Check other assignments (excluding this card)
         const otherAssignments = (assignments[empId] || []).filter(a => a.card !== card);
@@ -1246,15 +1249,18 @@
         const overAllocated = totalHrs > hpd;
 
         let badge = '';
+        if (!isOnSite) {
+          badge += ' <span class="badge bg-warning-subtle text-warning border ms-1" style="font-size:.55rem;">not on crew list</span>';
+        }
         if (otherAssignments.length > 0) {
           const summary = otherAssignments.map(a => `${a.label} ${a.hours}h`).join(', ');
           const color = overAllocated ? 'bg-danger-subtle text-danger' : 'bg-secondary-subtle text-secondary';
-          badge = ` <span class="badge ${color} border ms-auto" style="font-size:.6rem;" title="${summary}">${totalOtherHrs}h elsewhere</span>`;
+          badge += ` <span class="badge ${color} border ms-auto" style="font-size:.6rem;" title="${summary}">${totalOtherHrs}h elsewhere</span>`;
         }
 
         const label = document.createElement('label');
         label.className = 'd-flex align-items-center gap-1 px-2 py-1 border-bottom';
-        label.style.cssText = 'cursor:pointer;font-size:.78rem;';
+        label.style.cssText = 'cursor:pointer;font-size:.78rem;' + (!isOnSite ? 'opacity:0.7;' : '');
         label.innerHTML = `<input type="checkbox" class="form-check-input mt-0 crew-cb" value="${empId}"
           ${isChecked ? 'checked' : ''}
           onchange="onCrewCbChange(this)">
