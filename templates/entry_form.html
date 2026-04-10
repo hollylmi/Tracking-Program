@@ -720,6 +720,18 @@
     {% endfor %}
   };
 
+  // NON_DEPLOY_ROLES: role groups that don't deploy material (excluded from crew lists)
+  const NON_DEPLOY_ROLES = ['project manager', 'pm'];
+  const VAR_EMP_OPTIONS = [
+    {% for emp in employees %}{ id: {{ emp.id }}, label: '{{ emp.name|replace("'", "\\'") }}{% if emp.role %} — {{ emp.role }}{% endif %}', roles: [{% for r in emp.roles %}'{{ r.group_name|default(r.name, true)|lower|replace("'", "\\'") }}',{% endfor %}] },{% endfor %}
+  ];
+  const VAR_GROUPS = [
+    {% for g in machine_groups %}{% set gm = g.machines | selectattr('active') | list %}{% if gm %}{ id: {{ g.id }}, name: '{{ g.name|replace("'", "\\'") }}', rate: {{ g.delay_rate or 'null' }}, machine_ids: [{{ gm | map(attribute='id') | join(',') }}] },{% endif %}{% endfor %}
+  ];
+  const VAR_UNGROUPED_MACHINES = [
+    {% for machine in machines %}{% if not machine.group %}{ id: {{ machine.id }}, label: '{{ machine.name|replace("'", "\\'") }}{% if machine.plant_id %} ({{ machine.plant_id }}){% endif %}' },{% endif %}{% endfor %}
+  ];
+
   // Project hours per day — for person-hours calculation
   const PROJECT_HOURS_PER_DAY = {
     {% for project in projects %}
@@ -817,18 +829,6 @@
   function updateTotalSqm() { updateTotals(); }
 
   // ── Variation lines ───────────────────────────────────────────────────────
-  // Employee, machine, and group options for variation billing
-  // NON_DEPLOY_ROLES: role groups that don't deploy material (excluded from production lines)
-  const NON_DEPLOY_ROLES = ['project manager', 'pm'];
-  const VAR_EMP_OPTIONS = [
-    {% for emp in employees %}{ id: {{ emp.id }}, label: '{{ emp.name|replace("'", "\\'") }}{% if emp.role %} — {{ emp.role }}{% endif %}', roles: [{% for r in emp.roles %}'{{ r.group_name|default(r.name, true)|lower|replace("'", "\\'") }}',{% endfor %}] },{% endfor %}
-  ];
-  const VAR_GROUPS = [
-    {% for g in machine_groups %}{% set gm = g.machines | selectattr('active') | list %}{% if gm %}{ id: {{ g.id }}, name: '{{ g.name|replace("'", "\\'") }}', rate: {{ g.delay_rate or 'null' }}, machine_ids: [{{ gm | map(attribute='id') | join(',') }}] },{% endif %}{% endfor %}
-  ];
-  const VAR_UNGROUPED_MACHINES = [
-    {% for machine in machines %}{% if not machine.group %}{ id: {{ machine.id }}, label: '{{ machine.name|replace("'", "\\'") }}{% if machine.plant_id %} ({{ machine.plant_id }}){% endif %}' },{% endif %}{% endfor %}
-  ];
 
   function addVariationLine() {
     const container = document.getElementById('variationLines');
