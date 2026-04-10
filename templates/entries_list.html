@@ -71,7 +71,7 @@
         <tbody>
           {% for entry in entries %}
           <tr style="cursor:pointer;" onclick="window.location='{{ url_for('entries.view_entry', entry_id=entry.id) }}'">
-            <td class="fw-semibold text-nowrap">{{ entry.entry_date.strftime('%m/%d/%Y') }}</td>
+            <td class="fw-semibold text-nowrap">{{ entry.entry_date.strftime('%d/%m/%Y') }}</td>
             <td class="text-muted text-nowrap">{{ entry.day_name }}</td>
             <td>
               <span class="badge bg-dark text-white fw-semibold">{{ entry.project.name }}</span>
