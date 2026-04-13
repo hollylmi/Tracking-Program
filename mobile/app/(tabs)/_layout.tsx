@@ -6,7 +6,6 @@ import { Colors, Spacing } from '../../constants/theme'
 import { useAuthStore } from '../../store/auth'
 import { registerForPushNotifications } from '../../lib/notifications'
 import { OfflineBanner } from '../../components/ui/OfflineBanner'
-import ProjectSwitcher from '../../components/ui/ProjectSwitcher'
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 
@@ -38,9 +37,6 @@ export default function TabsLayout() {
   return (
     <View style={{ flex: 1 }}>
     <OfflineBanner />
-    <View style={layoutStyles.switcherBar}>
-      <ProjectSwitcher variant="pill" />
-    </View>
     <Tabs
       initialRouteName={isAdmin ? 'overview' : 'index'}
       screenOptions={{
@@ -92,13 +88,3 @@ export default function TabsLayout() {
   )
 }
 
-const layoutStyles = StyleSheet.create({
-  switcherBar: {
-    backgroundColor: Colors.dark,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,183,197,0.1)',
-  },
-})
