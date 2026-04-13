@@ -125,7 +125,7 @@
           </td>
           <td class="fw-semibold">{{ dc.hours_reading if dc.hours_reading else '—' }}</td>
           <td class="small">{{ dc.checked_by_user.display_name if dc.checked_by_user else '—' }}</td>
-          <td class="small">{{ dc.created_at.strftime('%H:%M') if dc.created_at else '—' }}</td>
+          <td class="small">{{ (dc.checked_at or dc.created_at)|aest if (dc.checked_at or dc.created_at) else '—' }}</td>
           <td class="small" style="max-width: 250px;">{{ dc.notes or '—' }}</td>
           <td>
             {% if dc.photo_filename %}

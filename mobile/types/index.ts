@@ -208,6 +208,7 @@ export interface DailyCheckRecord {
   hours_reading: number | null
   notes: string | null
   checked_by: string | null
+  checked_at: string | null
   photo_url: string | null
 }
 
@@ -352,6 +353,7 @@ export interface ScheduledCheckMachine {
     hours_reading: number | null
     notes: string | null
     checked_by: string | null
+    checked_at: string | null
     photo_url: string | null
   } | null
 }

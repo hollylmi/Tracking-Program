@@ -2956,6 +2956,7 @@ def equipment_project_daily_checks(project_id):
                 'hours_reading': dc.hours_reading,
                 'notes': dc.notes,
                 'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'checked_at': (dc.checked_at.isoformat() + 'Z') if dc.checked_at else (dc.created_at.isoformat() + 'Z') if dc.created_at else None,
                 'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
             } if dc else None,
         })
@@ -2977,6 +2978,7 @@ def equipment_project_daily_checks(project_id):
                 'hours_reading': dc.hours_reading,
                 'notes': dc.notes,
                 'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'checked_at': (dc.checked_at.isoformat() + 'Z') if dc.checked_at else (dc.created_at.isoformat() + 'Z') if dc.created_at else None,
                 'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
             } if dc else None,
         })
@@ -3713,6 +3715,7 @@ def scheduled_check_detail(check_id):
                 'hours_reading': dc.hours_reading,
                 'notes': dc.notes,
                 'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'checked_at': (dc.checked_at.isoformat() + 'Z') if dc.checked_at else (dc.created_at.isoformat() + 'Z') if dc.created_at else None,
                 'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
             } if dc else None,
         })

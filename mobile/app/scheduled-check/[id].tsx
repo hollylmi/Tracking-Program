@@ -44,6 +44,9 @@ function MachineCheckCard({ machine, onCheck }: { machine: ScheduledCheckMachine
           {checked && machine.check?.hours_reading != null ? (
             <Text style={s.type}>{machine.check.hours_reading} hrs</Text>
           ) : null}
+          {checked && machine.check?.checked_by ? (
+            <Text style={s.type}>{machine.check.checked_by}{machine.check.checked_at ? ' — ' + new Date(machine.check.checked_at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }) : ''}</Text>
+          ) : null}
         </View>
         <View style={s.right}>
           {checked && condOpt ? (

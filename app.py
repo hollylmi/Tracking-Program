@@ -128,6 +128,24 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+# Jinja filter: convert UTC datetime to Australian Eastern time for display
+@app.template_filter('aest')
+def to_aest(dt):
+    """Convert a naive UTC datetime to AEST/AEDT string."""
+    if dt is None:
+        return ''
+    from datetime import timezone, timedelta
+    try:
+        # Python 3.9+ zoneinfo
+        from zoneinfo import ZoneInfo
+        utc_dt = dt.replace(tzinfo=timezone.utc)
+        local_dt = utc_dt.astimezone(ZoneInfo('Australia/Sydney'))
+    except ImportError:
+        # Fallback: AEST = UTC+10 (ignores DST)
+        local_dt = dt + timedelta(hours=10)
+    return local_dt.strftime('%d/%m/%Y %I:%M %p')
+
+
 with app.app_context():
     db.create_all()
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
