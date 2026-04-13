@@ -1264,6 +1264,13 @@
         return;
       }
 
+      // "Select All / Clear" toolbar
+      const toolbar = document.createElement('div');
+      toolbar.className = 'd-flex gap-1 px-2 py-1 border-bottom bg-white';
+      toolbar.innerHTML = `<button type="button" class="btn btn-outline-secondary py-0 px-2" style="font-size:.65rem;" onclick="selectAllCrewOnLine(this)">Select All</button>
+        <button type="button" class="btn btn-outline-secondary py-0 px-2" style="font-size:.65rem;" onclick="clearCrewOnLine(this)">Clear</button>`;
+      container.appendChild(toolbar);
+
       unique.forEach(emp => {
         const empId = emp.id;
         const isChecked = selectedIds.includes(empId);
@@ -1302,6 +1309,31 @@
     const hidden = card.querySelector('.prod-emp-hidden, .var-emp-hidden, .other-emp-hidden');
     const ids = Array.from(card.querySelectorAll('.crew-cb:checked')).map(c => parseInt(c.value));
     hidden.value = JSON.stringify(ids);
+    refreshAllCrewLists();
+  }
+
+  function selectAllCrewOnLine(btn) {
+    const card = btn.closest('.prod-card, .var-card, .other-card');
+    if (!card) return;
+    const onSite = getOnSiteEmployeeIds();
+    // Check all on-site (non-PM) employees on this line
+    card.querySelectorAll('.crew-cb').forEach(cb => {
+      const empId = parseInt(cb.value);
+      if (onSite.includes(empId)) cb.checked = true;
+    });
+    // Sync hidden field
+    const hidden = card.querySelector('.prod-emp-hidden, .var-emp-hidden, .other-emp-hidden');
+    const ids = Array.from(card.querySelectorAll('.crew-cb:checked')).map(c => parseInt(c.value));
+    hidden.value = JSON.stringify(ids);
+    refreshAllCrewLists();
+  }
+
+  function clearCrewOnLine(btn) {
+    const card = btn.closest('.prod-card, .var-card, .other-card');
+    if (!card) return;
+    card.querySelectorAll('.crew-cb').forEach(cb => cb.checked = false);
+    const hidden = card.querySelector('.prod-emp-hidden, .var-emp-hidden, .other-emp-hidden');
+    hidden.value = '[]';
     refreshAllCrewLists();
   }
 
