@@ -689,10 +689,17 @@ def admin_projects():
                 flash('Project deleted.', 'info')
         return redirect(url_for('admin.admin_projects'))
 
-    projects = Project.query.order_by(Project.name).all()
+    show_inactive = request.args.get('show_inactive', '0') == '1'
+    if show_inactive:
+        projects = Project.query.order_by(Project.active.desc(), Project.name).all()
+    else:
+        projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    inactive_count = Project.query.filter_by(active=False).count()
+
     from utils.settings import get_airports, get_locations
     return render_template('admin/projects.html', projects=projects,
-                           airports=get_airports(), locations=get_locations())
+                           airports=get_airports(), locations=get_locations(),
+                           show_inactive=show_inactive, inactive_count=inactive_count)
 
 
 @admin_bp.route('/admin/users/<int:user_id>/projects', methods=['GET', 'POST'])
