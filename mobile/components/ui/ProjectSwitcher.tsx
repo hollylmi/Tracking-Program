@@ -4,9 +4,10 @@ import {
   Text,
   TouchableOpacity,
   Modal,
-  Pressable,
+  TouchableWithoutFeedback,
   ActivityIndicator,
   StyleSheet,
+  ScrollView,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useQueryClient } from '@tanstack/react-query'
@@ -16,14 +17,6 @@ import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme'
 
-/**
- * Compact project-switcher button + modal.
- * Drop it into any screen header or layout to let users change the active project.
- *
- * `variant`:
- *   - "pill"   (default) — shows project name in a tappable pill (good for tab headers)
- *   - "header" — larger touch target for use inside ScreenHeader's `right` slot
- */
 export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill' | 'header' }) {
   const user = useAuthStore((s) => s.user)
   const { activeProject, setActiveProject } = useProjectStore()
@@ -39,7 +32,6 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
     setOpen(false)
     setSwitching(true)
 
-    // First set a minimal project immediately so the UI updates
     const p = user?.accessible_projects?.find((x) => x.id === projectId)
     if (p) {
       setActiveProject({
@@ -55,13 +47,12 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
       })
     }
 
-    // Then try to fetch full project details in the background
     try {
       const { data } = await api.projects.detail(projectId)
       try { saveReferenceData(`project_${projectId}`, data) } catch {}
       setActiveProject(data)
     } catch (e) {
-      console.warn('Failed to fetch project details, using cached/minimal:', e)
+      console.warn('Failed to fetch project details:', e)
       const cached = getReferenceData(`project_${projectId}`)
       if (cached) setActiveProject(cached as any)
     } finally {
@@ -71,6 +62,12 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
   }
 
   const projectName = activeProject?.name ?? 'Select project'
+
+  // Filter: only show operational projects (not planning-stage)
+  const operationalProjects = (user?.accessible_projects ?? []).filter((p: any) => {
+    const status = p.status || (p.active ? 'active' : 'completed')
+    return status === 'active'
+  })
 
   return (
     <>
@@ -97,44 +94,49 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
       <Modal
         visible={open}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setOpen(false)}
       >
-        <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+        <View style={styles.modalContainer}>
+          {/* Tappable backdrop to dismiss */}
+          <TouchableWithoutFeedback onPress={() => setOpen(false)}>
+            <View style={styles.backdrop} />
+          </TouchableWithoutFeedback>
+
+          {/* Sheet content — NOT inside the backdrop pressable */}
+          <View style={styles.sheet}>
+            <View style={styles.handle} />
             <Text style={styles.sheetTitle}>Switch Project</Text>
-            {user?.accessible_projects?.map((p: any) => {
-              const isActive = p.id === activeProject?.id
-              const status = p.status || (p.active ? 'active' : 'completed')
-              const statusColor = status === 'active' ? '#28a745' : status === 'planning' ? '#17a2b8' : '#6c757d'
-              const statusLabel = status === 'active' ? 'Active' : status === 'planning' ? 'Planning' : 'Completed'
-              return (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.option, isActive && styles.optionActive]}
-                  onPress={() => handleSwitch(p.id)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.dot, { backgroundColor: isActive ? Colors.primary : statusColor }]} />
-                  <View style={{ flex: 1 }}>
+            <ScrollView style={{ maxHeight: 400 }}>
+              {operationalProjects.map((p: any) => {
+                const isActive = p.id === activeProject?.id
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.option, isActive && styles.optionActive]}
+                    onPress={() => handleSwitch(p.id)}
+                    activeOpacity={0.6}
+                  >
+                    <View style={[styles.dot, { backgroundColor: isActive ? Colors.primary : '#28a745' }]} />
                     <Text style={[styles.optionText, isActive && styles.optionTextActive]} numberOfLines={2}>
                       {p.name}
                     </Text>
-                    <Text style={{ fontSize: 10, color: statusColor, fontWeight: '600' }}>{statusLabel}</Text>
-                  </View>
-                  {isActive && <Ionicons name="checkmark-circle" size={18} color={Colors.primary} />}
-                </TouchableOpacity>
-              )
-            })}
-          </Pressable>
-        </Pressable>
+                    {isActive && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setOpen(false)} activeOpacity={0.7}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </>
   )
 }
 
 const styles = StyleSheet.create({
-  // Pill variant (compact, for tab bar header areas)
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -153,8 +155,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flexShrink: 1,
   },
-
-  // Header variant (for ScreenHeader right slot)
   headerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -167,12 +167,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     maxWidth: 120,
   },
-
-  // Modal
-  overlay: {
+  modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(26,10,16,0.5)',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(26,10,16,0.5)',
   },
   sheet: {
     backgroundColor: Colors.surface,
@@ -180,8 +181,17 @@ const styles = StyleSheet.create({
     borderTopRightRadius: BorderRadius.xl,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.xxl + 10,
     ...Shadows.md,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   sheetTitle: {
     ...Typography.h4,
@@ -199,7 +209,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.md + 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
@@ -220,5 +230,18 @@ const styles = StyleSheet.create({
   optionTextActive: {
     color: Colors.primary,
     fontWeight: '700',
+  },
+  cancelBtn: {
+    marginTop: Spacing.sm,
+    marginHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.backgroundSecondary,
+    alignItems: 'center',
+  },
+  cancelText: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    fontWeight: '600',
   },
 })
