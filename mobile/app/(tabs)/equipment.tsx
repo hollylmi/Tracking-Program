@@ -166,9 +166,9 @@ function HiredMachineCard({ machine }: { machine: HiredMachine }) {
 
 // ── Tab selector ──────────────────────────────────────────────────────────────
 
-type TabKey = 'fleet' | 'hired' | 'checks'
+type TabKey = 'fleet' | 'hired' | 'checks' | 'scheduled'
 
-const TAB_LABELS: Record<TabKey, string> = { fleet: 'Fleet', hired: 'Hired', checks: 'Checks' }
+const TAB_LABELS: Record<TabKey, string> = { fleet: 'Fleet', hired: 'Hired', checks: 'Checks', scheduled: 'Scheduled' }
 
 function TabSelector({ active, onChange }: { active: TabKey; onChange: (t: TabKey) => void }) {
   return (
@@ -539,8 +539,17 @@ export default function EquipmentScreen() {
   const { data: checksData, isLoading: checksLoading, refetch: refetchChecks } =
     useDailyChecks(projectId)
 
+  // Scheduled checks
+  const { data: scheduledData, isLoading: scheduledLoading, refetch: refetchScheduled } = useQuery({
+    queryKey: ['scheduled-checks', projectId],
+    queryFn: () => api.tasks.scheduledChecks(projectId ?? undefined).then(r => r.data.checks ?? []),
+    staleTime: 2 * 60 * 1000,
+    enabled: !!projectId,
+  })
+  const scheduledChecks = scheduledData ?? []
+
   const fleetLoading = machinesLoading || breakdownsLoading
-  const isLoading = activeTab === 'fleet' ? fleetLoading : activeTab === 'hired' ? hireLoading : checksLoading
+  const isLoading = activeTab === 'fleet' ? fleetLoading : activeTab === 'hired' ? hireLoading : activeTab === 'scheduled' ? scheduledLoading : checksLoading
 
   const openCount = breakdowns.filter(b => !b.resolved).length
 
@@ -694,7 +703,7 @@ export default function EquipmentScreen() {
             showsVerticalScrollIndicator={false}
           />
         )
-      ) : (
+      ) : activeTab === 'checks' ? (
         /* Checks tab */
         checkMachines.length === 0 ? (
           <EmptyState icon="🔧" title="No machines" subtitle="No equipment assigned to this project" />
@@ -706,6 +715,66 @@ export default function EquipmentScreen() {
             contentContainerStyle={styles.list}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
             showsVerticalScrollIndicator={false}
+          />
+        )
+      ) : (
+        /* Scheduled tab */
+        scheduledChecks.length === 0 ? (
+          <EmptyState icon="📋" title="No scheduled checks" subtitle="Scheduled equipment checks will appear here" />
+        ) : (
+          <FlatList
+            data={scheduledChecks}
+            keyExtractor={(item) => `sc-${item.id}`}
+            contentContainerStyle={styles.list}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); refetchScheduled().finally(() => setRefreshing(false)) }} tintColor={Colors.primary} />}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const isOverdue = item.is_overdue && !item.completed_today
+              const isDueToday = item.next_due_date === new Date().toISOString().slice(0, 10)
+              return (
+                <TouchableOpacity
+                  style={[styles.schedCard, isOverdue && { borderLeftColor: Colors.error, borderLeftWidth: 3 }]}
+                  onPress={() => router.push({ pathname: '/scheduled-check/[id]', params: { id: item.id } })}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                    <Ionicons
+                      name={item.completed_today ? 'checkmark-circle' : isOverdue ? 'alert-circle' : 'time-outline'}
+                      size={22}
+                      color={item.completed_today ? Colors.success : isOverdue ? Colors.error : Colors.warning}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ ...Typography.bodySmall, fontWeight: '700' }}>{item.name}</Text>
+                      <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>
+                        {item.project_name} — {item.machine_count} machine{item.machine_count !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      {item.completed_today ? (
+                        <Text style={{ ...Typography.caption, color: Colors.success, fontWeight: '700' }}>Done</Text>
+                      ) : (
+                        <>
+                          <Text style={{ ...Typography.caption, color: isOverdue ? Colors.error : Colors.textSecondary, fontWeight: '600' }}>
+                            {isOverdue ? 'OVERDUE' : item.frequency === 'one_time' ? 'One-time' : item.frequency}
+                          </Text>
+                          {item.next_due_date && (
+                            <Text style={{ fontSize: 10, color: Colors.textLight }}>
+                              Due {new Date(item.next_due_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                            </Text>
+                          )}
+                        </>
+                      )}
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
+                  </View>
+                  {item.assigned_to && (
+                    <Text style={{ ...Typography.caption, color: Colors.textLight, marginTop: 2, marginLeft: 32 }}>
+                      Assigned to {item.assigned_to}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )
+            }}
           />
         )
       )}
@@ -733,6 +802,14 @@ const styles = StyleSheet.create({
   body: { flex: 1, backgroundColor: Colors.background, padding: Spacing.md, gap: Spacing.sm },
 
   list: { padding: Spacing.md, gap: Spacing.sm, backgroundColor: Colors.background },
+
+  schedCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
 
   sectionLabel: {
     ...Typography.label,

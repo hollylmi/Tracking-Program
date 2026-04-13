@@ -3536,6 +3536,55 @@ def task_assignment_save_api():
 # SCHEDULED EQUIPMENT CHECK — detail + per-machine check flow
 # ─────────────────────────────────────────────────────────────────────────────
 
+@api_data_bp.route('/tasks/scheduled-checks', methods=['GET'])
+@jwt_required()
+def scheduled_checks_list():
+    """List all active scheduled checks for accessible projects."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    allowed_ids = _accessible_ids(user)
+    today_date = date.today()
+
+    query = ScheduledEquipmentCheck.query.filter_by(active=True)
+    project_id = request.args.get('project_id', type=int)
+    if project_id:
+        query = query.filter_by(project_id=project_id)
+    elif allowed_ids is not None:
+        query = query.filter(ScheduledEquipmentCheck.project_id.in_(allowed_ids))
+
+    checks = query.order_by(ScheduledEquipmentCheck.next_due_date).all()
+
+    result = []
+    for sc in checks:
+        is_overdue = sc.next_due_date and sc.next_due_date <= today_date
+        machine_count = len(sc.machines) if sc.machines else 0
+        # Check if completed today
+        completed_today = ScheduledCheckCompletion.query.filter_by(
+            scheduled_check_id=sc.id,
+            completed_date=today_date,
+        ).first() is not None
+
+        result.append({
+            'id': sc.id,
+            'name': sc.name,
+            'project_id': sc.project_id,
+            'project_name': sc.project.name if sc.project else None,
+            'assigned_to': (sc.assigned_user.display_name or sc.assigned_user.username) if sc.assigned_user else None,
+            'assigned_user_id': sc.assigned_user_id,
+            'frequency': sc.frequency,
+            'next_due_date': sc.next_due_date.isoformat() if sc.next_due_date else None,
+            'last_completed_date': sc.last_completed_date.isoformat() if sc.last_completed_date else None,
+            'machine_count': machine_count,
+            'is_overdue': is_overdue,
+            'completed_today': completed_today,
+            'notes': sc.notes,
+        })
+
+    return {'checks': result}, 200
+
+
 @api_data_bp.route('/tasks/scheduled-check/<int:check_id>', methods=['GET'])
 @jwt_required()
 def scheduled_check_detail(check_id):

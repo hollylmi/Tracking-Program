@@ -281,6 +281,8 @@ export const api = {
     assignments: () => apiClient.get<{ assignments: { id: number; project_id: number; project_name: string; task_type: string; assigned_user_id: number; assigned_user_name: string }[] }>('/tasks/assignments'),
     saveAssignment: (data: { project_id: number; task_type: string; assigned_user_id: number }) =>
       apiClient.post('/tasks/assignments', data),
+    scheduledChecks: (projectId?: number) =>
+      apiClient.get<{ checks: any[] }>(`/tasks/scheduled-checks${projectId ? `?project_id=${projectId}` : ''}`),
     scheduledCheck: (checkId: number) =>
       apiClient.get<ScheduledCheckDetail>(`/tasks/scheduled-check/${checkId}`),
     completeScheduledCheck: (checkId: number, notes?: string) =>
