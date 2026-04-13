@@ -1973,7 +1973,7 @@ export default function DashboardScreen() {
           activeOpacity={0.85}
         >
           <Ionicons name="add-circle-outline" size={20} color={Colors.dark} style={{ marginRight: Spacing.sm }} />
-          <Text style={st.newEntryText}>+ NEW DAILY ENTRY</Text>
+          <Text style={st.newEntryText}>NEW DAILY ENTRY</Text>
         </TouchableOpacity>
 
         {/* Sync status bar */}
