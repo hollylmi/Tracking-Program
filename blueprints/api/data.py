@@ -3020,16 +3020,37 @@ def equipment_daily_check_submit_api():
     if not _has_project_access(user, project_id, allowed):
         return {'error': 'Access denied'}, 403
 
-    check = MachineDailyCheck(
-        machine_id=machine_id or None,
-        hired_machine_id=hired_machine_id or None,
-        project_id=project_id,
-        check_date=date.today(),
-        checked_by_user_id=user.id,
-        condition=condition,
-        hours_reading=hours_reading,
-        notes=notes,
-    )
+    today_date = date.today()
+
+    # Check if a check already exists for this machine/project/date — update instead of insert
+    existing = None
+    if machine_id:
+        existing = MachineDailyCheck.query.filter_by(
+            machine_id=machine_id, project_id=project_id, check_date=today_date).first()
+    elif hired_machine_id:
+        existing = MachineDailyCheck.query.filter_by(
+            hired_machine_id=hired_machine_id, project_id=project_id, check_date=today_date).first()
+
+    if existing:
+        # Update existing check
+        existing.condition = condition
+        existing.notes = notes
+        existing.hours_reading = hours_reading
+        existing.checked_by_user_id = user.id
+        existing.checked_at = datetime.utcnow()
+        check = existing
+    else:
+        check = MachineDailyCheck(
+            machine_id=machine_id or None,
+            hired_machine_id=hired_machine_id or None,
+            project_id=project_id,
+            check_date=today_date,
+            checked_by_user_id=user.id,
+            condition=condition,
+            hours_reading=hours_reading,
+            notes=notes,
+            checked_at=datetime.utcnow(),
+        )
 
     photo = request.files.get('photo')
     if photo and photo.filename:
@@ -3069,7 +3090,8 @@ def equipment_daily_check_submit_api():
         except Exception:
             pass
 
-    db.session.add(check)
+    if not existing:
+        db.session.add(check)
     db.session.flush()
 
     # Auto-log machine hours if reading was provided
