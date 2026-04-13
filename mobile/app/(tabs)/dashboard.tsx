@@ -1886,20 +1886,7 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={st.safe} edges={['top']}>
       {/* ── Header ── */}
-      <ScreenHeader
-        title="Dashboard"
-        right={
-          <View style={st.headerRight}>
-            <View style={[st.networkDot, { backgroundColor: isOnline ? Colors.success : Colors.warning }]} />
-            <TouchableOpacity
-              onPress={handleLogout}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="log-out-outline" size={22} color={Colors.white} />
-            </TouchableOpacity>
-          </View>
-        }
-      />
+      <ScreenHeader title="Dashboard" />
 
       {/* ── Project switcher modal ── */}
       <Modal
