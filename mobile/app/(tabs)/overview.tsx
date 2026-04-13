@@ -37,7 +37,6 @@ interface ProjectWithProgress extends ProjectListItem {
 // ─── Task Overview Section ─────────────────────────────────────────────────
 
 function TaskOverviewSection() {
-  const router = useRouter()
   const { data } = useQuery({
     queryKey: ['admin-task-overview'],
     queryFn: () => api.tasks.adminOverview().then((r) => r.data),
@@ -46,12 +45,11 @@ function TaskOverviewSection() {
 
   if (!data?.projects?.length) return null
 
-  // Filter to only operational projects
-  const projects = data.projects.filter((p: any) => p.status !== 'planning')
+  const projects = data.projects.filter((p: any) => p.status === 'active')
   if (projects.length === 0) return null
 
   const allDone = projects.every((p: any) =>
-    (p.entry_done || !p.entry_assigned) && (p.startup_done || !p.startup_assigned)
+    p.daily_entry?.completed && p.machine_startup?.completed
   )
 
   return (
@@ -62,35 +60,65 @@ function TaskOverviewSection() {
         </Text>
       </View>
       {projects.map((p: any, i: number) => {
-        const entryOk = p.entry_done || !p.entry_assigned
-        const startupOk = p.startup_done || !p.startup_assigned
-        const allProjectDone = entryOk && startupOk
+        const entryDone = p.daily_entry?.completed ?? false
+        const entryAssigned = !!p.daily_entry?.assigned_to
+        const startupDone = p.machine_startup?.completed ?? false
+        const startupTotal = p.machine_startup?.total ?? 0
+        const startupChecked = p.machine_startup?.done ?? 0
+        const allProjectDone = entryDone && (startupDone || startupTotal === 0)
+
         return (
           <View key={p.project_id} style={{
-            flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-            paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+            paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2,
             borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0,
             borderTopColor: Colors.border,
+            backgroundColor: allProjectDone ? 'rgba(40,167,69,0.04)' : undefined,
           }}>
-            <Ionicons
-              name={allProjectDone ? 'checkmark-circle' : 'alert-circle'}
-              size={20}
-              color={allProjectDone ? Colors.success : Colors.warning}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={{ ...Typography.bodySmall, fontWeight: '600' }}>{p.project_name}</Text>
-              <View style={{ flexDirection: 'row', gap: Spacing.md, marginTop: 2 }}>
-                {p.entry_assigned && (
-                  <Text style={{ ...Typography.caption, color: p.entry_done ? Colors.success : Colors.warning }}>
-                    <Ionicons name={p.entry_done ? 'checkmark' : 'time-outline'} size={11} /> Entry
-                  </Text>
-                )}
-                {p.startup_assigned && (
-                  <Text style={{ ...Typography.caption, color: p.startup_done ? Colors.success : Colors.warning }}>
-                    <Ionicons name={p.startup_done ? 'checkmark' : 'time-outline'} size={11} /> Startup
-                  </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+              <Ionicons
+                name={allProjectDone ? 'checkmark-circle' : 'alert-circle'}
+                size={20}
+                color={allProjectDone ? Colors.success : Colors.warning}
+              />
+              <Text style={{ ...Typography.bodySmall, fontWeight: '700', flex: 1 }}>{p.project_name}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: Spacing.lg, marginTop: 4, marginLeft: 28 }}>
+              {/* Daily Entry status */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons
+                  name={entryDone ? 'checkmark-circle' : 'close-circle'}
+                  size={14}
+                  color={entryDone ? Colors.success : Colors.error}
+                />
+                <Text style={{ ...Typography.caption, color: entryDone ? Colors.success : Colors.error, fontWeight: '600' }}>
+                  Daily Entry
+                </Text>
+                {entryAssigned && !entryDone && (
+                  <Text style={{ ...Typography.caption, color: Colors.textLight }}> ({p.daily_entry.assigned_to})</Text>
                 )}
               </View>
+              {/* Machine Startup status */}
+              {startupTotal > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons
+                    name={startupDone ? 'checkmark-circle' : 'close-circle'}
+                    size={14}
+                    color={startupDone ? Colors.success : Colors.error}
+                  />
+                  <Text style={{ ...Typography.caption, color: startupDone ? Colors.success : Colors.error, fontWeight: '600' }}>
+                    Equipment {startupChecked}/{startupTotal}
+                  </Text>
+                </View>
+              )}
+              {/* Breakdowns */}
+              {(p.open_breakdowns ?? 0) > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="warning" size={14} color={Colors.error} />
+                  <Text style={{ ...Typography.caption, color: Colors.error, fontWeight: '600' }}>
+                    {p.open_breakdowns} breakdown{p.open_breakdowns > 1 ? 's' : ''}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         )

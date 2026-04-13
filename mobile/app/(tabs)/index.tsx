@@ -1989,9 +1989,6 @@ export default function DashboardScreen() {
           <Text style={st.newEntryText}>+ NEW DAILY ENTRY</Text>
         </TouchableOpacity>
 
-        {/* ── To-Do / Task Overview ── */}
-        <TodoSection router={router} userRole={user?.role} />
-
         {/* Sync status bar */}
         <SyncStatusBar
           pending={pending}

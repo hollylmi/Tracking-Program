@@ -42,6 +42,7 @@ export default function TabsLayout() {
       <ProjectSwitcher variant="pill" />
     </View>
     <Tabs
+      initialRouteName={isAdmin ? 'overview' : 'index'}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
