@@ -1091,6 +1091,32 @@ def serve_machine_photo(filename):
 # Machine detail page (comprehensive single-machine view)
 # ---------------------------------------------------------------------------
 
+@equipment_bp.route('/equipment/scan/<int:machine_id>')
+@require_role('admin', 'supervisor', 'site')
+def machine_scan(machine_id):
+    """NFC scan landing page — mobile-friendly action page for a specific machine."""
+    m = Machine.query.get_or_404(machine_id)
+    assignment = ProjectMachine.query.filter_by(machine_id=machine_id).first()
+    recent_checks = MachineDailyCheck.query.filter_by(machine_id=machine_id).order_by(
+        MachineDailyCheck.check_date.desc()).limit(5).all()
+    active_breakdowns = MachineBreakdown.query.filter_by(
+        machine_id=machine_id).filter(
+        MachineBreakdown.repair_status.in_(['pending', 'in_progress'])).all()
+    pending_transfers = MachineTransfer.query.filter(
+        MachineTransfer.machine_id == machine_id,
+        MachineTransfer.status.in_(['scheduled', 'in_transit'])).all()
+    latest_hours = MachineHoursLog.query.filter_by(machine_id=machine_id).order_by(
+        MachineHoursLog.log_date.desc()).first()
+
+    return render_template('equipment/scan.html',
+                           machine=m, assignment=assignment,
+                           recent_checks=recent_checks,
+                           active_breakdowns=active_breakdowns,
+                           pending_transfers=pending_transfers,
+                           latest_hours=latest_hours,
+                           today=date.today())
+
+
 @equipment_bp.route('/equipment/machine/<int:machine_id>')
 @require_role('admin', 'supervisor', 'site')
 def machine_detail(machine_id):

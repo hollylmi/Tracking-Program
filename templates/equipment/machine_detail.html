@@ -132,6 +132,21 @@
             {% endif %}
           </div>
         </div>
+        <!-- NFC Tag -->
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white py-2 fw-semibold small"><i class="bi bi-broadcast me-1"></i>NFC Tag</div>
+          <div class="card-body">
+            <div class="d-flex gap-2 align-items-center">
+              <a href="{{ url_for('equipment.machine_scan', machine_id=machine.id) }}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-phone me-1"></i>Scan Page
+              </a>
+              <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText('{{ url_for('equipment.machine_scan', machine_id=machine.id, _external=True) }}'); this.innerHTML='<i class=\'bi bi-check\'></i> Copied';">
+                <i class="bi bi-clipboard me-1"></i>Copy NFC URL
+              </button>
+            </div>
+            <div class="form-text mt-1">Write this URL to an NFC tag: <code>{{ url_for('equipment.machine_scan', machine_id=machine.id, _external=True) }}</code></div>
+          </div>
+        </div>
         {% if transfers %}
         <div class="card border-0 shadow-sm mb-3 border-start border-warning border-3">
           <div class="card-header bg-white py-2 fw-semibold small">Pending Transfers</div>

@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}{{ machine.name }} — Equipment Scan{% endblock %}
+
+{% block content %}
+<style>
+  .scan-page { max-width: 480px; margin: 0 auto; }
+  .scan-hero { text-align: center; padding: 1rem 0; }
+  .scan-hero .machine-name { font-size: 1.5rem; font-weight: 800; }
+  .scan-hero .machine-id { color: #888; font-size: 0.85rem; }
+  .scan-photo { width: 100px; height: 100px; border-radius: 12px; object-fit: cover; margin: 0 auto 0.75rem; display: block; }
+  .scan-photo-placeholder { width: 100px; height: 100px; border-radius: 12px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.75rem; }
+  .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 1rem 0; }
+  .action-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.25rem 0.75rem; border-radius: 12px; border: 2px solid #e9ecef; text-decoration: none; color: #333; font-weight: 700; font-size: 0.85rem; transition: all 0.15s; gap: 0.4rem; }
+  .action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .action-btn i { font-size: 1.5rem; }
+  .action-prestart { border-color: #28a745; background: rgba(40,167,69,0.06); }
+  .action-prestart:hover { background: rgba(40,167,69,0.12); color: #28a745; }
+  .action-breakdown { border-color: #dc3545; background: rgba(220,53,69,0.06); }
+  .action-breakdown:hover { background: rgba(220,53,69,0.12); color: #dc3545; }
+  .action-transfer { border-color: #0d6efd; background: rgba(13,110,253,0.06); }
+  .action-transfer:hover { background: rgba(13,110,253,0.12); color: #0d6efd; }
+  .action-detail { border-color: #6c757d; background: rgba(108,117,125,0.06); }
+  .action-detail:hover { background: rgba(108,117,125,0.12); color: #6c757d; }
+  .info-card { border-radius: 10px; border: 1px solid #e9ecef; padding: 0.75rem; margin-bottom: 0.75rem; }
+  .alert-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; font-size: 0.85rem; }
+</style>
+
+<div class="scan-page">
+  <!-- Hero -->
+  <div class="scan-hero">
+    {% if machine.photo_filename %}
+    <img src="{{ url_for('equipment.serve_machine_photo', filename=machine.photo_filename) }}"
+         alt="{{ machine.name }}" class="scan-photo">
+    {% else %}
+    <div class="scan-photo-placeholder"><i class="bi bi-camera fs-3 text-muted"></i></div>
+    {% endif %}
+    <div class="machine-name">{{ machine.name }}</div>
+    {% if machine.plant_id %}<div class="machine-id">{{ machine.plant_id }}</div>{% endif %}
+    <div class="text-muted small mt-1">
+      {% if machine.machine_type %}{{ machine.machine_type }}{% endif %}
+      {% if machine.manufacturer %} — {{ machine.manufacturer }}{% endif %}
+      {% if machine.model_number %} {{ machine.model_number }}{% endif %}
+    </div>
+    {% if assignment %}
+    <span class="badge bg-success mt-2">{{ assignment.project.name }}</span>
+    {% else %}
+    <span class="badge bg-secondary mt-2">Unassigned</span>
+    {% endif %}
+  </div>
+
+  <!-- Alerts -->
+  {% if active_breakdowns %}
+  <div class="info-card border-danger">
+    <div class="fw-bold text-danger small mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Active Breakdowns</div>
+    {% for bd in active_breakdowns %}
+    <div class="alert-item">
+      <span class="badge bg-{{ 'danger' if bd.repair_status == 'pending' else 'warning' }}">{{ bd.repair_status|title }}</span>
+      <span class="small">{{ bd.description[:80] if bd.description else 'No description' }}{% if bd.description and bd.description|length > 80 %}...{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if pending_transfers %}
+  <div class="info-card border-info">
+    <div class="fw-bold text-info small mb-1"><i class="bi bi-arrow-left-right me-1"></i>Pending Transfer</div>
+    {% for t in pending_transfers %}
+    <div class="alert-item">
+      <span class="badge bg-info">{{ t.status|title }}</span>
+      <span class="small">To {{ t.to_project.name if t.to_project else '?' }}{% if t.scheduled_date %} — {{ t.scheduled_date.strftime('%d/%m/%Y') }}{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if machine.next_inspection_date %}
+  {% set insp_days = (machine.next_inspection_date - today).days %}
+  {% if insp_days <= 14 %}
+  <div class="info-card border-{{ 'danger' if insp_days <= 3 else 'warning' }}">
+    <div class="alert-item">
+      <i class="bi bi-search text-{{ 'danger' if insp_days <= 3 else 'warning' }}"></i>
+      <span class="small fw-semibold text-{{ 'danger' if insp_days <= 3 else 'warning' }}">
+        {% if insp_days <= 0 %}Inspection overdue{% else %}Inspection due in {{ insp_days }} day{{ 's' if insp_days != 1 }}{% endif %}
+        ({{ machine.next_inspection_date.strftime('%d/%m/%Y') }})
+      </span>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {% if machine.dispose_by_date %}
+  {% set disp_days = (machine.dispose_by_date - today).days %}
+  {% if disp_days <= 30 %}
+  <div class="info-card border-{{ 'danger' if disp_days <= 7 else 'warning' }}">
+    <div class="alert-item">
+      <i class="bi bi-trash text-{{ 'danger' if disp_days <= 7 else 'warning' }}"></i>
+      <span class="small fw-semibold">Disposal in {{ disp_days }} day{{ 's' if disp_days != 1 }} ({{ machine.dispose_by_date.strftime('%d/%m/%Y') }})</span>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <!-- Quick Actions -->
+  <div class="action-grid">
+    <a href="{{ url_for('equipment.daily_checks_do') }}?machine_id={{ machine.id }}{% if assignment %}&project_id={{ assignment.project_id }}{% endif %}" class="action-btn action-prestart">
+      <i class="bi bi-check-circle text-success"></i>
+      Pre-Start Check
+    </a>
+    <a href="{{ url_for('equipment.equipment_overview') }}#breakdown" onclick="localStorage.setItem('nfc_breakdown_machine', '{{ machine.id }}');" class="action-btn action-breakdown">
+      <i class="bi bi-exclamation-triangle text-danger"></i>
+      Report Breakdown
+    </a>
+    <a href="{{ url_for('equipment.machine_detail', machine_id=machine.id) }}" class="action-btn action-detail">
+      <i class="bi bi-info-circle text-secondary"></i>
+      Full Details
+    </a>
+    <a href="{{ url_for('equipment.equipment_overview') }}#transfer" onclick="localStorage.setItem('nfc_transfer_machine', '{{ machine.id }}');" class="action-btn action-transfer">
+      <i class="bi bi-arrow-left-right text-primary"></i>
+      Transfer
+    </a>
+  </div>
+
+  <!-- Machine Info -->
+  <div class="info-card">
+    <div class="row g-2 small">
+      {% if machine.serial_number %}
+      <div class="col-6"><span class="text-muted">Serial:</span> {{ machine.serial_number }}</div>
+      {% endif %}
+      {% if machine.manufacturer %}
+      <div class="col-6"><span class="text-muted">Make:</span> {{ machine.manufacturer }}</div>
+      {% endif %}
+      {% if machine.model_number %}
+      <div class="col-6"><span class="text-muted">Model:</span> {{ machine.model_number }}</div>
+      {% endif %}
+      {% if latest_hours %}
+      <div class="col-6"><span class="text-muted">Hours:</span> {{ latest_hours.hours_reading }} ({{ latest_hours.log_date.strftime('%d/%m') }})</div>
+      {% endif %}
+      {% if machine.acquired_date %}
+      <div class="col-6"><span class="text-muted">Acquired:</span> {{ machine.acquired_date.strftime('%d/%m/%Y') }}</div>
+      {% endif %}
+      {% if machine.group %}
+      <div class="col-6"><span class="text-muted">Group:</span> {{ machine.group.name }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Recent Checks -->
+  {% if recent_checks %}
+  <div class="info-card">
+    <div class="fw-bold small mb-2"><i class="bi bi-clock-history me-1"></i>Recent Checks</div>
+    {% for dc in recent_checks %}
+    <div class="d-flex justify-content-between align-items-center py-1 {% if not loop.last %}border-bottom{% endif %}">
+      <div>
+        <span class="badge bg-{{ 'success' if dc.condition == 'good' else 'warning' if dc.condition == 'fair' else 'danger' }}-subtle text-{{ 'success' if dc.condition == 'good' else 'warning' if dc.condition == 'fair' else 'danger' }}" style="font-size:.7rem;">{{ dc.condition|title }}</span>
+        {% if dc.hours_reading %}<span class="text-muted small ms-1">{{ dc.hours_reading }}h</span>{% endif %}
+      </div>
+      <div class="small text-muted">
+        {{ dc.check_date.strftime('%d/%m') }}
+        {% if dc.checked_by_user %} — {{ dc.checked_by_user.display_name or dc.checked_by_user.username }}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- NFC URL for programming -->
+  {% if current_user.role == 'admin' %}
+  <div class="info-card bg-light mt-3">
+    <div class="fw-bold small mb-1"><i class="bi bi-broadcast me-1"></i>NFC Tag URL</div>
+    <div class="input-group input-group-sm">
+      <input type="text" class="form-control form-control-sm bg-white" readonly
+             value="{{ url_for('equipment.machine_scan', machine_id=machine.id, _external=True) }}"
+             id="nfcUrl">
+      <button class="btn btn-outline-primary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('nfcUrl').value); this.innerHTML='<i class=\'bi bi-check\'></i> Copied';">
+        <i class="bi bi-clipboard"></i> Copy
+      </button>
+    </div>
+    <div class="form-text">Write this URL to an NFC tag using any NFC writer app.</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
