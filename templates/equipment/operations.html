@@ -200,7 +200,7 @@
       <thead class="table-light"><tr><th>Check Name</th><th>Project</th><th>Completed</th><th>By</th><th>Notes</th></tr></thead>
       <tbody>
         {% for comp in recent_completions %}
-        <tr>
+        <tr style="cursor:pointer;" onclick="window.location='{{ url_for('equipment.daily_checks_view', project_id=comp.scheduled_check.project_id, date=comp.completed_date.strftime('%Y-%m-%d')) }}'">
           <td class="fw-semibold">{{ comp.scheduled_check.name if comp.scheduled_check else '—' }}</td>
           {% set pc = project_colour_map.get(comp.scheduled_check.project_id) if comp.scheduled_check else None %}
           <td class="small">{% if pc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.7rem;">{{ comp.scheduled_check.project.name }}</span>{% else %}{{ comp.scheduled_check.project.name if comp.scheduled_check and comp.scheduled_check.project else '—' }}{% endif %}</td>
