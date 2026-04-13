@@ -3415,7 +3415,8 @@ def admin_task_overview():
 
     from sqlalchemy import func
     today_date = date.today()
-    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    all_active = Project.query.filter_by(active=True).order_by(Project.name).all()
+    projects = [p for p in all_active if p.is_operational]
 
     project_tasks = []
     for p in projects:
@@ -3461,6 +3462,7 @@ def admin_task_overview():
         project_tasks.append({
             'project_id': p.id,
             'project_name': p.name,
+            'status': p.status,
             'site_manager': (p.site_manager.display_name or p.site_manager.username) if p.site_manager else None,
             'daily_entry': {
                 'assigned_to': (entry_assignment.assigned_user.display_name or entry_assignment.assigned_user.username) if entry_assignment else None,

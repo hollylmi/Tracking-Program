@@ -34,6 +34,71 @@ interface ProjectWithProgress extends ProjectListItem {
   progress: ProjectProgress | null
 }
 
+// ─── Task Overview Section ─────────────────────────────────────────────────
+
+function TaskOverviewSection() {
+  const router = useRouter()
+  const { data } = useQuery({
+    queryKey: ['admin-task-overview'],
+    queryFn: () => api.tasks.adminOverview().then((r) => r.data),
+    staleTime: 60 * 1000,
+  })
+
+  if (!data?.projects?.length) return null
+
+  // Filter to only operational projects
+  const projects = data.projects.filter((p: any) => p.status !== 'planning')
+  if (projects.length === 0) return null
+
+  const allDone = projects.every((p: any) =>
+    (p.entry_done || !p.entry_assigned) && (p.startup_done || !p.startup_assigned)
+  )
+
+  return (
+    <Card style={{ marginBottom: Spacing.md, borderLeftWidth: 4, borderLeftColor: allDone ? Colors.success : Colors.warning, overflow: 'hidden' }}>
+      <View style={{ paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.sm }}>
+        <Text style={{ ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Daily Task Status
+        </Text>
+      </View>
+      {projects.map((p: any, i: number) => {
+        const entryOk = p.entry_done || !p.entry_assigned
+        const startupOk = p.startup_done || !p.startup_assigned
+        const allProjectDone = entryOk && startupOk
+        return (
+          <View key={p.project_id} style={{
+            flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+            paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+            borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0,
+            borderTopColor: Colors.border,
+          }}>
+            <Ionicons
+              name={allProjectDone ? 'checkmark-circle' : 'alert-circle'}
+              size={20}
+              color={allProjectDone ? Colors.success : Colors.warning}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={{ ...Typography.bodySmall, fontWeight: '600' }}>{p.project_name}</Text>
+              <View style={{ flexDirection: 'row', gap: Spacing.md, marginTop: 2 }}>
+                {p.entry_assigned && (
+                  <Text style={{ ...Typography.caption, color: p.entry_done ? Colors.success : Colors.warning }}>
+                    <Ionicons name={p.entry_done ? 'checkmark' : 'time-outline'} size={11} /> Entry
+                  </Text>
+                )}
+                {p.startup_assigned && (
+                  <Text style={{ ...Typography.caption, color: p.startup_done ? Colors.success : Colors.warning }}>
+                    <Ionicons name={p.startup_done ? 'checkmark' : 'time-outline'} size={11} /> Startup
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        )
+      })}
+    </Card>
+  )
+}
+
 // ─── Material color palette (matches dashboard) ─────────────────────────────
 const MAT_COLORS = ['#FFB7C5', '#A6E6FC', '#C8F0A0', '#FFD59E', '#C8B0F5', '#FFDDA6']
 
@@ -384,6 +449,9 @@ export default function OverviewScreen() {
           />
         }
       >
+        {/* Admin Task Overview */}
+        <TaskOverviewSection />
+
         {isLoading && projectsWithProgress.length === 0 ? (
           <>
             <SkeletonCard />
