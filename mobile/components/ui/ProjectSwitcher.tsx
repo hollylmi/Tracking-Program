@@ -31,40 +31,41 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
   const [switching, setSwitching] = useState(false)
   const queryClient = useQueryClient()
 
-  const hasMultiple = (user?.accessible_projects?.length ?? 0) > 1
-  if (!hasMultiple) return null // nothing to switch
+  const projectCount = user?.accessible_projects?.length ?? 0
+  if (projectCount === 0) return null
 
   const handleSwitch = async (projectId: number) => {
     if (projectId === activeProject?.id) { setOpen(false); return }
-    setSwitching(true)
     setOpen(false)
+    setSwitching(true)
+
+    // First set a minimal project immediately so the UI updates
+    const p = user?.accessible_projects?.find((x) => x.id === projectId)
+    if (p) {
+      setActiveProject({
+        id: p.id,
+        name: p.name,
+        start_date: null,
+        active: true,
+        quoted_days: null,
+        hours_per_day: null,
+        site_address: null,
+        site_contact: null,
+        track_by_lot: false,
+      })
+    }
+
+    // Then try to fetch full project details in the background
     try {
       const { data } = await api.projects.detail(projectId)
       try { saveReferenceData(`project_${projectId}`, data) } catch {}
       setActiveProject(data)
-    } catch {
+    } catch (e) {
+      console.warn('Failed to fetch project details, using cached/minimal:', e)
       const cached = getReferenceData(`project_${projectId}`)
-      if (cached) {
-        setActiveProject(cached as any)
-      } else {
-        const p = user?.accessible_projects?.find((x) => x.id === projectId)
-        if (p) {
-          setActiveProject({
-            id: p.id,
-            name: p.name,
-            start_date: null,
-            active: true,
-            quoted_days: null,
-            hours_per_day: null,
-            site_address: null,
-            site_contact: null,
-            track_by_lot: false,
-          })
-        }
-      }
+      if (cached) setActiveProject(cached as any)
     } finally {
       setSwitching(false)
-      // Invalidate all queries so data refreshes for the new project
       queryClient.invalidateQueries()
     }
   }
