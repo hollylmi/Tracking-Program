@@ -11,13 +11,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Svg, { Circle as SvgCircle } from 'react-native-svg'
 import Card from '../../components/ui/Card'
 import ScreenHeader from '../../components/layout/ScreenHeader'
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme'
 import { api } from '../../lib/api'
 import { useProjectStore } from '../../store/project'
+import { useAuthStore } from '../../store/auth'
+import { useNetworkStatus } from '../../hooks/useNetworkStatus'
+import { useSyncStatus } from '../../hooks/useSyncStatus'
 import { Project, ProjectProgress, ProgressTask } from '../../types'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -372,7 +375,12 @@ function ProjectCard({ project, onPress }: { project: ProjectWithProgress; onPre
 
 export default function OverviewScreen() {
   const router = useRouter()
+  const activeProject = useProjectStore((s) => s.activeProject)
   const setActiveProject = useProjectStore((s) => s.setActiveProject)
+  const user = useAuthStore((s) => s.user)
+  const isOnline = useNetworkStatus()
+  const { pending, syncing, lastSyncedAt, syncNow } = useSyncStatus()
+  const queryClient = useQueryClient()
   const [refreshing, setRefreshing] = useState(false)
 
   // Fetch all projects
@@ -390,6 +398,18 @@ export default function OverviewScreen() {
   const operationalProjects = (projectsData ?? []).filter(
     (p) => p.is_operational || p.status === 'active'
   )
+
+  // Set active project if not set (so pill shows immediately)
+  useEffect(() => {
+    if (!activeProject && operationalProjects.length > 0) {
+      const p = operationalProjects[0]
+      setActiveProject({
+        id: p.id, name: p.name, start_date: null, active: true,
+        quoted_days: null, hours_per_day: null, site_address: null,
+        site_contact: null, track_by_lot: false,
+      })
+    }
+  }, [activeProject, operationalProjects])
 
   // Fetch progress for each operational project
   const [projectsWithProgress, setProjectsWithProgress] = useState<ProjectWithProgress[]>([])
@@ -477,8 +497,35 @@ export default function OverviewScreen() {
           />
         }
       >
+        {/* New Daily Entry button */}
+        <TouchableOpacity
+          style={s.newEntryBtn}
+          onPress={() => router.push('/entry/new')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add-circle-outline" size={20} color={Colors.dark} style={{ marginRight: Spacing.sm }} />
+          <Text style={s.newEntryText}>NEW DAILY ENTRY</Text>
+        </TouchableOpacity>
+
         {/* Admin Task Overview */}
         <TaskOverviewSection />
+
+        {/* Sync status */}
+        <View style={s.syncBar}>
+          <Ionicons
+            name={syncing ? 'sync-outline' : pending > 0 ? 'cloud-upload-outline' : 'cloud-done-outline'}
+            size={14}
+            color={pending > 0 ? Colors.warning : Colors.success}
+          />
+          <Text style={{ fontSize: 11, color: pending > 0 ? Colors.warning : Colors.success, fontWeight: '600', flex: 1 }}>
+            {syncing ? 'Syncing...' : pending > 0 ? `${pending} pending` : 'All synced'}
+          </Text>
+          {!syncing && isOnline && (
+            <TouchableOpacity onPress={syncNow} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '700' }}>{pending > 0 ? 'Sync' : 'Refresh'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {isLoading && projectsWithProgress.length === 0 ? (
           <>
@@ -523,6 +570,36 @@ const s = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.md,
     paddingBottom: Spacing.xxl,
+  },
+
+  // New entry button
+  newEntryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.lg,
+  },
+  newEntryText: {
+    ...Typography.bodySmall,
+    color: Colors.dark,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+
+  // Sync bar
+  syncBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
 
   // Project card

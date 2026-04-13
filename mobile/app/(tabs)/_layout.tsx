@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions } from 'react-native'
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -26,54 +26,71 @@ const TAB_META: Record<string, TabMeta> = {
 
 function CustomTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets()
+  const { width } = useWindowDimensions()
+  const isWide = width >= 700 // iPad or large phone landscape
+
+  const visibleRoutes = state.routes.filter((_: any, i: number) => {
+    const { options } = descriptors[state.routes[i].key]
+    return options.href !== null
+  })
+  const tabCount = visibleRoutes.length
+
+  const renderTab = (route: any, index: number) => {
+    const { options } = descriptors[route.key]
+    if (options.href === null) return null
+
+    const focused = state.index === index
+    const label = options.title ?? route.name
+    const meta = TAB_META[route.name]
+    const iconName = meta
+      ? (focused ? meta.iconActive : meta.icon)
+      : (focused ? 'ellipse' : 'ellipse-outline')
+
+    return (
+      <TouchableOpacity
+        key={route.key}
+        accessibilityRole="button"
+        accessibilityState={focused ? { selected: true } : {}}
+        onPress={() => {
+          const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
+          if (!focused && !event.defaultPrevented) {
+            navigation.navigate(route.name)
+          }
+        }}
+        onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
+        style={[tb.tab, isWide && { flex: 1 }]}
+        activeOpacity={0.7}
+      >
+        <View style={[tb.iconWrap, focused && tb.iconWrapActive]}>
+          <Ionicons
+            name={iconName as IoniconName}
+            size={isWide ? 22 : 20}
+            color={focused ? Colors.primary : Colors.textSecondary}
+          />
+        </View>
+        <Text style={[tb.label, focused && tb.labelActive, isWide && { fontSize: 11 }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    )
+  }
+
+  const content = state.routes.map((route: any, index: number) => renderTab(route, index))
+
   return (
     <View style={[tb.outer, { paddingBottom: Math.max(insets.bottom, 4) }]}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={tb.scroll}
-        bounces={false}
-      >
-        {state.routes.map((route: any, index: number) => {
-          const { options } = descriptors[route.key]
-          if (options.href === null) return null // hidden tab
-
-          const focused = state.index === index
-          const label = options.title ?? route.name
-          const meta = TAB_META[route.name]
-          const iconName = meta
-            ? (focused ? meta.iconActive : meta.icon)
-            : (focused ? 'ellipse' : 'ellipse-outline')
-
-          return (
-            <TouchableOpacity
-              key={route.key}
-              accessibilityRole="button"
-              accessibilityState={focused ? { selected: true } : {}}
-              onPress={() => {
-                const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
-                if (!focused && !event.defaultPrevented) {
-                  navigation.navigate(route.name)
-                }
-              }}
-              onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
-              style={tb.tab}
-              activeOpacity={0.7}
-            >
-              <View style={[tb.iconWrap, focused && tb.iconWrapActive]}>
-                <Ionicons
-                  name={iconName as IoniconName}
-                  size={20}
-                  color={focused ? Colors.primary : Colors.textSecondary}
-                />
-              </View>
-              <Text style={[tb.label, focused && tb.labelActive]} numberOfLines={1}>
-                {label}
-              </Text>
-            </TouchableOpacity>
-          )
-        })}
-      </ScrollView>
+      {isWide ? (
+        <View style={tb.wideRow}>{content}</View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={tb.scroll}
+          bounces={false}
+        >
+          {content}
+        </ScrollView>
+      )}
     </View>
   )
 }
@@ -87,6 +104,10 @@ const tb = StyleSheet.create({
   scroll: {
     flexDirection: 'row',
     paddingHorizontal: Spacing.xs,
+  },
+  wideRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
   },
   tab: {
     alignItems: 'center',
