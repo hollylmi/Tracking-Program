@@ -22,7 +22,7 @@ export default function ScreenHeader({ title, subtitle, showBack = false, right 
           </TouchableOpacity>
         )}
         <View style={styles.brand}>
-          <Logo width={72} height={38} />
+          <Logo width={60} height={30} />
           <Text style={styles.brandName}>PLYTRACK</Text>
         </View>
       </View>
@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.dark,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
