@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl,
   Modal, TextInput, ActivityIndicator, Alert, Image,
@@ -30,6 +30,7 @@ function MachineCheckCard({ machine, onCheck }: { machine: ScheduledCheckMachine
   const hasTransfer = !!machine.pending_transfer
 
   return (
+    <TouchableOpacity activeOpacity={0.7} onPress={onCheck}>
     <Card padding="none" style={{ overflow: 'hidden' }}>
       <View style={[s.accentBar, { backgroundColor: checked ? Colors.success : hasAlerts ? Colors.warning : Colors.border }]} />
       <View style={s.row}>
@@ -46,13 +47,16 @@ function MachineCheckCard({ machine, onCheck }: { machine: ScheduledCheckMachine
         </View>
         <View style={s.right}>
           {checked && condOpt ? (
-            <View style={[s.statusPill, { backgroundColor: condOpt.bg }]}>
-              <Text style={[s.statusText, { color: condOpt.color }]}>{condOpt.label}</Text>
+            <View style={{ alignItems: 'flex-end', gap: 2 }}>
+              <View style={[s.statusPill, { backgroundColor: condOpt.bg }]}>
+                <Text style={[s.statusText, { color: condOpt.color }]}>{condOpt.label}</Text>
+              </View>
+              <Text style={{ fontSize: 9, color: Colors.textLight }}>Tap to edit</Text>
             </View>
           ) : (
-            <TouchableOpacity style={s.checkBtn} onPress={onCheck} activeOpacity={0.8}>
+            <View style={s.checkBtn}>
               <Text style={s.checkBtnText}>Check</Text>
-            </TouchableOpacity>
+            </View>
           )}
         </View>
       </View>
@@ -81,18 +85,27 @@ function MachineCheckCard({ machine, onCheck }: { machine: ScheduledCheckMachine
         </View>
       ) : null}
     </Card>
+    </TouchableOpacity>
   )
 }
 
-function CheckModal({ visible, machineName, onClose, onSubmit }: {
+function CheckModal({ visible, machineName, onClose, onSubmit, initialCondition, initialNotes, initialHours }: {
   visible: boolean; machineName: string; onClose: () => void
   onSubmit: (condition: string, notes: string, hoursReading?: string, photoUri?: string, photoFilename?: string) => Promise<void>
+  initialCondition?: string; initialNotes?: string; initialHours?: string
 }) {
-  const [condition, setCondition] = useState('good')
-  const [notes, setNotes] = useState('')
-  const [hoursReading, setHoursReading] = useState('')
+  const [condition, setCondition] = useState(initialCondition || 'good')
+  const [notes, setNotes] = useState(initialNotes || '')
+  const [hoursReading, setHoursReading] = useState(initialHours || '')
   const [photo, setPhoto] = useState<{ uri: string; filename: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // Update state when initial values change (e.g. opening modal for a different machine)
+  useEffect(() => {
+    setCondition(initialCondition || 'good')
+    setNotes(initialNotes || '')
+    setHoursReading(initialHours || '')
+  }, [initialCondition, initialNotes, initialHours])
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -264,7 +277,11 @@ export default function ScheduledCheckScreen() {
 
       {checkingMachine && (
         <CheckModal visible={!!checkingMachine} machineName={checkingMachine.name}
-          onClose={() => setCheckingMachine(null)} onSubmit={handleSubmitCheck} />
+          onClose={() => setCheckingMachine(null)} onSubmit={handleSubmitCheck}
+          initialCondition={checkingMachine.check?.condition}
+          initialNotes={checkingMachine.check?.notes}
+          initialHours={checkingMachine.check?.hours_reading != null ? String(checkingMachine.check.hours_reading) : undefined}
+        />
       )}
     </SafeAreaView>
   )
