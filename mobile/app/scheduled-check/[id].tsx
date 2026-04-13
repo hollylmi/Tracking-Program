@@ -115,6 +115,9 @@ function CheckModal({ visible, machineName, onClose, onSubmit, initialCondition,
     try {
       await onSubmit(condition, notes, hoursReading || undefined, photo?.uri, photo?.filename)
       setCondition('good'); setNotes(''); setHoursReading(''); setPhoto(null)
+    } catch (e) {
+      console.error('Check submit error:', e)
+      Alert.alert('Error', 'Failed to submit check. Please try again.')
     } finally { setSubmitting(false) }
   }
 
@@ -195,24 +198,32 @@ export default function ScheduledCheckScreen() {
 
   const handleSubmitCheck = useCallback(
     async (condition: string, notes: string, hoursReading?: string, photoUri?: string, photoFilename?: string) => {
-      if (!checkingMachine || !data) return
-      try {
-        await api.equipment.submitDailyCheck({
-          machine_id: checkingMachine.machine_id,
-          project_id: data.project_id,
-          condition,
-          notes: notes || undefined,
-          hours_reading: hoursReading,
-          photo_uri: photoUri,
-          photo_filename: photoFilename,
-        })
-        show('Check recorded', 'success')
-        setCheckingMachine(null)
-        queryClient.invalidateQueries({ queryKey: ['scheduled-check', checkId] })
-        if (condition === 'broken_down') {
-          router.push({ pathname: '/breakdown/new', params: { machine_id: String(checkingMachine.machine_id), machine_name: checkingMachine.name } })
-        }
-      } catch { show('Failed to submit check', 'error') }
+      if (!checkingMachine) {
+        console.error('No checking machine selected')
+        throw new Error('No machine selected')
+      }
+      if (!data) {
+        console.error('No check data loaded')
+        throw new Error('Check data not loaded')
+      }
+      console.log('Submitting check:', { machine_id: checkingMachine.machine_id, project_id: data.project_id, condition })
+      await api.equipment.submitDailyCheck({
+        machine_id: checkingMachine.machine_id,
+        project_id: data.project_id,
+        condition,
+        notes: notes || undefined,
+        hours_reading: hoursReading,
+        photo_uri: photoUri,
+        photo_filename: photoFilename,
+      })
+      show('Check recorded', 'success')
+      setCheckingMachine(null)
+      queryClient.invalidateQueries({ queryKey: ['scheduled-check', checkId] })
+      queryClient.invalidateQueries({ queryKey: ['admin-task-overview'] })
+      queryClient.invalidateQueries({ queryKey: ['my-todos'] })
+      if (condition === 'broken_down') {
+        router.push({ pathname: '/breakdown/new', params: { machine_id: String(checkingMachine.machine_id), machine_name: checkingMachine.name } })
+      }
     },
     [checkingMachine, data, checkId, queryClient, router, show]
   )
