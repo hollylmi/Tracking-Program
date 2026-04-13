@@ -1,69 +1,23 @@
-import { useEffect, useState } from 'react'
-import { View, Text, TouchableOpacity, ActionSheetIOS, Platform, Alert, StyleSheet } from 'react-native'
+import { useEffect } from 'react'
+import { View, StyleSheet } from 'react-native'
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { useQueryClient } from '@tanstack/react-query'
-import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme'
+import { Colors, Spacing } from '../../constants/theme'
 import { useAuthStore } from '../../store/auth'
-import { useProjectStore } from '../../store/project'
-import { api } from '../../lib/api'
 import { registerForPushNotifications } from '../../lib/notifications'
-import { OfflineBanner } from '../../components/ui/OfflineBanner'
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 
 export default function TabsLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const user = useAuthStore((s) => s.user)
-  const userRole = user?.role
+  const userRole = useAuthStore((s) => s.user?.role)
   const isAdmin = userRole === 'admin'
-  const { activeProject, setActiveProject } = useProjectStore()
-  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (isAuthenticated) {
       registerForPushNotifications()
     }
   }, [isAuthenticated])
-
-  // Only operational projects for switching
-  const operationalProjects = (user?.accessible_projects ?? []).filter((p: any) => {
-    const status = p.status || (p.active ? 'active' : 'completed')
-    return status === 'active'
-  })
-
-  const handleSwitchProject = () => {
-    if (operationalProjects.length <= 1) return
-    const names = operationalProjects.map((p: any) => p.name)
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: [...names, 'Cancel'], cancelButtonIndex: names.length, title: 'Switch Project' },
-        (idx) => {
-          if (idx < names.length) doSwitch(operationalProjects[idx])
-        }
-      )
-    } else {
-      Alert.alert('Switch Project', undefined,
-        [...operationalProjects.map((p: any) => ({
-          text: p.name, onPress: () => doSwitch(p),
-        })), { text: 'Cancel', style: 'cancel' as const }]
-      )
-    }
-  }
-
-  const doSwitch = async (p: any) => {
-    setActiveProject({
-      id: p.id, name: p.name, start_date: null, active: true,
-      quoted_days: null, hours_per_day: null, site_address: null,
-      site_contact: null, track_by_lot: false,
-    })
-    try {
-      const { data } = await api.projects.detail(p.id)
-      setActiveProject(data)
-    } catch {}
-    queryClient.invalidateQueries()
-  }
 
   const icon = (focused: boolean, color: string, name: IoniconName, activeName: IoniconName) => (
     <View style={{
@@ -81,21 +35,6 @@ export default function TabsLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-    <OfflineBanner />
-    <TouchableOpacity
-      style={layoutStyles.switcherBar}
-      onPress={handleSwitchProject}
-      activeOpacity={operationalProjects.length > 1 ? 0.7 : 1}
-    >
-      <View style={layoutStyles.pill}>
-        <Text style={layoutStyles.pillText} numberOfLines={1}>
-          {activeProject?.name ?? 'No project'}
-        </Text>
-        {operationalProjects.length > 1 && (
-          <Ionicons name="chevron-down" size={12} color={Colors.primary} />
-        )}
-      </View>
-    </TouchableOpacity>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -146,34 +85,4 @@ export default function TabsLayout() {
   )
 }
 
-const layoutStyles = StyleSheet.create({
-  switcherBar: {
-    backgroundColor: Colors.dark,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,183,197,0.1)',
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,183,197,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,183,197,0.3)',
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.md + 2,
-    paddingVertical: 8,
-    minWidth: 160,
-    minHeight: 38,
-  },
-  pillText: {
-    fontSize: 13,
-    color: Colors.primary,
-    fontWeight: '700',
-    flexShrink: 1,
-  },
-})
 
