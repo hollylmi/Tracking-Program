@@ -814,7 +814,25 @@
         </button>
       </div>
       <div class="collapse show" id="progressTableBody">
-      <div class="card-body p-0">
+      <!-- Material completion summary cards -->
+      <div class="card-body pb-0">
+        <div class="row g-2">
+          {% for task in progress.tasks %}
+          <div class="col-6 col-md-4 col-lg-3">
+            <div class="border rounded p-2 text-center {% if task.pct_complete >= 100 %}bg-success-subtle{% elif task.pct_complete >= 75 %}bg-primary-subtle{% elif task.pct_complete >= 50 %}bg-info-subtle{% else %}bg-light{% endif %}">
+              <div class="fw-bold fs-5 {% if task.pct_complete >= 100 %}text-success{% elif task.pct_complete >= 75 %}text-primary{% else %}text-dark{% endif %}">{{ task.pct_complete }}%</div>
+              <div class="small fw-semibold">{{ task.material or 'Unknown' }}</div>
+              {% if task.lot %}<div class="text-muted" style="font-size:.65rem;">Lot {{ task.lot }}</div>{% endif %}
+              <div class="progress mt-1" style="height:4px;">
+                <div class="progress-bar {% if task.pct_complete >= 100 %}bg-success{% elif task.pct_complete >= 50 %}bg-primary{% else %}bg-warning{% endif %}" style="width:{{ task.pct_complete }}%"></div>
+              </div>
+              <div class="text-muted" style="font-size:.6rem;">{{ task.actual_sqm }} / {{ task.planned_sqm }} m²</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-body p-0 pt-3">
         <div class="table-responsive">
           <table class="table table-sm table-hover align-middle mb-0">
             <thead class="table-light">
