@@ -25,7 +25,9 @@ def index():
     )
     total_entries = DailyEntry.query.count()
     entries_today = DailyEntry.query.filter_by(entry_date=today).count()
-    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    all_active_projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    # Only show operational projects (mobilised) on the dashboard
+    projects = [p for p in all_active_projects if p.is_operational]
     active_hired = HiredMachine.query.filter_by(active=True).count()
 
     # Compute progress + gantt for each project
