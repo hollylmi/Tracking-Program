@@ -40,6 +40,7 @@ interface ProjectWithProgress extends ProjectListItem {
 // ─── Task Overview Section ─────────────────────────────────────────────────
 
 function TaskOverviewSection() {
+  const router = useRouter()
   const { data } = useQuery({
     queryKey: ['admin-task-overview'],
     queryFn: () => api.tasks.adminOverview().then((r) => r.data),
@@ -52,7 +53,8 @@ function TaskOverviewSection() {
   if (projects.length === 0) return null
 
   const allDone = projects.every((p: any) =>
-    p.daily_entry?.completed && p.machine_startup?.completed
+    p.daily_entry?.completed && p.machine_startup?.completed &&
+    (p.scheduled_checks ?? []).every((sc: any) => sc.completed_today || !sc.is_overdue)
   )
 
   return (
@@ -68,7 +70,9 @@ function TaskOverviewSection() {
         const startupDone = p.machine_startup?.completed ?? false
         const startupTotal = p.machine_startup?.total ?? 0
         const startupChecked = p.machine_startup?.done ?? 0
-        const allProjectDone = entryDone && (startupDone || startupTotal === 0)
+        const schedChecks = p.scheduled_checks ?? []
+        const schedAllDone = schedChecks.every((sc: any) => sc.completed_today || !sc.is_overdue)
+        const allProjectDone = entryDone && (startupDone || startupTotal === 0) && schedAllDone
 
         return (
           <View key={p.project_id} style={{
@@ -123,6 +127,32 @@ function TaskOverviewSection() {
                 </View>
               )}
             </View>
+            {/* Scheduled checks */}
+            {(p.scheduled_checks ?? []).length > 0 && (
+              <View style={{ marginTop: 4, marginLeft: 28, gap: 3 }}>
+                {p.scheduled_checks.map((sc: any) => (
+                  <TouchableOpacity
+                    key={sc.id}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    onPress={() => router.push({ pathname: '/scheduled-check/[id]', params: { id: sc.id } })}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={sc.completed_today ? 'checkmark-circle' : sc.is_overdue ? 'alert-circle' : 'time-outline'}
+                      size={14}
+                      color={sc.completed_today ? Colors.success : sc.is_overdue ? Colors.error : Colors.warning}
+                    />
+                    <Text style={{ ...Typography.caption, color: sc.completed_today ? Colors.success : sc.is_overdue ? Colors.error : Colors.textSecondary, fontWeight: '600', flex: 1 }}>
+                      {sc.name}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: Colors.textLight }}>
+                      {sc.machine_count} machine{sc.machine_count !== 1 ? 's' : ''}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={12} color={Colors.textLight} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
         )
       })}

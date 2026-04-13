@@ -3459,6 +3459,25 @@ def admin_task_overview():
             )
         ).count()
 
+        # Scheduled equipment checks for this project
+        sched_checks = ScheduledEquipmentCheck.query.filter_by(
+            project_id=p.id, active=True).all()
+        sched_items = []
+        for sc in sched_checks:
+            sc_completed = ScheduledCheckCompletion.query.filter_by(
+                scheduled_check_id=sc.id, completed_date=today_date).first() is not None
+            sc_overdue = sc.next_due_date and sc.next_due_date <= today_date and not sc_completed
+            sched_items.append({
+                'id': sc.id,
+                'name': sc.name,
+                'assigned_to': (sc.assigned_user.display_name or sc.assigned_user.username) if sc.assigned_user else None,
+                'frequency': sc.frequency,
+                'next_due_date': sc.next_due_date.isoformat() if sc.next_due_date else None,
+                'machine_count': len(sc.machines) if sc.machines else 0,
+                'completed_today': sc_completed,
+                'is_overdue': sc_overdue,
+            })
+
         project_tasks.append({
             'project_id': p.id,
             'project_name': p.name,
@@ -3474,6 +3493,7 @@ def admin_task_overview():
                 'total': total_machines,
                 'completed': checks_done >= total_machines and total_machines > 0,
             },
+            'scheduled_checks': sched_items,
             'standdown_email_needed': standdown_needed,
             'open_breakdowns': open_breakdowns,
         })
