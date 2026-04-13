@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
+  Alert,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -281,6 +282,28 @@ export default function LoginScreen() {
                   <Ionicons name="arrow-forward" size={16} color={Colors.dark} style={{ marginLeft: 8 }} />
                 </>
               )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                Alert.prompt
+                  ? Alert.prompt('Forgot Password', 'Enter your email address:', (email) => {
+                      if (email?.trim()) {
+                        api.auth.forgotPassword(email.trim())
+                        Alert.alert('Check your email', 'If an account with that email exists, a reset link has been sent.')
+                      }
+                    }, 'plain-text', '', 'email-address')
+                  : Alert.alert('Forgot Password', 'Enter your email address in the field below and tap Send.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'OK', onPress: () => {
+                        // Android fallback — show a simple alert directing to web
+                        Alert.alert('Password Reset', 'Please visit the Plytrack website and click "Forgot password?" on the login page.')
+                      }},
+                    ])
+              }}
+              style={{ alignSelf: 'center', marginTop: 12 }}
+            >
+              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Forgot password?</Text>
             </TouchableOpacity>
           </View>
         </View>

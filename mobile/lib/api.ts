@@ -110,6 +110,8 @@ export const api = {
       ),
     me: () => apiClient.get<User>('/auth/me'),
     logout: () => apiClient.post('/auth/logout'),
+    forgotPassword: (email: string) =>
+      apiClient.post<{ message: string }>('/auth/forgot-password', { email }),
   },
 
   projects: {

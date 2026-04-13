@@ -76,6 +76,25 @@ def me():
     }, 200
 
 
+@api_auth_bp.route('/auth/forgot-password', methods=['POST'])
+def api_forgot_password():
+    """Send a password reset email (no auth required)."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    if not email:
+        return {'error': 'Email is required'}, 400
+
+    user = User.query.filter(db.func.lower(User.email) == email, User.active == True).first()
+    if user and user.email:
+        from blueprints.auth import _get_reset_serializer, _send_reset_email
+        s = _get_reset_serializer()
+        token = s.dumps(user.id)
+        _send_reset_email(user, token)
+
+    # Always return success (don't reveal if email exists)
+    return {'message': 'If an account with that email exists, a reset link has been sent.'}, 200
+
+
 @api_auth_bp.route('/auth/logout', methods=['POST'])
 @jwt_required()
 def logout():
