@@ -273,6 +273,8 @@ with app.app_context():
         "ALTER TABLE machine_transfer ADD COLUMN arrival_check_notes TEXT",
         'ALTER TABLE machine_transfer ADD COLUMN arrived_by_user_id INTEGER REFERENCES "user"(id)',
         "ALTER TABLE machine_transfer ADD COLUMN arrived_at TIMESTAMP",
+        # ── 2026-04-13: Project mobilisation date ──
+        "ALTER TABLE project ADD COLUMN mobilisation_date DATE",
         # ── 2026-04-04: Equipment display photo ──
         "ALTER TABLE machine ADD COLUMN photo_filename VARCHAR(500)",
         "ALTER TABLE machine ADD COLUMN photo_original_name VARCHAR(500)",

@@ -103,8 +103,11 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
         <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Switch Project</Text>
-            {user?.accessible_projects?.map((p) => {
+            {user?.accessible_projects?.map((p: any) => {
               const isActive = p.id === activeProject?.id
+              const status = p.status || (p.active ? 'active' : 'completed')
+              const statusColor = status === 'active' ? '#28a745' : status === 'planning' ? '#17a2b8' : '#6c757d'
+              const statusLabel = status === 'active' ? 'Active' : status === 'planning' ? 'Planning' : 'Completed'
               return (
                 <TouchableOpacity
                   key={p.id}
@@ -112,10 +115,13 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
                   onPress={() => handleSwitch(p.id)}
                   activeOpacity={0.75}
                 >
-                  <View style={[styles.dot, { backgroundColor: isActive ? Colors.primary : Colors.border }]} />
-                  <Text style={[styles.optionText, isActive && styles.optionTextActive]} numberOfLines={2}>
-                    {p.name}
-                  </Text>
+                  <View style={[styles.dot, { backgroundColor: isActive ? Colors.primary : statusColor }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.optionText, isActive && styles.optionTextActive]} numberOfLines={2}>
+                      {p.name}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: statusColor, fontWeight: '600' }}>{statusLabel}</Text>
+                  </View>
                   {isActive && <Ionicons name="checkmark-circle" size={18} color={Colors.primary} />}
                 </TouchableOpacity>
               )

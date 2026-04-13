@@ -638,6 +638,12 @@ def admin_projects():
                             setattr(p, attr, cast(raw))
                         except ValueError:
                             pass
+                mob_str = request.form.get('mobilisation_date', '').strip()
+                if mob_str:
+                    try:
+                        p.mobilisation_date = datetime.strptime(mob_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
                 p.site_address = request.form.get('site_address', '').strip() or None
                 p.site_contact = request.form.get('site_contact', '').strip() or None
                 p.city = request.form.get('city', '').strip() or None
@@ -653,6 +659,8 @@ def admin_projects():
             project.description = request.form.get('description', '').strip() or None
             start_str = request.form.get('start_date', '').strip()
             project.start_date = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else None
+            mob_str = request.form.get('mobilisation_date', '').strip()
+            project.mobilisation_date = datetime.strptime(mob_str, '%Y-%m-%d').date() if mob_str else None
             planned_crew = request.form.get('planned_crew', '').strip()
             project.planned_crew = int(planned_crew) if planned_crew else None
             hours_per_day = request.form.get('hours_per_day', '').strip()

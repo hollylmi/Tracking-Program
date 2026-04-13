@@ -46,10 +46,16 @@
               </td>
               <td>{{ project.entries|length }}</td>
               <td>
-                {% if project.active %}
+                {% set proj_status = project.status %}
+                {% if proj_status == 'active' %}
                   <span class="badge bg-success-subtle text-success">Active</span>
+                {% elif proj_status == 'planning' %}
+                  <span class="badge bg-info-subtle text-info">Planning</span>
+                  {% if project.mobilisation_date %}
+                  <div class="text-muted" style="font-size:.65rem;">Mob: {{ project.mobilisation_date.strftime('%d/%m/%Y') }}</div>
+                  {% endif %}
                 {% else %}
-                  <span class="badge bg-secondary-subtle text-secondary">Inactive</span>
+                  <span class="badge bg-secondary-subtle text-secondary">Completed</span>
                 {% endif %}
               </td>
               <td class="text-end">
@@ -73,7 +79,8 @@
                             '{{ (project.site_address or '')|replace("'", "\\'") }}',
                             '{{ (project.site_contact or '')|replace("'", "\\'") }}',
                             '{{ project.city or "" }}',
-                            '{{ project.nearest_airport or "" }}')"
+                            '{{ project.nearest_airport or "" }}',
+                            '{{ project.mobilisation_date.strftime("%Y-%m-%d") if project.mobilisation_date else "" }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -135,13 +142,22 @@
                       placeholder="Optional notes about this project..."></textarea>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label fw-semibold">
-              Installation Start Date
-              <span class="text-muted fw-normal small">(Day 1 for Gantt)</span>
-            </label>
-            <input type="date" name="start_date" id="projectStartDate" class="form-control">
-            <div class="form-text">Used to convert planned day numbers to calendar dates on the Gantt chart.</div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">
+                Mobilisation Date
+              </label>
+              <input type="date" name="mobilisation_date" id="projectMobDate" class="form-control">
+              <div class="form-text">Project becomes operational on this date. Before this, it's in planning mode (scheduling only, no entries).</div>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">
+                Installation Start Date
+                <span class="text-muted fw-normal small">(Day 1)</span>
+              </label>
+              <input type="date" name="start_date" id="projectStartDate" class="form-control">
+              <div class="form-text">Day 1 for Gantt chart and progress calculations.</div>
+            </div>
           </div>
 
           <div class="mb-3">
@@ -219,13 +235,14 @@
 
 {% block scripts %}
 <script>
-  function openEditProject(id, name, description, startDate, plannedCrew, hoursPerDay, quotedDays, siteAddress, siteContact, city, airport) {
+  function openEditProject(id, name, description, startDate, plannedCrew, hoursPerDay, quotedDays, siteAddress, siteContact, city, airport, mobDate) {
     document.getElementById('formTitle').textContent = 'Edit Project';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
     document.getElementById('projectName').value = name;
     document.getElementById('projectDesc').value = description;
     document.getElementById('projectStartDate').value = startDate;
+    document.getElementById('projectMobDate').value = mobDate || '';
     document.getElementById('projectPlannedCrew').value = plannedCrew;
     document.getElementById('projectHoursPerDay').value = hoursPerDay;
     document.getElementById('projectQuotedDays').value = quotedDays;
@@ -246,6 +263,7 @@
     document.getElementById('projectName').value = '';
     document.getElementById('projectDesc').value = '';
     document.getElementById('projectStartDate').value = '';
+    document.getElementById('projectMobDate').value = '';
     document.getElementById('projectPlannedCrew').value = '';
     document.getElementById('projectHoursPerDay').value = '';
     document.getElementById('projectQuotedDays').value = '';

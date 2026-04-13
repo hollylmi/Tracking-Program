@@ -32,7 +32,7 @@ def login():
     access_token = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
 
-    projects = [{'id': p.id, 'name': p.name, 'active': p.active} for p in user.accessible_projects()]
+    projects = [{'id': p.id, 'name': p.name, 'active': p.active, 'status': p.status, 'is_operational': p.is_operational} for p in user.accessible_projects()]
 
     return {
         'access_token': access_token,
@@ -64,7 +64,7 @@ def me():
     if not user or not user.active:
         return {'error': 'User not found or inactive'}, 401
 
-    projects = [{'id': p.id, 'name': p.name, 'active': p.active} for p in user.accessible_projects()]
+    projects = [{'id': p.id, 'name': p.name, 'active': p.active, 'status': p.status, 'is_operational': p.is_operational} for p in user.accessible_projects()]
 
     return {
         'id': user.id,

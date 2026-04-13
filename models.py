@@ -71,7 +71,25 @@ class Project(db.Model):
     nearest_airport = db.Column(db.String(10))       # Airport code for travel (e.g. "BNE", "SYD", "KTA")
     site_contact = db.Column(db.String(200))      # On-site contact name / phone
     site_manager_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    mobilisation_date = db.Column(db.Date, nullable=True)  # When set, project becomes operational on this date
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def status(self):
+        """Planning / Active / Completed based on active flag and mobilisation date."""
+        if not self.active:
+            return 'completed'
+        if self.mobilisation_date:
+            from datetime import date as d
+            if d.today() >= self.mobilisation_date:
+                return 'active'
+            return 'planning'
+        return 'active'  # No mob date = assume active
+
+    @property
+    def is_operational(self):
+        """True if project is active AND mobilised (ready for entries, equipment checks)."""
+        return self.status == 'active'
     entries = db.relationship('DailyEntry', backref='project', lazy=True)
     site_manager = db.relationship('User', foreign_keys=[site_manager_user_id], lazy=True)
     planned_data = db.relationship('PlannedData', backref='project',
