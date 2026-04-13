@@ -37,7 +37,80 @@ interface ProjectWithProgress extends ProjectListItem {
   progress: ProjectProgress | null
 }
 
-// ─── Task Overview Section ─────────────────────────────────────────────────
+// ─── My Todos Section (supervisor/site users) ─────────────────────────────
+
+function MyTodosSection() {
+  const router = useRouter()
+  const user = useAuthStore((s) => s.user)
+
+  const { data } = useQuery({
+    queryKey: ['my-todos'],
+    queryFn: () => api.tasks.myTodos().then((r) => r.data),
+    staleTime: 60 * 1000,
+    enabled: !!user && user.role !== 'admin',
+  })
+
+  if (!data?.todos?.length) return null
+
+  const todos = data.todos
+  const allDone = todos.every((t: any) => t.completed)
+
+  return (
+    <Card style={{ marginBottom: Spacing.md, borderLeftWidth: 4, borderLeftColor: allDone ? Colors.success : Colors.warning, overflow: 'hidden' }}>
+      <View style={{ paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.sm }}>
+        <Text style={{ ...Typography.label, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Your Tasks Today
+        </Text>
+      </View>
+      {allDone && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm }}>
+          <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
+          <Text style={{ ...Typography.bodySmall, color: Colors.success, fontWeight: '600' }}>All tasks complete for today</Text>
+        </View>
+      )}
+      {todos.map((todo: any, i: number) => (
+        <TouchableOpacity
+          key={`${todo.project_id}-${todo.task_type}-${todo.check_id || ''}`}
+          onPress={() => {
+            if (todo.completed) return
+            if (todo.task_type === 'daily_entry') router.push('/entry/new')
+            else if (todo.task_type === 'machine_startup') router.push('/(tabs)/equipment')
+            else if (todo.task_type === 'scheduled_check' && todo.check_id) router.push({ pathname: '/scheduled-check/[id]', params: { id: todo.check_id } })
+          }}
+          activeOpacity={todo.completed ? 1 : 0.7}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+            paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2,
+            borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0,
+            borderTopColor: Colors.border,
+          }}
+        >
+          <Ionicons
+            name={todo.completed ? 'checkmark-circle' : 'ellipse-outline'}
+            size={22}
+            color={todo.completed ? Colors.success : Colors.textLight}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={{
+              ...Typography.body, color: todo.completed ? Colors.textLight : Colors.textPrimary,
+              fontWeight: todo.completed ? '400' : '600',
+              textDecorationLine: todo.completed ? 'line-through' : 'none',
+            }}>{todo.label}</Text>
+            <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>{todo.project_name}</Text>
+          </View>
+          {todo.progress && !todo.completed && (
+            <Text style={{ ...Typography.caption, color: Colors.warning, fontWeight: '700' }}>
+              {todo.progress.done}/{todo.progress.total}
+            </Text>
+          )}
+          {!todo.completed && <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />}
+        </TouchableOpacity>
+      ))}
+    </Card>
+  )
+}
+
+// ─── Task Overview Section (admin) ─────────────────────────────────────────
 
 function TaskOverviewSection() {
   const router = useRouter()
@@ -543,8 +616,9 @@ export default function OverviewScreen() {
           <Text style={s.newEntryText}>NEW DAILY ENTRY</Text>
         </TouchableOpacity>
 
-        {/* Admin Task Overview */}
+        {/* Task lists — admin sees all projects, others see their personal todos */}
         <TaskOverviewSection />
+        <MyTodosSection />
 
         {/* Sync status */}
         <View style={s.syncBar}>

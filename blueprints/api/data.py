@@ -3379,7 +3379,7 @@ def my_todos():
 
     for a in assignments:
         project = a.project
-        if not project or not project.active:
+        if not project or not project.active or not project.is_operational:
             continue
 
         if a.task_type == 'daily_entry':
@@ -3395,15 +3395,18 @@ def my_todos():
             })
 
         elif a.task_type == 'machine_startup':
+            own_count = ProjectMachine.query.filter_by(project_id=project.id).count()
+            hired_count = HiredMachine.query.filter_by(project_id=project.id, active=True).count()
+            total_machines = own_count + hired_count
             checks_done = MachineDailyCheck.query.filter_by(
                 project_id=project.id, check_date=today_date).count()
             todos.append({
                 'project_id': project.id,
                 'project_name': project.name,
                 'task_type': 'machine_startup',
-                'label': 'Start machines for the day',
-                'completed': checks_done > 0,
-                'progress': {'done': checks_done, 'total': 0},
+                'label': 'Equipment startup checks',
+                'completed': checks_done >= total_machines and total_machines > 0,
+                'progress': {'done': checks_done, 'total': total_machines},
             })
 
     # Scheduled equipment checks assigned to this user
@@ -3413,6 +3416,8 @@ def my_todos():
         ScheduledEquipmentCheck.next_due_date <= today_date,
     ).all()
     for sc in my_scheduled:
+        if not sc.project or not sc.project.is_operational:
+            continue
         already_done = any(c.completed_date == today_date for c in sc.completions)
         todos.append({
             'project_id': sc.project_id,
