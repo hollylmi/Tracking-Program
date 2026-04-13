@@ -130,13 +130,24 @@
           </div>
           {% if prog and prog.tasks %}
           <div class="mt-2 pt-2 border-top">
+            {# Aggregate by material (ignore lot breakdown) #}
+            {% set ns = namespace(mat_data={}) %}
             {% for task in prog.tasks %}
+              {% set mat = task.material or 'Unknown' %}
+              {% if mat in ns.mat_data %}
+                {% set _ = ns.mat_data.update({mat: {'planned': ns.mat_data[mat].planned + task.planned_sqm, 'actual': ns.mat_data[mat].actual + task.actual_sqm}}) %}
+              {% else %}
+                {% set _ = ns.mat_data.update({mat: {'planned': task.planned_sqm, 'actual': task.actual_sqm}}) %}
+              {% endif %}
+            {% endfor %}
+            {% for mat, d in ns.mat_data.items() %}
+            {% set pct = ((d.actual / d.planned * 100) | round(0) | int) if d.planned > 0 else 0 %}
             <div class="d-flex align-items-center gap-2 mb-1">
               <div class="progress flex-grow-1" style="height:6px;">
-                <div class="progress-bar {% if task.pct_complete >= 100 %}bg-success{% elif task.pct_complete >= 50 %}bg-primary{% else %}bg-warning{% endif %}" style="width:{{ task.pct_complete }}%"></div>
+                <div class="progress-bar {% if pct >= 100 %}bg-success{% elif pct >= 50 %}bg-primary{% else %}bg-warning{% endif %}" style="width:{{ [pct, 100] | min }}%"></div>
               </div>
-              <span class="fw-semibold {% if task.pct_complete >= 100 %}text-success{% else %}text-dark{% endif %}" style="font-size:.7rem;min-width:32px;text-align:right;">{{ task.pct_complete }}%</span>
-              <span class="text-muted" style="font-size:.68rem;min-width:60px;">{{ task.material or 'Unknown' }}</span>
+              <span class="fw-semibold {% if pct >= 100 %}text-success{% else %}text-dark{% endif %}" style="font-size:.7rem;min-width:32px;text-align:right;">{{ pct }}%</span>
+              <span class="text-muted" style="font-size:.68rem;min-width:60px;">{{ mat }}</span>
             </div>
             {% endfor %}
           </div>
