@@ -757,6 +757,8 @@ def admin_employees():
                 emp.home_airport = request.form.get('home_airport', '').strip() or None
                 term_str = request.form.get('termination_date', '').strip()
                 emp.termination_date = datetime.strptime(term_str, '%Y-%m-%d').date() if term_str else None
+                if emp.termination_date and emp.termination_date <= datetime.now().date():
+                    emp.active = False
                 db.session.add(emp)
                 db.session.flush()  # get emp.id before setting m2m
                 if role_ids:
@@ -783,6 +785,8 @@ def admin_employees():
             emp.home_airport = request.form.get('home_airport', '').strip() or None
             term_str = request.form.get('termination_date', '').strip()
             emp.termination_date = datetime.strptime(term_str, '%Y-%m-%d').date() if term_str else None
+            if emp.termination_date and emp.termination_date <= datetime.now().date():
+                emp.active = False
             role_ids = request.form.getlist('role_ids')
             delay_rate_raw = request.form.get('delay_rate', '').strip()
             if role_ids:
@@ -817,11 +821,30 @@ def admin_employees():
                 flash('Employee deleted.', 'info')
         return redirect(url_for('admin.admin_employees'))
 
+    # Auto-deactivate employees whose termination date has passed
+    today = datetime.now().date()
+    terminated = Employee.query.filter(
+        Employee.active == True,
+        Employee.termination_date != None,
+        Employee.termination_date <= today
+    ).all()
+    for emp in terminated:
+        emp.active = False
+    if terminated:
+        db.session.commit()
+
+    show_inactive = request.args.get('show_inactive', '0') == '1'
+    if show_inactive:
+        employees = Employee.query.order_by(Employee.active.desc(), Employee.name).all()
+    else:
+        employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
+    inactive_count = Employee.query.filter_by(active=False).count()
+
     from utils.settings import get_airports, get_locations
-    employees = Employee.query.order_by(Employee.name).all()
     roles = Role.query.order_by(Role.name).all()
     return render_template('admin/employees.html', employees=employees, roles=roles,
-                           airports=get_airports(), locations=get_locations())
+                           airports=get_airports(), locations=get_locations(),
+                           show_inactive=show_inactive, inactive_count=inactive_count)
 
 
 @admin_bp.route('/admin/machines', methods=['GET', 'POST'])

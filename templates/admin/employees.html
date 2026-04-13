@@ -14,8 +14,19 @@
   <!-- Employee List -->
   <div class="col-lg-8">
     <div class="card border-0 shadow-sm">
-      <div class="card-header bg-white py-3">
-        <h5 class="mb-0 fw-semibold">All Employees</h5>
+      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-semibold">{{ 'All Employees' if show_inactive else 'Active Employees' }}</h5>
+        <div class="d-flex gap-2 align-items-center">
+          {% if show_inactive %}
+          <a href="{{ url_for('admin.admin_employees') }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-eye-slash me-1"></i>Hide Inactive
+          </a>
+          {% else %}
+          <a href="{{ url_for('admin.admin_employees', show_inactive=1) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-eye me-1"></i>Show Inactive ({{ inactive_count }})
+          </a>
+          {% endif %}
+        </div>
       </div>
       <div class="card-body p-0">
         {% if employees %}
