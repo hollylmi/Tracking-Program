@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View,
   Text,
@@ -12,10 +12,12 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import NfcManager, { NfcTech, Ndef } from 'react-native-nfc-manager'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import * as ImagePicker from 'expo-image-picker'
 import ScreenHeader from '../../components/layout/ScreenHeader'
@@ -509,6 +511,47 @@ export default function EquipmentScreen() {
   const activeProject = useProjectStore((s) => s.activeProject)
   const projectId = activeProject?.id
 
+  // NFC scanning
+  const [nfcScanning, setNfcScanning] = useState(false)
+  const [nfcSupported, setNfcSupported] = useState(false)
+
+  useEffect(() => {
+    NfcManager.isSupported().then(setNfcSupported).catch(() => setNfcSupported(false))
+  }, [])
+
+  const handleNfcScan = useCallback(async () => {
+    if (!nfcSupported) {
+      Alert.alert('NFC Not Available', 'This device does not support NFC scanning.')
+      return
+    }
+    setNfcScanning(true)
+    try {
+      await NfcManager.requestTechnology(NfcTech.Ndef)
+      const tag = await NfcManager.getTag()
+      if (tag?.ndefMessage?.[0]) {
+        const payload = tag.ndefMessage[0].payload
+        const url = Ndef.uri.decodePayload(payload as unknown as number[])
+        const match = url.match(/\/equipment\/scan\/(\d+)/)
+        if (match) {
+          setNfcScanning(false)
+          router.push({ pathname: '/machine/[id]', params: { id: match[1] } })
+          return
+        } else {
+          Alert.alert('Unknown Tag', 'This NFC tag is not linked to any equipment.')
+        }
+      } else {
+        Alert.alert('Empty Tag', 'No data found on this NFC tag.')
+      }
+    } catch (e: any) {
+      if (e?.message !== 'cancelled') {
+        Alert.alert('Scan Failed', 'Could not read NFC tag. Make sure NFC is enabled.')
+      }
+    } finally {
+      NfcManager.cancelTechnologyRequest().catch(() => {})
+      setNfcScanning(false)
+    }
+  }, [nfcSupported, router])
+
   // Fleet data
   const { data: machines = [], isLoading: machinesLoading, refetch: refetchMachines } =
     useQuery({
@@ -845,6 +888,37 @@ export default function EquipmentScreen() {
           onSaved={() => { setViewingCheck(null); queryClient.invalidateQueries({ queryKey: ['daily-checks'] }) }}
           onDeleted={() => { setViewingCheck(null); queryClient.invalidateQueries({ queryKey: ['daily-checks'] }) }} />
       )}
+
+      {/* NFC Floating Action Button */}
+      {nfcSupported && (
+        <TouchableOpacity style={styles.nfcFab} onPress={handleNfcScan} activeOpacity={0.85}>
+          <Ionicons name="scan-outline" size={24} color="#fff" />
+          <Text style={styles.nfcFabText}>Scan</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* NFC Scanning Modal */}
+      <Modal visible={nfcScanning} transparent animationType="fade" onRequestClose={() => {
+        NfcManager.cancelTechnologyRequest().catch(() => {})
+        setNfcScanning(false)
+      }}>
+        <View style={styles.nfcOverlay}>
+          <View style={styles.nfcCard}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Ionicons name="scan-outline" size={48} color={Colors.primary} style={{ marginTop: Spacing.md }} />
+            <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginTop: Spacing.md }}>Hold near NFC tag</Text>
+            <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, marginTop: Spacing.xs, textAlign: 'center' }}>
+              Place your device against the NFC tag on the equipment
+            </Text>
+            <TouchableOpacity
+              style={styles.nfcCancelBtn}
+              onPress={() => { NfcManager.cancelTechnologyRequest().catch(() => {}); setNfcScanning(false) }}
+            >
+              <Text style={{ ...Typography.body, color: Colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -944,6 +1018,48 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.sm,
+  },
+  nfcFab: {
+    position: 'absolute',
+    bottom: Spacing.lg,
+    right: Spacing.lg,
+    backgroundColor: Colors.primary,
+    borderRadius: 28,
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  nfcFabText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  nfcOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nfcCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    width: 280,
+  },
+  nfcCancelBtn: {
+    marginTop: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.border,
   },
 })
 
