@@ -1978,9 +1978,8 @@ def get_reference():
     # Scope employees, machines, hired machines to the active project if provided,
     # falling back to all accessible projects if the scoped query returns nothing.
     if prog_pid:
-        employees = _active_employees({prog_pid})
-        if not employees:
-            employees = _active_employees(allowed_ids)
+        # Always return ALL active employees so any crew member can be selected
+        employees = Employee.query.filter_by(active=True).order_by(Employee.role, Employee.name).all()
 
         assigned_machine_ids = {
             row.machine_id

@@ -814,6 +814,7 @@ export default function EntryEditScreen() {
           {/* ── Step 1: Entry Details ── */}
           {step === 1 && (
             <View>
+              <FieldInput label="Project" value={entry.project_name || activeProject?.name || ''} onChangeText={() => {}} readOnly optional />
               <FieldInput label="Date" value={new Date(entry.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} onChangeText={() => {}} readOnly optional />
               <FieldInput ref={locationRef} label="Location" value={location}
                 onChangeText={setLocation} placeholder="e.g. Cell 3 North" optional returnKeyType="done" />
