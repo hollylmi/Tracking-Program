@@ -1,9 +1,12 @@
-import { useEffect } from 'react'
-import { View, StyleSheet } from 'react-native'
+import { useEffect, useState } from 'react'
+import { View, Text, TouchableOpacity, ActionSheetIOS, Platform, Alert, StyleSheet } from 'react-native'
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { Colors, Spacing } from '../../constants/theme'
+import { useQueryClient } from '@tanstack/react-query'
+import { Colors, Spacing, Typography, BorderRadius } from '../../constants/theme'
 import { useAuthStore } from '../../store/auth'
+import { useProjectStore } from '../../store/project'
+import { api } from '../../lib/api'
 import { registerForPushNotifications } from '../../lib/notifications'
 import { OfflineBanner } from '../../components/ui/OfflineBanner'
 
@@ -11,14 +14,56 @@ type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 
 export default function TabsLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const userRole = useAuthStore((s) => s.user?.role)
+  const user = useAuthStore((s) => s.user)
+  const userRole = user?.role
   const isAdmin = userRole === 'admin'
+  const { activeProject, setActiveProject } = useProjectStore()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (isAuthenticated) {
       registerForPushNotifications()
     }
   }, [isAuthenticated])
+
+  // Only operational projects for switching
+  const operationalProjects = (user?.accessible_projects ?? []).filter((p: any) => {
+    const status = p.status || (p.active ? 'active' : 'completed')
+    return status === 'active'
+  })
+
+  const handleSwitchProject = () => {
+    if (operationalProjects.length <= 1) return
+    const names = operationalProjects.map((p: any) => p.name)
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: [...names, 'Cancel'], cancelButtonIndex: names.length, title: 'Switch Project' },
+        (idx) => {
+          if (idx < names.length) doSwitch(operationalProjects[idx])
+        }
+      )
+    } else {
+      Alert.alert('Switch Project', undefined,
+        [...operationalProjects.map((p: any) => ({
+          text: p.name, onPress: () => doSwitch(p),
+        })), { text: 'Cancel', style: 'cancel' as const }]
+      )
+    }
+  }
+
+  const doSwitch = async (p: any) => {
+    setActiveProject({
+      id: p.id, name: p.name, start_date: null, active: true,
+      quoted_days: null, hours_per_day: null, site_address: null,
+      site_contact: null, track_by_lot: false,
+    })
+    try {
+      const { data } = await api.projects.detail(p.id)
+      setActiveProject(data)
+    } catch {}
+    queryClient.invalidateQueries()
+  }
 
   const icon = (focused: boolean, color: string, name: IoniconName, activeName: IoniconName) => (
     <View style={{
@@ -37,8 +82,21 @@ export default function TabsLayout() {
   return (
     <View style={{ flex: 1 }}>
     <OfflineBanner />
+    <TouchableOpacity
+      style={layoutStyles.switcherBar}
+      onPress={handleSwitchProject}
+      activeOpacity={operationalProjects.length > 1 ? 0.7 : 1}
+    >
+      <View style={layoutStyles.pill}>
+        <Text style={layoutStyles.pillText} numberOfLines={1}>
+          {activeProject?.name ?? 'No project'}
+        </Text>
+        {operationalProjects.length > 1 && (
+          <Ionicons name="chevron-down" size={12} color={Colors.primary} />
+        )}
+      </View>
+    </TouchableOpacity>
     <Tabs
-      initialRouteName={isAdmin ? 'overview' : 'index'}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -54,12 +112,12 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
       }}
     >
-      <Tabs.Screen name="overview" options={{
+      <Tabs.Screen name="index" options={{
         title: 'Overview',
         href: isAdmin ? undefined : null,
         tabBarIcon: ({ focused, color }) => icon(focused, color, 'grid-outline', 'grid'),
       }} />
-      <Tabs.Screen name="index" options={{
+      <Tabs.Screen name="dashboard" options={{
         title: 'Dashboard',
         tabBarIcon: ({ focused, color }) => icon(focused, color, 'home-outline', 'home'),
       }} />
@@ -87,4 +145,33 @@ export default function TabsLayout() {
     </View>
   )
 }
+
+const layoutStyles = StyleSheet.create({
+  switcherBar: {
+    backgroundColor: Colors.dark,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,183,197,0.1)',
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,183,197,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,183,197,0.25)',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm + 4,
+    paddingVertical: 5,
+    maxWidth: 220,
+  },
+  pillText: {
+    ...Typography.caption,
+    color: Colors.primary,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+})
 
