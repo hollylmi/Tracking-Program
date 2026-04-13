@@ -41,15 +41,21 @@ interface ProjectWithProgress extends ProjectListItem {
 
 function TaskOverviewSection() {
   const router = useRouter()
-  const { data } = useQuery({
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.role === 'admin'
+
+  const { data, error } = useQuery({
     queryKey: ['admin-task-overview'],
     queryFn: () => api.tasks.adminOverview().then((r) => r.data),
     staleTime: 60 * 1000,
+    enabled: isAdmin,
   })
 
+  if (!isAdmin) return null
   if (!data?.projects?.length) return null
 
-  const projects = data.projects.filter((p: any) => p.status === 'active')
+  // Show all projects from the response (API already filters to operational)
+  const projects = data.projects
   if (projects.length === 0) return null
 
   const allDone = projects.every((p: any) =>
