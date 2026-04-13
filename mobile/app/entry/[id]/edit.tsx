@@ -449,7 +449,7 @@ export default function EntryEditScreen() {
   const [selectedMachineIds, setSelectedMachineIds] = useState<number[]>([])
 
   // Step 4 — Variations, Delays & Notes
-  const [variationLines, setVariationLines] = useState<{ number: string; description: string; hours: string; employee_ids: number[] }[]>([])
+  const [variationLines, setVariationLines] = useState<{ number: string; description: string; hours: string; employee_ids: number[]; machine_ids: number[] }[]>([])
   const [delayLines, setDelayLines] = useState<{ reason: string; hours: string; description: string }[]>([])
   const [selectedStanddownIds, setSelectedStanddownIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
@@ -504,7 +504,7 @@ export default function EntryEditScreen() {
 
   // Variation line helpers
   function addVariationLine() {
-    setVariationLines(prev => [...prev, { number: '', description: '', hours: '', employee_ids: [] }])
+    setVariationLines(prev => [...prev, { number: '', description: '', hours: '', employee_ids: [], machine_ids: [] }])
   }
   function updateVariationLine(index: number, field: 'number' | 'description' | 'hours', value: string) {
     setVariationLines(prev => prev.map((line, i) => i === index ? { ...line, [field]: value } : line))
@@ -520,6 +520,57 @@ export default function EntryEditScreen() {
   }
   function removeVariationLine(index: number) {
     setVariationLines(prev => prev.filter((_, i) => i !== index))
+  }
+  function toggleVariationMachine(lineIndex: number, machineId: number) {
+    setVariationLines(prev => prev.map((line, i) => {
+      if (i !== lineIndex) return line
+      const ids = line.machine_ids.includes(machineId)
+        ? line.machine_ids.filter(x => x !== machineId)
+        : [...line.machine_ids, machineId]
+      return { ...line, machine_ids: ids }
+    }))
+  }
+
+  // Select All / Clear helpers
+  function selectAllLineEmployees(lineIndex: number) {
+    setProductionLines(prev => prev.map((line, i) =>
+      i === lineIndex ? { ...line, employee_ids: [...selectedEmployeeIds] } : line
+    ))
+  }
+  function clearLineEmployees(lineIndex: number) {
+    setProductionLines(prev => prev.map((line, i) =>
+      i === lineIndex ? { ...line, employee_ids: [] } : line
+    ))
+  }
+  function selectAllVariationEmployees(lineIndex: number) {
+    setVariationLines(prev => prev.map((line, i) =>
+      i === lineIndex ? { ...line, employee_ids: [...selectedEmployeeIds] } : line
+    ))
+  }
+  function clearVariationEmployees(lineIndex: number) {
+    setVariationLines(prev => prev.map((line, i) =>
+      i === lineIndex ? { ...line, employee_ids: [] } : line
+    ))
+  }
+  function selectAllVariationMachines(lineIndex: number) {
+    setVariationLines(prev => prev.map((line, i) =>
+      i === lineIndex ? { ...line, machine_ids: [...selectedMachineIds] } : line
+    ))
+  }
+  function clearVariationMachines(lineIndex: number) {
+    setVariationLines(prev => prev.map((line, i) =>
+      i === lineIndex ? { ...line, machine_ids: [] } : line
+    ))
+  }
+  function selectAllOtherActivityEmployees(lineIndex: number) {
+    setOtherActivityLines(prev => prev.map((line, i) =>
+      i === lineIndex ? { ...line, employee_ids: [...selectedEmployeeIds] } : line
+    ))
+  }
+  function clearOtherActivityEmployees(lineIndex: number) {
+    setOtherActivityLines(prev => prev.map((line, i) =>
+      i === lineIndex ? { ...line, employee_ids: [] } : line
+    ))
   }
 
   // Other activity line helpers
@@ -549,6 +600,16 @@ export default function EntryEditScreen() {
 
   const totalSqm = productionLines.reduce((sum, l) => sum + (parseFloat(l.sqm) || 0), 0)
   const totalHours = productionLines.reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0)
+
+  // Person-hours calculations
+  const crewCount = selectedEmployeeIds.length
+  const hoursPerDay = activeProject?.hours_per_day ?? 8
+  const productionPersonHours = productionLines.reduce((sum, l) => sum + (parseFloat(l.hours) || 0) * l.employee_ids.length, 0)
+  const variationPersonHours = variationLines.reduce((sum, vl) => sum + (parseFloat(vl.hours) || 0) * vl.employee_ids.length, 0)
+  const otherPersonHours = otherActivityLines.reduce((sum, ol) => sum + (parseFloat(ol.hours) || 0) * ol.employee_ids.length, 0)
+  const availablePersonHours = crewCount * hoursPerDay
+  const totalAccountedPersonHours = productionPersonHours + variationPersonHours + otherPersonHours
+  const unaccountedPersonHours = availablePersonHours - totalAccountedPersonHours
 
   // ── Populate from loaded entry ────────────────────────────────────────────────
   useEffect(() => {
@@ -582,6 +643,7 @@ export default function EntryEditScreen() {
         number: vl.variation_number ?? '', description: vl.description ?? '',
         hours: vl.hours != null ? String(vl.hours) : '',
         employee_ids: vl.employee_ids_json ? JSON.parse(vl.employee_ids_json) : [],
+        machine_ids: vl.machine_ids_json ? JSON.parse(vl.machine_ids_json) : [],
       })))
     }
     // Load delay lines
@@ -678,6 +740,7 @@ export default function EntryEditScreen() {
           description: vl.description || undefined,
           hours: parseFloat(vl.hours) || 0,
           employee_ids_json: vl.employee_ids.length > 0 ? JSON.stringify(vl.employee_ids) : undefined,
+          machine_ids_json: vl.machine_ids.length > 0 ? JSON.stringify(vl.machine_ids) : undefined,
         }))
 
       const apiOtherActivityLines: OtherActivityLine[] = otherActivityLines
@@ -751,7 +814,7 @@ export default function EntryEditScreen() {
           {/* ── Step 1: Entry Details ── */}
           {step === 1 && (
             <View>
-              <FieldInput label="Date" value={entry.date} onChangeText={() => {}} readOnly optional />
+              <FieldInput label="Date" value={new Date(entry.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} onChangeText={() => {}} readOnly optional />
               <FieldInput ref={locationRef} label="Location" value={location}
                 onChangeText={setLocation} placeholder="e.g. Cell 3 North" optional returnKeyType="done" />
               <SelectField label="Weather" value={weather} options={WEATHER_OPTIONS}
@@ -831,24 +894,34 @@ export default function EntryEditScreen() {
                     {selectedEmployeeIds.length === 0 ? (
                       <Text style={styles.lineCrewHint}>Select crew in Step 2 first</Text>
                     ) : (
-                      <View style={styles.lineCrewChips}>
-                        {allEmployees
-                          .filter(e => selectedEmployeeIds.includes(e.id))
-                          .map(emp => {
-                            const selected = line.employee_ids.includes(emp.id)
-                            return (
-                              <TouchableOpacity
-                                key={emp.id}
-                                style={[styles.crewChip, selected && styles.crewChipSelected]}
-                                onPress={() => toggleLineEmployee(index, emp.id)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
-                                  {emp.name}
-                                </Text>
-                              </TouchableOpacity>
-                            )
-                          })}
+                      <View>
+                        <View style={styles.selectAllRowInline}>
+                          <TouchableOpacity style={styles.selectAllBtnSmall} onPress={() => selectAllLineEmployees(index)} activeOpacity={0.7}>
+                            <Text style={styles.selectAllBtnSmallText}>Select All</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.clearBtnSmall} onPress={() => clearLineEmployees(index)} activeOpacity={0.7}>
+                            <Text style={styles.clearBtnSmallText}>Clear</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.lineCrewChips}>
+                          {allEmployees
+                            .filter(e => selectedEmployeeIds.includes(e.id))
+                            .map(emp => {
+                              const selected = line.employee_ids.includes(emp.id)
+                              return (
+                                <TouchableOpacity
+                                  key={emp.id}
+                                  style={[styles.crewChip, selected && styles.crewChipSelected]}
+                                  onPress={() => toggleLineEmployee(index, emp.id)}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
+                                    {emp.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              )
+                            })}
+                        </View>
                       </View>
                     )}
                   </View>
@@ -864,24 +937,44 @@ export default function EntryEditScreen() {
 
           {/* ── Step 2: Crew ── */}
           {step === 2 && (
-            <ChecklistSection
-              title="Crew Members"
-              items={employeeItems}
-              selectedIds={selectedEmployeeIds}
-              onToggle={(tid) => setSelectedEmployeeIds((prev) => toggleId(prev, tid))}
-              emptyMessage="No active employees found."
-            />
+            <View>
+              <View style={styles.selectAllRow}>
+                <TouchableOpacity style={styles.selectAllBtn} onPress={() => setSelectedEmployeeIds(allEmployees.map(e => e.id))} activeOpacity={0.7}>
+                  <Text style={styles.selectAllBtnText}>Select All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedEmployeeIds([])} activeOpacity={0.7}>
+                  <Text style={styles.clearBtnText}>Clear</Text>
+                </TouchableOpacity>
+              </View>
+              <ChecklistSection
+                title="Crew Members"
+                items={employeeItems}
+                selectedIds={selectedEmployeeIds}
+                onToggle={(tid) => setSelectedEmployeeIds((prev) => toggleId(prev, tid))}
+                emptyMessage="No active employees found."
+              />
+            </View>
           )}
 
           {/* ── Step 5: Equipment ── */}
           {step === 5 && (
-            <ChecklistSection
-              title="Machines Used"
-              items={machineItems}
-              selectedIds={selectedMachineIds}
-              onToggle={(tid) => setSelectedMachineIds((prev) => toggleId(prev, tid))}
-              emptyMessage="No active machines found."
-            />
+            <View>
+              <View style={styles.selectAllRow}>
+                <TouchableOpacity style={styles.selectAllBtn} onPress={() => setSelectedMachineIds(allMachines.map(m => m.id))} activeOpacity={0.7}>
+                  <Text style={styles.selectAllBtnText}>Select All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedMachineIds([])} activeOpacity={0.7}>
+                  <Text style={styles.clearBtnText}>Clear</Text>
+                </TouchableOpacity>
+              </View>
+              <ChecklistSection
+                title="Machines Used"
+                items={machineItems}
+                selectedIds={selectedMachineIds}
+                onToggle={(tid) => setSelectedMachineIds((prev) => toggleId(prev, tid))}
+                emptyMessage="No active machines found."
+              />
+            </View>
           )}
 
           {/* ── Step 4: Variations, Delays & Notes ── */}
@@ -932,29 +1025,77 @@ export default function EntryEditScreen() {
                     placeholder="Description of variation work..."
                     multiline
                   />
+                  {/* Crew selector */}
                   <View style={styles.lineCrewSection}>
                     <Text style={sf.label}>Crew</Text>
                     {selectedEmployeeIds.length === 0 ? (
                       <Text style={styles.lineCrewHint}>Select crew in Step 2 first</Text>
                     ) : (
-                      <View style={styles.lineCrewChips}>
-                        {allEmployees
-                          .filter(e => selectedEmployeeIds.includes(e.id))
-                          .map(emp => {
-                            const selected = vl.employee_ids.includes(emp.id)
-                            return (
-                              <TouchableOpacity
-                                key={emp.id}
-                                style={[styles.crewChip, selected && styles.crewChipSelected]}
-                                onPress={() => toggleVariationEmployee(index, emp.id)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
-                                  {emp.name}
-                                </Text>
-                              </TouchableOpacity>
-                            )
-                          })}
+                      <View>
+                        <View style={styles.selectAllRowInline}>
+                          <TouchableOpacity style={styles.selectAllBtnSmall} onPress={() => selectAllVariationEmployees(index)} activeOpacity={0.7}>
+                            <Text style={styles.selectAllBtnSmallText}>Select All</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.clearBtnSmall} onPress={() => clearVariationEmployees(index)} activeOpacity={0.7}>
+                            <Text style={styles.clearBtnSmallText}>Clear</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.lineCrewChips}>
+                          {allEmployees
+                            .filter(e => selectedEmployeeIds.includes(e.id))
+                            .map(emp => {
+                              const selected = vl.employee_ids.includes(emp.id)
+                              return (
+                                <TouchableOpacity
+                                  key={emp.id}
+                                  style={[styles.crewChip, selected && styles.crewChipSelected]}
+                                  onPress={() => toggleVariationEmployee(index, emp.id)}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
+                                    {emp.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              )
+                            })}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                  {/* Equipment selector per variation */}
+                  <View style={styles.lineCrewSection}>
+                    <Text style={sf.label}>Equipment</Text>
+                    {selectedMachineIds.length === 0 ? (
+                      <Text style={styles.lineCrewHint}>Select equipment in Step 5 first</Text>
+                    ) : (
+                      <View>
+                        <View style={styles.selectAllRowInline}>
+                          <TouchableOpacity style={styles.selectAllBtnSmall} onPress={() => selectAllVariationMachines(index)} activeOpacity={0.7}>
+                            <Text style={styles.selectAllBtnSmallText}>Select All</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.clearBtnSmall} onPress={() => clearVariationMachines(index)} activeOpacity={0.7}>
+                            <Text style={styles.clearBtnSmallText}>Clear</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.lineCrewChips}>
+                          {allMachines
+                            .filter(m => selectedMachineIds.includes(m.id))
+                            .map(machine => {
+                              const selected = vl.machine_ids.includes(machine.id)
+                              return (
+                                <TouchableOpacity
+                                  key={machine.id}
+                                  style={[styles.crewChip, selected && styles.crewChipSelected]}
+                                  onPress={() => toggleVariationMachine(index, machine.id)}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
+                                    {machine.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              )
+                            })}
+                        </View>
                       </View>
                     )}
                   </View>
@@ -1049,24 +1190,34 @@ export default function EntryEditScreen() {
                     {selectedEmployeeIds.length === 0 ? (
                       <Text style={styles.lineCrewHint}>Select crew in Step 2 first</Text>
                     ) : (
-                      <View style={styles.lineCrewChips}>
-                        {allEmployees
-                          .filter(e => selectedEmployeeIds.includes(e.id))
-                          .map(emp => {
-                            const selected = ol.employee_ids.includes(emp.id)
-                            return (
-                              <TouchableOpacity
-                                key={emp.id}
-                                style={[styles.crewChip, selected && styles.crewChipSelected]}
-                                onPress={() => toggleOtherActivityEmployee(index, emp.id)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
-                                  {emp.name}
-                                </Text>
-                              </TouchableOpacity>
-                            )
-                          })}
+                      <View>
+                        <View style={styles.selectAllRowInline}>
+                          <TouchableOpacity style={styles.selectAllBtnSmall} onPress={() => selectAllOtherActivityEmployees(index)} activeOpacity={0.7}>
+                            <Text style={styles.selectAllBtnSmallText}>Select All</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.clearBtnSmall} onPress={() => clearOtherActivityEmployees(index)} activeOpacity={0.7}>
+                            <Text style={styles.clearBtnSmallText}>Clear</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.lineCrewChips}>
+                          {allEmployees
+                            .filter(e => selectedEmployeeIds.includes(e.id))
+                            .map(emp => {
+                              const selected = ol.employee_ids.includes(emp.id)
+                              return (
+                                <TouchableOpacity
+                                  key={emp.id}
+                                  style={[styles.crewChip, selected && styles.crewChipSelected]}
+                                  onPress={() => toggleOtherActivityEmployee(index, emp.id)}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={[styles.crewChipText, selected && styles.crewChipTextSelected]}>
+                                    {emp.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              )
+                            })}
+                        </View>
                       </View>
                     )}
                   </View>
@@ -1077,6 +1228,49 @@ export default function EntryEditScreen() {
                 <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
                 <Text style={styles.addLineBtnText}>Add Other Activity</Text>
               </TouchableOpacity>
+
+              {/* ── Person-Hours Summary ── */}
+              {crewCount > 0 && (
+                <View style={phs.container}>
+                  <Text style={phs.title}>Person-Hours Summary</Text>
+                  <View style={phs.row}>
+                    <Text style={phs.label}>Production</Text>
+                    <Text style={phs.value}>{productionPersonHours.toFixed(1)} ph</Text>
+                  </View>
+                  <View style={phs.row}>
+                    <Text style={phs.label}>Variations</Text>
+                    <Text style={phs.value}>{variationPersonHours.toFixed(1)} ph</Text>
+                  </View>
+                  <View style={phs.row}>
+                    <Text style={phs.label}>Other Activities</Text>
+                    <Text style={phs.value}>{otherPersonHours.toFixed(1)} ph</Text>
+                  </View>
+                  <View style={phs.divider} />
+                  <View style={phs.row}>
+                    <Text style={phs.label}>Available ({crewCount} crew x {hoursPerDay}h)</Text>
+                    <Text style={phs.value}>{availablePersonHours.toFixed(1)} ph</Text>
+                  </View>
+                  <View style={phs.row}>
+                    <Text style={[phs.label, unaccountedPersonHours > 0 && phs.warningText]}>Unaccounted</Text>
+                    <Text style={[phs.value, unaccountedPersonHours > 0 && phs.warningText]}>
+                      {unaccountedPersonHours.toFixed(1)} ph
+                    </Text>
+                  </View>
+                  {/* Progress bar */}
+                  {availablePersonHours > 0 && (
+                    <View style={phs.barBg}>
+                      <View style={[phs.barSegment, { width: `${Math.min(100, (productionPersonHours / availablePersonHours) * 100)}%` as any, backgroundColor: Colors.primary }]} />
+                      <View style={[phs.barSegment, { width: `${Math.min(100 - (productionPersonHours / availablePersonHours) * 100, (variationPersonHours / availablePersonHours) * 100)}%` as any, backgroundColor: Colors.warning }]} />
+                      <View style={[phs.barSegment, { width: `${Math.min(100 - ((productionPersonHours + variationPersonHours) / availablePersonHours) * 100, (otherPersonHours / availablePersonHours) * 100)}%` as any, backgroundColor: Colors.textSecondary }]} />
+                    </View>
+                  )}
+                  <View style={phs.legendRow}>
+                    <View style={phs.legendItem}><View style={[phs.legendDot, { backgroundColor: Colors.primary }]} /><Text style={phs.legendText}>Production</Text></View>
+                    <View style={phs.legendItem}><View style={[phs.legendDot, { backgroundColor: Colors.warning }]} /><Text style={phs.legendText}>Variation</Text></View>
+                    <View style={phs.legendItem}><View style={[phs.legendDot, { backgroundColor: Colors.textSecondary }]} /><Text style={phs.legendText}>Other</Text></View>
+                  </View>
+                </View>
+              )}
 
               <FieldInput ref={notesRef} label="Notes" value={notes}
                 onChangeText={setNotes} placeholder="Any additional notes..." multiline minHeight={100} optional />
@@ -1203,5 +1397,141 @@ const styles = StyleSheet.create({
   crewChipTextSelected: {
     color: Colors.dark,
     fontWeight: '600',
+  },
+  selectAllRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  selectAllBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(255,183,197,0.08)',
+    alignItems: 'center',
+  },
+  selectAllBtnText: {
+    ...Typography.bodySmall,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  clearBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+  },
+  clearBtnText: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  selectAllRowInline: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 4,
+  },
+  selectAllBtnSmall: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(255,183,197,0.08)',
+  },
+  selectAllBtnSmallText: {
+    ...Typography.caption,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  clearBtnSmall: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  clearBtnSmallText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+})
+
+const phs = StyleSheet.create({
+  container: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  title: {
+    ...Typography.label,
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: Spacing.sm,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 3,
+  },
+  label: {
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
+  },
+  value: {
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
+  warningText: {
+    color: Colors.warning,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 6,
+  },
+  barBg: {
+    height: 10,
+    backgroundColor: Colors.border,
+    borderRadius: 5,
+    overflow: 'hidden',
+    marginTop: Spacing.sm,
+    flexDirection: 'row',
+  },
+  barSegment: {
+    height: '100%',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: 6,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
   },
 })
