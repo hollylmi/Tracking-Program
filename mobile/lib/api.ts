@@ -283,6 +283,8 @@ export const api = {
       apiClient.post('/tasks/assignments', data),
     scheduledChecks: (projectId?: number) =>
       apiClient.get<{ checks: any[] }>(`/tasks/scheduled-checks${projectId ? `?project_id=${projectId}` : ''}`),
+    checkHistory: (projectId?: number, limit?: number) =>
+      apiClient.get<{ completions: any[] }>(`/tasks/check-history?${projectId ? `project_id=${projectId}&` : ''}limit=${limit ?? 50}`),
     scheduledCheck: (checkId: number) =>
       apiClient.get<ScheduledCheckDetail>(`/tasks/scheduled-check/${checkId}`),
     completeScheduledCheck: (checkId: number, notes?: string) =>

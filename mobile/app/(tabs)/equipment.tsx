@@ -548,6 +548,15 @@ export default function EquipmentScreen() {
   })
   const scheduledChecks = scheduledData ?? []
 
+  // Check completion history
+  const { data: historyData, refetch: refetchHistory } = useQuery({
+    queryKey: ['check-history', projectId],
+    queryFn: () => api.tasks.checkHistory(projectId ?? undefined, 30).then(r => r.data.completions ?? []),
+    staleTime: 2 * 60 * 1000,
+    enabled: !!projectId,
+  })
+  const checkHistory = historyData ?? []
+
   const fleetLoading = machinesLoading || breakdownsLoading
   const isLoading = activeTab === 'fleet' ? fleetLoading : activeTab === 'hired' ? hireLoading : activeTab === 'scheduled' ? scheduledLoading : checksLoading
 
@@ -719,64 +728,106 @@ export default function EquipmentScreen() {
         )
       ) : (
         /* Scheduled tab */
-        scheduledChecks.length === 0 ? (
-          <EmptyState icon="📋" title="No scheduled checks" subtitle="Scheduled equipment checks will appear here" />
-        ) : (
-          <FlatList
-            data={scheduledChecks}
-            keyExtractor={(item) => `sc-${item.id}`}
-            contentContainerStyle={styles.list}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); refetchScheduled().finally(() => setRefreshing(false)) }} tintColor={Colors.primary} />}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => {
-              const isOverdue = item.is_overdue && !item.completed_today
-              const isDueToday = item.next_due_date === new Date().toISOString().slice(0, 10)
-              return (
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
+            setRefreshing(true)
+            Promise.all([refetchScheduled(), refetchHistory()]).finally(() => setRefreshing(false))
+          }} tintColor={Colors.primary} />}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Active / Upcoming checks */}
+          {scheduledChecks.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>Active Checks</Text>
+              {scheduledChecks.map((item: any) => {
+                const isOverdue = item.is_overdue && !item.completed_today
+                return (
+                  <TouchableOpacity
+                    key={`sc-${item.id}`}
+                    style={[styles.schedCard, isOverdue && { borderLeftColor: Colors.error, borderLeftWidth: 3 }]}
+                    onPress={() => router.push({ pathname: '/scheduled-check/[id]', params: { id: item.id } })}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                      <Ionicons
+                        name={item.completed_today ? 'checkmark-circle' : isOverdue ? 'alert-circle' : 'time-outline'}
+                        size={22}
+                        color={item.completed_today ? Colors.success : isOverdue ? Colors.error : Colors.warning}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ ...Typography.bodySmall, fontWeight: '700' }}>{item.name}</Text>
+                        <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>
+                          {item.machine_count} machine{item.machine_count !== 1 ? 's' : ''}
+                          {item.assigned_to ? ` — ${item.assigned_to}` : ''}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        {item.completed_today ? (
+                          <Text style={{ ...Typography.caption, color: Colors.success, fontWeight: '700' }}>Done</Text>
+                        ) : (
+                          <>
+                            <Text style={{ ...Typography.caption, color: isOverdue ? Colors.error : Colors.textSecondary, fontWeight: '600' }}>
+                              {isOverdue ? 'OVERDUE' : item.frequency === 'one_time' ? 'One-time' : item.frequency}
+                            </Text>
+                            {item.next_due_date && (
+                              <Text style={{ fontSize: 10, color: Colors.textLight }}>
+                                Due {new Date(item.next_due_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                              </Text>
+                            )}
+                          </>
+                        )}
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
+                    </View>
+                  </TouchableOpacity>
+                )
+              })}
+            </>
+          )}
+
+          {/* Completion history */}
+          {checkHistory.length > 0 && (
+            <>
+              <Text style={[styles.sectionLabel, { marginTop: Spacing.md }]}>Previous Checks</Text>
+              {checkHistory.map((c: any) => (
                 <TouchableOpacity
-                  style={[styles.schedCard, isOverdue && { borderLeftColor: Colors.error, borderLeftWidth: 3 }]}
-                  onPress={() => router.push({ pathname: '/scheduled-check/[id]', params: { id: item.id } })}
+                  key={`hist-${c.id}`}
+                  style={styles.schedCard}
+                  onPress={() => router.push({ pathname: '/scheduled-check/[id]', params: { id: c.check_id } })}
                   activeOpacity={0.7}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
-                    <Ionicons
-                      name={item.completed_today ? 'checkmark-circle' : isOverdue ? 'alert-circle' : 'time-outline'}
-                      size={22}
-                      color={item.completed_today ? Colors.success : isOverdue ? Colors.error : Colors.warning}
-                    />
+                    <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ ...Typography.bodySmall, fontWeight: '700' }}>{item.name}</Text>
+                      <Text style={{ ...Typography.bodySmall, fontWeight: '600' }}>{c.check_name}</Text>
                       <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>
-                        {item.project_name} — {item.machine_count} machine{item.machine_count !== 1 ? 's' : ''}
+                        {c.machine_count} machine{c.machine_count !== 1 ? 's' : ''}
+                        {c.completed_by ? ` — ${c.completed_by}` : ''}
                       </Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                      {item.completed_today ? (
-                        <Text style={{ ...Typography.caption, color: Colors.success, fontWeight: '700' }}>Done</Text>
-                      ) : (
-                        <>
-                          <Text style={{ ...Typography.caption, color: isOverdue ? Colors.error : Colors.textSecondary, fontWeight: '600' }}>
-                            {isOverdue ? 'OVERDUE' : item.frequency === 'one_time' ? 'One-time' : item.frequency}
-                          </Text>
-                          {item.next_due_date && (
-                            <Text style={{ fontSize: 10, color: Colors.textLight }}>
-                              Due {new Date(item.next_due_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                            </Text>
-                          )}
-                        </>
-                      )}
+                      <Text style={{ ...Typography.caption, color: Colors.success, fontWeight: '600' }}>Completed</Text>
+                      <Text style={{ fontSize: 10, color: Colors.textLight }}>
+                        {new Date(c.completed_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
                   </View>
-                  {item.assigned_to && (
-                    <Text style={{ ...Typography.caption, color: Colors.textLight, marginTop: 2, marginLeft: 32 }}>
-                      Assigned to {item.assigned_to}
+                  {c.notes && (
+                    <Text style={{ ...Typography.caption, color: Colors.textLight, marginTop: 2, marginLeft: 28 }} numberOfLines={1}>
+                      {c.notes}
                     </Text>
                   )}
                 </TouchableOpacity>
-              )
-            }}
-          />
-        )
+              ))}
+            </>
+          )}
+
+          {scheduledChecks.length === 0 && checkHistory.length === 0 && (
+            <EmptyState icon="📋" title="No scheduled checks" subtitle="Scheduled equipment checks will appear here" />
+          )}
+        </ScrollView>
       )}
 
       {/* Check Modal — new check */}

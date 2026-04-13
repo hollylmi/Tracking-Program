@@ -3605,6 +3605,51 @@ def scheduled_checks_list():
     return {'checks': result}, 200
 
 
+@api_data_bp.route('/tasks/check-history', methods=['GET'])
+@jwt_required()
+def check_history():
+    """Return completed scheduled check history."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    allowed_ids = _accessible_ids(user)
+    project_id = request.args.get('project_id', type=int)
+    limit = request.args.get('limit', 50, type=int)
+
+    query = (ScheduledCheckCompletion.query
+             .join(ScheduledEquipmentCheck,
+                   ScheduledCheckCompletion.scheduled_check_id == ScheduledEquipmentCheck.id))
+
+    if project_id:
+        query = query.filter(ScheduledEquipmentCheck.project_id == project_id)
+    elif allowed_ids is not None:
+        query = query.filter(ScheduledEquipmentCheck.project_id.in_(allowed_ids))
+
+    completions = (query
+                   .order_by(ScheduledCheckCompletion.completed_date.desc())
+                   .limit(limit)
+                   .all())
+
+    result = []
+    for c in completions:
+        sc = c.scheduled_check
+        result.append({
+            'id': c.id,
+            'check_id': sc.id,
+            'check_name': sc.name,
+            'project_id': sc.project_id,
+            'project_name': sc.project.name if sc.project else None,
+            'completed_date': c.completed_date.isoformat(),
+            'completed_by': (c.completed_by.display_name or c.completed_by.username) if c.completed_by else None,
+            'notes': c.notes,
+            'machine_count': len(sc.machines) if sc.machines else 0,
+            'frequency': sc.frequency,
+        })
+
+    return {'completions': result}, 200
+
+
 @api_data_bp.route('/tasks/scheduled-check/<int:check_id>', methods=['GET'])
 @jwt_required()
 def scheduled_check_detail(check_id):

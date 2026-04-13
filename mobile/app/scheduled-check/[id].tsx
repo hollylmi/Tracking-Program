@@ -209,6 +209,8 @@ export default function ScheduledCheckScreen() {
       show('Check completed', 'success')
       queryClient.invalidateQueries({ queryKey: ['my-todos'] })
       queryClient.invalidateQueries({ queryKey: ['scheduled-check', checkId] })
+      queryClient.invalidateQueries({ queryKey: ['admin-task-overview'] })
+      queryClient.invalidateQueries({ queryKey: ['scheduled-checks'] })
       router.back()
     } catch { show('Failed to complete', 'error') }
     finally { setCompleting(false) }
