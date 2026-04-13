@@ -101,7 +101,7 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
         onRequestClose={() => setOpen(false)}
       >
         <Pressable style={styles.overlay} onPress={() => setOpen(false)}>
-          <View style={styles.sheet}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.sheetTitle}>Switch Project</Text>
             {user?.accessible_projects?.map((p: any) => {
               const isActive = p.id === activeProject?.id
@@ -126,7 +126,7 @@ export default function ProjectSwitcher({ variant = 'pill' }: { variant?: 'pill'
                 </TouchableOpacity>
               )
             })}
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     </>
