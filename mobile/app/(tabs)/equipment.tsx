@@ -173,7 +173,7 @@ const TAB_LABELS: Record<TabKey, string> = { fleet: 'Fleet', hired: 'Hired', che
 function TabSelector({ active, onChange }: { active: TabKey; onChange: (t: TabKey) => void }) {
   return (
     <View style={tabStyles.container}>
-      {(['fleet', 'hired', 'checks'] as const).map((key) => (
+      {(['fleet', 'hired', 'checks', 'scheduled'] as const).map((key) => (
         <TouchableOpacity
           key={key}
           style={[tabStyles.tab, active === key && tabStyles.tabActive]}
