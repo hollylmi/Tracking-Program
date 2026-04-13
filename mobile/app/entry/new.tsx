@@ -1212,11 +1212,11 @@ export default function NewEntryScreen() {
           {step === 1 && (
             <View>
               <SelectField
-                label="Project *"
-                value={String(activeProject?.id ?? '')}
-                options={(refQuery.data?.projects ?? []).map((p: any) => ({ label: p.name, value: String(p.id) }))}
-                onChange={(val) => {
-                  const proj = (refQuery.data?.projects ?? []).find((p: any) => String(p.id) === val)
+                label="Project"
+                value={activeProject?.name ?? ''}
+                options={(refQuery.data?.projects ?? []).map((p: any) => p.name)}
+                onChange={(name) => {
+                  const proj = (refQuery.data?.projects ?? []).find((p: any) => p.name === name)
                   if (proj) {
                     const { setActiveProject } = useProjectStore.getState()
                     setActiveProject(proj as any)
