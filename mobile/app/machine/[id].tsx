@@ -559,20 +559,20 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
       {/* Action buttons */}
       <View style={qa.grid}>
         <TouchableOpacity style={[qa.btn, { borderColor: '#28a745', backgroundColor: panel === 'check' ? 'rgba(40,167,69,0.12)' : '#fff' }]} onPress={() => toggle('check')} activeOpacity={0.7}>
-          <Ionicons name="checkmark-circle-outline" size={26} color="#28a745" />
-          <Text style={[qa.btnLabel, { color: '#28a745' }]}>Pre-Start{'\n'}Check</Text>
+          <Ionicons name="checkmark-circle-outline" size={20} color="#28a745" />
+          <Text style={[qa.btnLabel, { color: '#28a745' }]}>Check</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[qa.btn, { borderColor: '#dc3545', backgroundColor: panel === 'breakdown' ? 'rgba(220,53,69,0.12)' : '#fff' }]} onPress={() => toggle('breakdown')} activeOpacity={0.7}>
-          <Ionicons name="warning-outline" size={26} color="#dc3545" />
-          <Text style={[qa.btnLabel, { color: '#dc3545' }]}>Report{'\n'}Breakdown</Text>
+          <Ionicons name="warning-outline" size={20} color="#dc3545" />
+          <Text style={[qa.btnLabel, { color: '#dc3545' }]}>Breakdown</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[qa.btn, { borderColor: '#1565C0', backgroundColor: panel === 'history' ? 'rgba(21,101,192,0.12)' : '#fff' }]} onPress={() => toggle('history')} activeOpacity={0.7}>
-          <Ionicons name="time-outline" size={26} color="#1565C0" />
-          <Text style={[qa.btnLabel, { color: '#1565C0' }]}>Check{'\n'}History</Text>
+          <Ionicons name="time-outline" size={20} color="#1565C0" />
+          <Text style={[qa.btnLabel, { color: '#1565C0' }]}>History</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[qa.btn, { borderColor: Colors.textSecondary, backgroundColor: panel === 'details' ? 'rgba(108,117,125,0.12)' : '#fff' }]} onPress={() => toggle('details')} activeOpacity={0.7}>
-          <Ionicons name="information-circle-outline" size={26} color={Colors.textSecondary} />
-          <Text style={[qa.btnLabel, { color: Colors.textSecondary }]}>Details{'\n'}& Docs</Text>
+          <Ionicons name="information-circle-outline" size={20} color={Colors.textSecondary} />
+          <Text style={[qa.btnLabel, { color: Colors.textSecondary }]}>Details</Text>
         </TouchableOpacity>
       </View>
 
@@ -649,9 +649,11 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
             ['Manufacturer', display.manufacturer],
             ['Model', display.model_number],
             ['Delay Rate', display.delay_rate != null ? `$${display.delay_rate}/hr` : null],
+            ['Status', display.active ? 'Active' : 'Inactive'],
             ['Acquired', display.acquired_date ? formatDate(display.acquired_date) : null],
-            ['Next Inspection', display.next_inspection_date ? formatDate(display.next_inspection_date) : null],
             ['Dispose By', display.dispose_by_date ? formatDate(display.dispose_by_date) : null],
+            ['Next Inspection', display.next_inspection_date ? formatDate(display.next_inspection_date) : null],
+            ['Inspection Interval', (display as any).inspection_interval_days ? `${(display as any).inspection_interval_days} days` : null],
           ].filter(([, v]) => v).map(([label, val], i) => (
             <View key={i} style={{ flexDirection: 'row', paddingVertical: 3, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: Colors.border }}>
               <Text style={{ fontSize: 12, color: Colors.textLight, width: 110 }}>{label}</Text>
@@ -735,9 +737,9 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
 }
 
 const qa = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.md },
-  btn: { flex: 1, minWidth: '45%', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12, borderWidth: 2, gap: 4 },
-  btnLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center', lineHeight: 15 },
+  grid: { flexDirection: 'row', gap: 6, marginBottom: Spacing.sm },
+  btn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, gap: 2 },
+  btnLabel: { fontSize: 9, fontWeight: '700', textAlign: 'center', lineHeight: 11 },
   input: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: Colors.textPrimary, backgroundColor: '#fff' },
   submit: { marginTop: 12, paddingVertical: 10, borderRadius: BorderRadius.md, alignItems: 'center' },
   submitText: { color: '#fff', fontWeight: '700', fontSize: 14 },
