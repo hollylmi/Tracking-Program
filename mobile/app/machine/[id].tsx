@@ -510,7 +510,7 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
   const { show } = useToastStore()
   const queryClient = useQueryClient()
   const activeProject = useProjectStore((s) => s.activeProject)
-  const [panel, setPanel] = useState<'check' | 'breakdown' | 'history' | null>(null)
+  const [panel, setPanel] = useState<'check' | 'breakdown' | 'history' | 'details' | null>(null)
   const [cond, setCond] = useState('good')
   const [hrs, setHrs] = useState('')
   const [notes, setNotes] = useState('')
@@ -570,7 +570,7 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
           <Ionicons name="time-outline" size={26} color="#1565C0" />
           <Text style={[qa.btnLabel, { color: '#1565C0' }]}>Check{'\n'}History</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[qa.btn, { borderColor: Colors.border }]} onPress={() => {/* scroll down to details — they're already visible */}} activeOpacity={0.7}>
+        <TouchableOpacity style={[qa.btn, { borderColor: Colors.textSecondary, backgroundColor: panel === 'details' ? 'rgba(108,117,125,0.12)' : '#fff' }]} onPress={() => toggle('details')} activeOpacity={0.7}>
           <Ionicons name="information-circle-outline" size={26} color={Colors.textSecondary} />
           <Text style={[qa.btnLabel, { color: Colors.textSecondary }]}>Details{'\n'}& Docs</Text>
         </TouchableOpacity>
@@ -632,6 +632,100 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
               {openBds.map(bd => (
                 <Text key={bd.id} style={{ fontSize: 11, paddingVertical: 2 }}>{formatDate(bd.date)} — {bd.description?.slice(0, 80)}</Text>
               ))}
+            </>
+          )}
+        </Card>
+      )}
+
+      {/* Details & Docs */}
+      {panel === 'details' && (
+        <Card style={{ borderLeftWidth: 3, borderLeftColor: Colors.textSecondary }}>
+          <Text style={{ ...Typography.bodySmall, fontWeight: '700', color: Colors.textSecondary, marginBottom: 8 }}>Machine Details</Text>
+          {[
+            ['Name', display.name],
+            ['Plant ID', display.plant_id],
+            ['Type', display.type],
+            ['Serial Number', display.serial_number],
+            ['Manufacturer', display.manufacturer],
+            ['Model', display.model_number],
+            ['Delay Rate', display.delay_rate != null ? `$${display.delay_rate}/hr` : null],
+            ['Acquired', display.acquired_date ? formatDate(display.acquired_date) : null],
+            ['Next Inspection', display.next_inspection_date ? formatDate(display.next_inspection_date) : null],
+            ['Dispose By', display.dispose_by_date ? formatDate(display.dispose_by_date) : null],
+          ].filter(([, v]) => v).map(([label, val], i) => (
+            <View key={i} style={{ flexDirection: 'row', paddingVertical: 3, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: Colors.border }}>
+              <Text style={{ fontSize: 12, color: Colors.textLight, width: 110 }}>{label}</Text>
+              <Text style={{ fontSize: 12, color: Colors.textPrimary, flex: 1 }}>{val}</Text>
+            </View>
+          ))}
+
+          {(display.storage_instructions || display.service_instructions || display.spare_parts_notes || display.disposal_procedure) && (
+            <>
+              <View style={{ height: 1, backgroundColor: Colors.border, marginVertical: 8 }} />
+              <Text style={{ ...Typography.caption, fontWeight: '700', marginBottom: 4 }}>Instructions & Notes</Text>
+              {display.storage_instructions && (
+                <View style={{ marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textSecondary }}>Storage</Text>
+                  <Text style={{ fontSize: 12, color: Colors.textPrimary }}>{display.storage_instructions}</Text>
+                </View>
+              )}
+              {display.service_instructions && (
+                <View style={{ marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textSecondary }}>Service</Text>
+                  <Text style={{ fontSize: 12, color: Colors.textPrimary }}>{display.service_instructions}</Text>
+                </View>
+              )}
+              {display.spare_parts_notes && (
+                <View style={{ marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textSecondary }}>Spare Parts</Text>
+                  <Text style={{ fontSize: 12, color: Colors.textPrimary }}>{display.spare_parts_notes}</Text>
+                </View>
+              )}
+              {display.disposal_procedure && (
+                <View style={{ marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textSecondary }}>Disposal Procedure</Text>
+                  <Text style={{ fontSize: 12, color: Colors.textPrimary }}>{display.disposal_procedure}</Text>
+                </View>
+              )}
+            </>
+          )}
+
+          {display.description && (
+            <>
+              <View style={{ height: 1, backgroundColor: Colors.border, marginVertical: 8 }} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textSecondary }}>Notes</Text>
+              <Text style={{ fontSize: 12, color: Colors.textPrimary }}>{display.description}</Text>
+            </>
+          )}
+
+          {(display.next_inspection_date || display.dispose_by_date) && (
+            <>
+              <View style={{ height: 1, backgroundColor: Colors.border, marginVertical: 8 }} />
+              <Text style={{ ...Typography.caption, fontWeight: '700', marginBottom: 4 }}>Lifecycle Alerts</Text>
+              {display.next_inspection_date && (() => {
+                const days = Math.ceil((new Date(display.next_inspection_date + 'T00:00:00').getTime() - Date.now()) / 86400000)
+                const urgent = days <= 3
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 3 }}>
+                    <Ionicons name="search" size={14} color={urgent ? Colors.error : Colors.warning} />
+                    <Text style={{ fontSize: 12, color: urgent ? Colors.error : Colors.warning, fontWeight: '600' }}>
+                      {days <= 0 ? 'Inspection overdue' : `Inspection in ${days} day${days !== 1 ? 's' : ''}`} ({formatDate(display.next_inspection_date)})
+                    </Text>
+                  </View>
+                )
+              })()}
+              {display.dispose_by_date && (() => {
+                const days = Math.ceil((new Date(display.dispose_by_date + 'T00:00:00').getTime() - Date.now()) / 86400000)
+                const urgent = days <= 7
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 3 }}>
+                    <Ionicons name="trash" size={14} color={urgent ? Colors.error : Colors.warning} />
+                    <Text style={{ fontSize: 12, color: urgent ? Colors.error : Colors.warning, fontWeight: '600' }}>
+                      {days <= 0 ? 'Disposal overdue' : `Disposal in ${days} day${days !== 1 ? 's' : ''}`} ({formatDate(display.dispose_by_date)})
+                    </Text>
+                  </View>
+                )
+              })()}
             </>
           )}
         </Card>
