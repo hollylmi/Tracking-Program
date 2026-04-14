@@ -31,7 +31,8 @@
         "EXPO_PUBLIC_API_URL": "https://tracking-program-production.up.railway.app"
       },
       "ios": {
-        "credentialsSource": "remote"
+        "credentialsSource": "remote",
+        "image": "macos-ventura-14.2-xcode-16.2"
       },
       "android": {
         "credentialsSource": "remote"
