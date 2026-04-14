@@ -27,6 +27,7 @@ import { api } from '../../lib/api'
 import { cachedQuery } from '../../lib/cachedQuery'
 import { compressImage } from '../../lib/compressImage'
 import { useAuthStore } from '../../store/auth'
+import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
 import { BreakdownDetail, MachineDetail, DailyCheckRecord } from '../../types'
 
@@ -492,6 +493,162 @@ function BreakdownCard({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+// ─── Quick Actions Panel (scan-page style) ──────────────────────────────────
+
+const CONDITION_OPTS = [
+  { v: 'good', l: 'Good', c: '#28a745' },
+  { v: 'fair', l: 'Fair', c: '#fd7e14' },
+  { v: 'poor', l: 'Poor', c: '#E65100' },
+  { v: 'broken_down', l: 'Broken Down', c: '#dc3545' },
+]
+
+function QuickActions({ machineId, display, breakdowns: bds }: {
+  machineId: number
+  display: MachineDetail
+  breakdowns: BreakdownDetail[]
+}) {
+  const { show } = useToastStore()
+  const queryClient = useQueryClient()
+  const activeProject = useProjectStore((s) => s.activeProject)
+  const [panel, setPanel] = useState<'check' | 'breakdown' | 'history' | null>(null)
+  const [cond, setCond] = useState('good')
+  const [hrs, setHrs] = useState('')
+  const [notes, setNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [bdDesc, setBdDesc] = useState('')
+  const [bdBy, setBdBy] = useState('')
+  const [bdSub, setBdSub] = useState(false)
+
+  const toggle = (p: typeof panel) => setPanel(panel === p ? null : p)
+
+  const submitCheck = async () => {
+    if (!activeProject?.id) { show('Select a project first', 'error'); return }
+    setSubmitting(true)
+    try {
+      await api.equipment.submitDailyCheck({
+        machine_id: machineId, project_id: activeProject.id,
+        condition: cond, notes: notes || undefined, hours_reading: hrs || undefined,
+      })
+      show('Check recorded', 'success')
+      setCond('good'); setHrs(''); setNotes(''); setPanel(null)
+      queryClient.invalidateQueries({ queryKey: ['machine'] })
+      queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
+    } catch { show('Failed to submit', 'error') }
+    finally { setSubmitting(false) }
+  }
+
+  const submitBreakdown = async () => {
+    if (!bdDesc.trim()) { show('Description required', 'error'); return }
+    setBdSub(true)
+    try {
+      await api.equipment.createBreakdown({
+        machine_id: machineId, breakdown_date: toDateStr(new Date()),
+        description: bdDesc.trim(), repairing_by: bdBy.trim() || undefined,
+      })
+      show('Breakdown reported', 'success')
+      setBdDesc(''); setBdBy(''); setPanel(null)
+      queryClient.invalidateQueries({ queryKey: ['machine'] })
+    } catch { show('Failed to report', 'error') }
+    finally { setBdSub(false) }
+  }
+
+  const openBds = bds.filter(b => b.repair_status !== 'completed')
+
+  return (
+    <View style={{ marginBottom: Spacing.md }}>
+      {/* Action buttons */}
+      <View style={qa.grid}>
+        <TouchableOpacity style={[qa.btn, { borderColor: '#28a745', backgroundColor: panel === 'check' ? 'rgba(40,167,69,0.12)' : '#fff' }]} onPress={() => toggle('check')} activeOpacity={0.7}>
+          <Ionicons name="checkmark-circle-outline" size={26} color="#28a745" />
+          <Text style={[qa.btnLabel, { color: '#28a745' }]}>Pre-Start{'\n'}Check</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[qa.btn, { borderColor: '#dc3545', backgroundColor: panel === 'breakdown' ? 'rgba(220,53,69,0.12)' : '#fff' }]} onPress={() => toggle('breakdown')} activeOpacity={0.7}>
+          <Ionicons name="warning-outline" size={26} color="#dc3545" />
+          <Text style={[qa.btnLabel, { color: '#dc3545' }]}>Report{'\n'}Breakdown</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[qa.btn, { borderColor: '#1565C0', backgroundColor: panel === 'history' ? 'rgba(21,101,192,0.12)' : '#fff' }]} onPress={() => toggle('history')} activeOpacity={0.7}>
+          <Ionicons name="time-outline" size={26} color="#1565C0" />
+          <Text style={[qa.btnLabel, { color: '#1565C0' }]}>Check{'\n'}History</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[qa.btn, { borderColor: Colors.border }]} onPress={() => {/* scroll down to details — they're already visible */}} activeOpacity={0.7}>
+          <Ionicons name="information-circle-outline" size={26} color={Colors.textSecondary} />
+          <Text style={[qa.btnLabel, { color: Colors.textSecondary }]}>Details{'\n'}& Docs</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Pre-Start Check */}
+      {panel === 'check' && (
+        <Card style={{ borderLeftWidth: 3, borderLeftColor: '#28a745' }}>
+          <Text style={{ ...Typography.bodySmall, fontWeight: '700', color: '#28a745', marginBottom: 8 }}>Pre-Start Check</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {CONDITION_OPTS.map(o => (
+              <TouchableOpacity key={o.v} onPress={() => setCond(o.v)}
+                style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 2,
+                  borderColor: cond === o.v ? o.c : Colors.border,
+                  backgroundColor: cond === o.v ? o.c + '20' : '#fff' }}>
+                <Text style={{ fontSize: 12, fontWeight: cond === o.v ? '700' : '500', color: cond === o.v ? o.c : Colors.textSecondary }}>{o.l}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TextInput style={qa.input} value={hrs} onChangeText={setHrs} placeholder="Hours reading" keyboardType="decimal-pad" placeholderTextColor={Colors.textLight} />
+          <TextInput style={[qa.input, { marginTop: 8 }]} value={notes} onChangeText={setNotes} placeholder="Notes..." placeholderTextColor={Colors.textLight} />
+          <TouchableOpacity style={[qa.submit, { backgroundColor: '#28a745' }]} onPress={submitCheck} disabled={submitting} activeOpacity={0.85}>
+            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={qa.submitText}>Submit Check</Text>}
+          </TouchableOpacity>
+        </Card>
+      )}
+
+      {/* Report Breakdown */}
+      {panel === 'breakdown' && (
+        <Card style={{ borderLeftWidth: 3, borderLeftColor: '#dc3545' }}>
+          <Text style={{ ...Typography.bodySmall, fontWeight: '700', color: '#dc3545', marginBottom: 8 }}>Report Breakdown</Text>
+          <TextInput style={[qa.input, { height: 72, textAlignVertical: 'top' }]} value={bdDesc} onChangeText={setBdDesc} placeholder="Describe the breakdown..." multiline placeholderTextColor={Colors.textLight} />
+          <TextInput style={[qa.input, { marginTop: 8 }]} value={bdBy} onChangeText={setBdBy} placeholder="Being repaired by..." placeholderTextColor={Colors.textLight} />
+          <TouchableOpacity style={[qa.submit, { backgroundColor: '#dc3545' }]} onPress={submitBreakdown} disabled={bdSub || !bdDesc.trim()} activeOpacity={0.85}>
+            {bdSub ? <ActivityIndicator size="small" color="#fff" /> : <Text style={qa.submitText}>Report Breakdown</Text>}
+          </TouchableOpacity>
+        </Card>
+      )}
+
+      {/* Check History */}
+      {panel === 'history' && (
+        <Card style={{ borderLeftWidth: 3, borderLeftColor: '#1565C0' }}>
+          <Text style={{ ...Typography.bodySmall, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Check History</Text>
+          {(display.daily_checks ?? []).length > 0 ? (display.daily_checks ?? []).map((dc: DailyCheckRecord, i: number) => (
+            <View key={dc.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4,
+              borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: Colors.border }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4,
+                backgroundColor: dc.condition === 'good' ? '#28a745' : dc.condition === 'fair' ? '#fd7e14' : '#dc3545' }} />
+              <Text style={{ fontSize: 12, flex: 1 }}>{dc.condition?.replace('_', ' ')}</Text>
+              <Text style={{ fontSize: 11, color: Colors.textLight }}>{dc.hours_reading ?? '—'}h</Text>
+              <Text style={{ fontSize: 11, color: Colors.textLight }}>{dc.checked_by ?? ''}</Text>
+              <Text style={{ fontSize: 11, color: Colors.textLight }}>{formatDate(dc.check_date)}</Text>
+            </View>
+          )) : <Text style={{ fontSize: 12, color: Colors.textLight, textAlign: 'center', paddingVertical: 8 }}>No checks recorded</Text>}
+          {openBds.length > 0 && (
+            <>
+              <View style={{ height: 1, backgroundColor: Colors.border, marginVertical: 8 }} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#dc3545', marginBottom: 4 }}>Active Breakdowns</Text>
+              {openBds.map(bd => (
+                <Text key={bd.id} style={{ fontSize: 11, paddingVertical: 2 }}>{formatDate(bd.date)} — {bd.description?.slice(0, 80)}</Text>
+              ))}
+            </>
+          )}
+        </Card>
+      )}
+    </View>
+  )
+}
+
+const qa = StyleSheet.create({
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.md },
+  btn: { flex: 1, minWidth: '45%', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12, borderWidth: 2, gap: 4 },
+  btnLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center', lineHeight: 15 },
+  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: Colors.textPrimary, backgroundColor: '#fff' },
+  submit: { marginTop: 12, paddingVertical: 10, borderRadius: BorderRadius.md, alignItems: 'center' },
+  submitText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+})
+
 export default function MachineDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const router = useRouter()
@@ -667,6 +824,9 @@ export default function MachineDetailScreen() {
             )}
           </TouchableOpacity>
         ) : null}
+
+        {/* Quick action buttons */}
+        <QuickActions machineId={Number(id)} display={display} breakdowns={displayBreakdowns} />
 
         {/* Machine info card */}
         <Card style={styles.infoCard}>
