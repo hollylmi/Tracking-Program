@@ -1128,6 +1128,15 @@ def get_machine(machine_id):
     if machine.photo_filename:
         photo_url = f'/equipment/machine-photo/{machine.photo_filename}'
 
+    # Assignment
+    assignment = ProjectMachine.query.filter_by(machine_id=machine_id).first()
+
+    # Recent daily checks
+    recent_checks = (MachineDailyCheck.query
+                     .filter_by(machine_id=machine_id)
+                     .order_by(MachineDailyCheck.check_date.desc())
+                     .limit(10).all())
+
     return {
         'id': machine.id,
         'name': machine.name,
@@ -1137,6 +1146,35 @@ def get_machine(machine_id):
         'delay_rate': machine.delay_rate,
         'active': machine.active,
         'photo_url': photo_url,
+        # Extended fields
+        'serial_number': machine.serial_number,
+        'manufacturer': machine.manufacturer,
+        'model_number': machine.model_number,
+        'acquired_date': machine.acquired_date.isoformat() if machine.acquired_date else None,
+        'dispose_by_date': machine.dispose_by_date.isoformat() if machine.dispose_by_date else None,
+        'next_inspection_date': machine.next_inspection_date.isoformat() if machine.next_inspection_date else None,
+        'inspection_interval_days': machine.inspection_interval_days,
+        'storage_instructions': machine.storage_instructions,
+        'service_instructions': machine.service_instructions,
+        'spare_parts_notes': machine.spare_parts_notes,
+        'disposal_procedure': machine.disposal_procedure,
+        # Assignment
+        'project_id': assignment.project_id if assignment else None,
+        'project_name': assignment.project.name if assignment and assignment.project else None,
+        # Recent checks
+        'daily_checks': [
+            {
+                'id': dc.id,
+                'check_date': dc.check_date.isoformat(),
+                'condition': dc.condition,
+                'hours_reading': dc.hours_reading,
+                'notes': dc.notes,
+                'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
+                'checked_at': (dc.checked_at.isoformat() + 'Z') if dc.checked_at else None,
+                'photo_url': f'/equipment/machine-photo/{dc.photo_filename}' if dc.photo_filename else None,
+            }
+            for dc in recent_checks
+        ],
         'breakdowns': [
             {
                 'id': bd.id,

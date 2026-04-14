@@ -515,9 +515,41 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
   const [hrs, setHrs] = useState('')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [checkPhoto, setCheckPhoto] = useState<string | null>(null)
   const [bdDesc, setBdDesc] = useState('')
   const [bdBy, setBdBy] = useState('')
   const [bdSub, setBdSub] = useState(false)
+  const [bdPhotos, setBdPhotos] = useState<{ uri: string; name: string }[]>([])
+
+  const takeOrPickPhoto = async (multi = false): Promise<{ uri: string; name: string }[]> => {
+    const result = await new Promise<{ uri: string; name: string }[]>((resolve) => {
+      Alert.alert('Add Photo', '', [
+        { text: 'Camera', onPress: async () => {
+          const perm = await ImagePicker.requestCameraPermissionsAsync()
+          if (perm.status !== 'granted') { resolve([]); return }
+          const r = await ImagePicker.launchCameraAsync({ quality: 0.8 })
+          if (!r.canceled && r.assets.length > 0) {
+            const compressed = await compressImage(r.assets[0].uri)
+            resolve([{ uri: compressed, name: `photo_${Date.now()}.jpg` }])
+          } else resolve([])
+        }},
+        { text: 'Photo Library', onPress: async () => {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+          if (perm.status !== 'granted') { resolve([]); return }
+          const r = await ImagePicker.launchImageLibraryAsync({ quality: 0.8, allowsMultipleSelection: multi })
+          if (!r.canceled && r.assets.length > 0) {
+            const photos = await Promise.all(r.assets.map(async (a, i) => ({
+              uri: await compressImage(a.uri),
+              name: `photo_${Date.now()}_${i}.jpg`,
+            })))
+            resolve(photos)
+          } else resolve([])
+        }},
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve([]) },
+      ])
+    })
+    return result
+  }
 
   const toggle = (p: typeof panel) => setPanel(panel === p ? null : p)
 
@@ -528,9 +560,10 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
       await api.equipment.submitDailyCheck({
         machine_id: machineId, project_id: activeProject.id,
         condition: cond, notes: notes || undefined, hours_reading: hrs || undefined,
+        photo_uri: checkPhoto || undefined, photo_filename: checkPhoto ? `check_${Date.now()}.jpg` : undefined,
       })
       show('Check recorded', 'success')
-      setCond('good'); setHrs(''); setNotes(''); setPanel(null)
+      setCond('good'); setHrs(''); setNotes(''); setCheckPhoto(null); setPanel(null)
       queryClient.invalidateQueries({ queryKey: ['machine'] })
       queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
     } catch { show('Failed to submit', 'error') }
@@ -541,12 +574,18 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
     if (!bdDesc.trim()) { show('Description required', 'error'); return }
     setBdSub(true)
     try {
-      await api.equipment.createBreakdown({
+      const bdRes = await api.equipment.createBreakdown({
         machine_id: machineId, breakdown_date: toDateStr(new Date()),
         description: bdDesc.trim(), repairing_by: bdBy.trim() || undefined,
       })
+      // Upload photos if any
+      if (bdPhotos.length > 0 && bdRes.data?.id) {
+        for (const p of bdPhotos) {
+          try { await api.equipment.uploadBreakdownPhoto(bdRes.data.id, p.uri, p.name) } catch {}
+        }
+      }
       show('Breakdown reported', 'success')
-      setBdDesc(''); setBdBy(''); setPanel(null)
+      setBdDesc(''); setBdBy(''); setBdPhotos([]); setPanel(null)
       queryClient.invalidateQueries({ queryKey: ['machine'] })
     } catch { show('Failed to report', 'error') }
     finally { setBdSub(false) }
@@ -592,6 +631,11 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
           </View>
           <TextInput style={qa.input} value={hrs} onChangeText={setHrs} placeholder="Hours reading" keyboardType="decimal-pad" placeholderTextColor={Colors.textLight} />
           <TextInput style={[qa.input, { marginTop: 8 }]} value={notes} onChangeText={setNotes} placeholder="Notes..." placeholderTextColor={Colors.textLight} />
+          <TouchableOpacity style={qa.photoBtn} onPress={async () => { const p = await takeOrPickPhoto(); if (p.length) setCheckPhoto(p[0].uri) }} activeOpacity={0.7}>
+            <Ionicons name="camera-outline" size={16} color={Colors.primary} />
+            <Text style={qa.photoBtnText}>{checkPhoto ? 'Photo added' : 'Add Photo'}</Text>
+          </TouchableOpacity>
+          {checkPhoto && <Image source={{ uri: checkPhoto }} style={{ width: 60, height: 60, borderRadius: 6, marginTop: 4 }} />}
           <TouchableOpacity style={[qa.submit, { backgroundColor: '#28a745' }]} onPress={submitCheck} disabled={submitting} activeOpacity={0.85}>
             {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={qa.submitText}>Submit Check</Text>}
           </TouchableOpacity>
@@ -604,6 +648,22 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
           <Text style={{ ...Typography.bodySmall, fontWeight: '700', color: '#dc3545', marginBottom: 8 }}>Report Breakdown</Text>
           <TextInput style={[qa.input, { height: 72, textAlignVertical: 'top' }]} value={bdDesc} onChangeText={setBdDesc} placeholder="Describe the breakdown..." multiline placeholderTextColor={Colors.textLight} />
           <TextInput style={[qa.input, { marginTop: 8 }]} value={bdBy} onChangeText={setBdBy} placeholder="Being repaired by..." placeholderTextColor={Colors.textLight} />
+          <TouchableOpacity style={qa.photoBtn} onPress={async () => { const p = await takeOrPickPhoto(true); if (p.length) setBdPhotos(prev => [...prev, ...p]) }} activeOpacity={0.7}>
+            <Ionicons name="camera-outline" size={16} color={Colors.primary} />
+            <Text style={qa.photoBtnText}>{bdPhotos.length > 0 ? `${bdPhotos.length} photo${bdPhotos.length > 1 ? 's' : ''}` : 'Add Photos'}</Text>
+          </TouchableOpacity>
+          {bdPhotos.length > 0 && (
+            <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+              {bdPhotos.map((p, i) => (
+                <TouchableOpacity key={i} onPress={() => setBdPhotos(prev => prev.filter((_, j) => j !== i))}>
+                  <Image source={{ uri: p.uri }} style={{ width: 50, height: 50, borderRadius: 6 }} />
+                  <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#dc3545', borderRadius: 8, width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="close" size={10} color="#fff" />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           <TouchableOpacity style={[qa.submit, { backgroundColor: '#dc3545' }]} onPress={submitBreakdown} disabled={bdSub || !bdDesc.trim()} activeOpacity={0.85}>
             {bdSub ? <ActivityIndicator size="small" color="#fff" /> : <Text style={qa.submitText}>Report Breakdown</Text>}
           </TouchableOpacity>
@@ -743,6 +803,8 @@ const qa = StyleSheet.create({
   input: { borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: Colors.textPrimary, backgroundColor: '#fff' },
   submit: { marginTop: 12, paddingVertical: 10, borderRadius: BorderRadius.md, alignItems: 'center' },
   submitText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  photoBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: BorderRadius.sm, borderWidth: 1, borderColor: Colors.border, borderStyle: 'dashed', alignSelf: 'flex-start' },
+  photoBtnText: { fontSize: 12, color: Colors.primary, fontWeight: '600' },
 })
 
 export default function MachineDetailScreen() {
