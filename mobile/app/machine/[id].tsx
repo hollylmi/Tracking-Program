@@ -1090,6 +1090,33 @@ export default function MachineDetailScreen() {
           )}
         </Card>
 
+        {/* Last Known Location */}
+        {display.last_scanned_at && (
+          <Card style={styles.infoCard}>
+            <Text style={[styles.sectionTitle, { marginBottom: Spacing.sm }]}>
+              Last Known Location
+            </Text>
+            <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 4 }}>
+              Scanned {new Date(display.last_scanned_at).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              {display.last_scanned_by ? ` by ${display.last_scanned_by}` : ''}
+            </Text>
+            {display.last_scanned_address && (
+              <Text style={{ fontSize: 13, color: Colors.text, marginBottom: 4 }}>
+                {display.last_scanned_address}
+              </Text>
+            )}
+            {display.last_scanned_lat != null && display.last_scanned_lng != null && (
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}
+                onPress={() => Linking.openURL(`https://www.google.com/maps?q=${display.last_scanned_lat},${display.last_scanned_lng}`)}
+              >
+                <Ionicons name="map-outline" size={16} color={Colors.primary} />
+                <Text style={{ fontSize: 13, color: Colors.primary, marginLeft: 4, fontWeight: '600' }}>View on Map</Text>
+              </TouchableOpacity>
+            )}
+          </Card>
+        )}
+
         {/* Lifecycle section */}
         {(display.dispose_by_date || display.next_inspection_date) && (
           <Card style={styles.infoCard}>

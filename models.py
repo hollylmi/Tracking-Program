@@ -191,6 +191,14 @@ class Machine(db.Model):
     model_number = db.Column(db.String(200), nullable=True)
     photo_filename = db.Column(db.String(500), nullable=True)       # UUID-based stored name
     photo_original_name = db.Column(db.String(500), nullable=True)
+    # NFC scan location tracking
+    last_scanned_at = db.Column(db.DateTime, nullable=True)
+    last_scanned_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    last_scanned_lat = db.Column(db.Float, nullable=True)
+    last_scanned_lng = db.Column(db.Float, nullable=True)
+    last_scanned_address = db.Column(db.String(500), nullable=True)
+
+    last_scanned_by_user = db.relationship('User', foreign_keys=[last_scanned_by_user_id], lazy=True)
 
     def __repr__(self):
         return f'<Machine {self.name}>'

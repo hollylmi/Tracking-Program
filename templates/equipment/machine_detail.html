@@ -145,6 +145,23 @@
               </button>
             </div>
             <div class="form-text mt-1">Write this URL to an NFC tag: <code>{{ url_for('equipment.machine_scan', machine_id=machine.id, _external=True) }}</code></div>
+            {% if machine.last_scanned_at %}
+            <hr class="my-2">
+            <div class="fw-semibold small mb-1"><i class="bi bi-geo-alt-fill text-primary me-1"></i>Last Known Location</div>
+            <div class="small text-muted">
+              Scanned {{ machine.last_scanned_at.strftime('%d/%m/%Y %H:%M') }}
+              {% if machine.last_scanned_by_user %}by {{ machine.last_scanned_by_user.display_name or machine.last_scanned_by_user.username }}{% endif %}
+            </div>
+            {% if machine.last_scanned_address %}
+            <div class="small mt-1"><i class="bi bi-pin-map me-1"></i>{{ machine.last_scanned_address }}</div>
+            {% endif %}
+            {% if machine.last_scanned_lat and machine.last_scanned_lng %}
+            <a href="https://www.google.com/maps?q={{ machine.last_scanned_lat }},{{ machine.last_scanned_lng }}"
+               target="_blank" class="btn btn-sm btn-outline-primary mt-1">
+              <i class="bi bi-map me-1"></i>View on Map
+            </a>
+            {% endif %}
+            {% endif %}
           </div>
         </div>
         {% if transfers %}

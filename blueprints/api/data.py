@@ -1212,6 +1212,12 @@ def get_machine(machine_id):
             }
             for bd in breakdowns
         ],
+        # NFC scan location
+        'last_scanned_at': machine.last_scanned_at.isoformat() if machine.last_scanned_at else None,
+        'last_scanned_lat': machine.last_scanned_lat,
+        'last_scanned_lng': machine.last_scanned_lng,
+        'last_scanned_address': machine.last_scanned_address,
+        'last_scanned_by': (machine.last_scanned_by_user.display_name or machine.last_scanned_by_user.username) if machine.last_scanned_by_user else None,
     }, 200
 
 
@@ -2768,6 +2774,11 @@ def equipment_machine_detail(machine_id):
             'travel_notes': pending_transfer.travel_notes,
             'transport_contact': pending_transfer.transport_contact,
         } if pending_transfer else None,
+        'last_scanned_at': m.last_scanned_at.isoformat() if m.last_scanned_at else None,
+        'last_scanned_lat': m.last_scanned_lat,
+        'last_scanned_lng': m.last_scanned_lng,
+        'last_scanned_address': m.last_scanned_address,
+        'last_scanned_by': (m.last_scanned_by_user.display_name or m.last_scanned_by_user.username) if m.last_scanned_by_user else None,
     }, 200
 
 
@@ -4126,3 +4137,31 @@ def get_travel_overview():
         'properties': properties_out,
         'unbooked': unbooked,
     }, 200
+
+
+# ─── NFC scan location recording ─────────────────────────────────────────────
+
+@api_data_bp.route('/equipment/<int:machine_id>/scan-location', methods=['POST'])
+@jwt_required()
+def record_scan_location(machine_id):
+    """Record GPS location when an NFC tag is scanned (mobile app)."""
+    m = Machine.query.get(machine_id)
+    if not m:
+        return {'error': 'Machine not found'}, 404
+
+    data = request.get_json(silent=True) or {}
+    lat = data.get('lat')
+    lng = data.get('lng')
+    address = data.get('address')
+
+    user_id = get_jwt_identity()
+    m.last_scanned_at = datetime.utcnow()
+    m.last_scanned_by_user_id = int(user_id)
+    if lat is not None and lng is not None:
+        m.last_scanned_lat = float(lat)
+        m.last_scanned_lng = float(lng)
+    if address:
+        m.last_scanned_address = str(address)[:500]
+
+    db.session.commit()
+    return {'ok': True}, 200

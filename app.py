@@ -291,6 +291,12 @@ with app.app_context():
         "ALTER TABLE machine_transfer ADD COLUMN arrival_check_notes TEXT",
         'ALTER TABLE machine_transfer ADD COLUMN arrived_by_user_id INTEGER REFERENCES "user"(id)',
         "ALTER TABLE machine_transfer ADD COLUMN arrived_at TIMESTAMP",
+        # ── 2026-04-14: NFC scan location tracking ──
+        "ALTER TABLE machine ADD COLUMN last_scanned_at TIMESTAMP",
+        'ALTER TABLE machine ADD COLUMN last_scanned_by_user_id INTEGER REFERENCES "user"(id)',
+        "ALTER TABLE machine ADD COLUMN last_scanned_lat FLOAT",
+        "ALTER TABLE machine ADD COLUMN last_scanned_lng FLOAT",
+        "ALTER TABLE machine ADD COLUMN last_scanned_address VARCHAR(500)",
         # ── 2026-04-13: Machine daily check timestamp ──
         "ALTER TABLE machine_daily_check ADD COLUMN checked_at TIMESTAMP",
         # ── 2026-04-13: Project mobilisation date ──

@@ -16,8 +16,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lmigroup.plytrack",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
-        "ITSAppUsesNonExemptEncryption": false
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Your location is recorded when you scan an NFC tag to track where equipment was last seen."
       }
     },
     "android": {
@@ -53,7 +56,8 @@
           "sounds": [],
           "enableBackgroundRemoteNotifications": true
         }
-      ]
+      ],
+      "react-native-nfc-manager"
     ],
     "extra": {
       "router": {},

@@ -1157,6 +1157,28 @@ def machine_scan(machine_id):
                            today=date.today())
 
 
+@equipment_bp.route('/equipment/scan/<int:machine_id>/location', methods=['POST'])
+@require_role('admin', 'supervisor', 'site')
+def record_scan_location_web(machine_id):
+    """Record GPS location when NFC scan page is opened in a browser."""
+    m = Machine.query.get_or_404(machine_id)
+    data = request.get_json(silent=True) or {}
+    lat = data.get('lat')
+    lng = data.get('lng')
+    address = data.get('address')
+
+    m.last_scanned_at = datetime.utcnow()
+    m.last_scanned_by_user_id = current_user.id
+    if lat is not None and lng is not None:
+        m.last_scanned_lat = float(lat)
+        m.last_scanned_lng = float(lng)
+    if address:
+        m.last_scanned_address = str(address)[:500]
+
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 @equipment_bp.route('/equipment/machine/<int:machine_id>')
 @require_role('admin', 'supervisor', 'site')
 def machine_detail(machine_id):

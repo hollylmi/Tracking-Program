@@ -31,6 +31,7 @@ try {
 }
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import * as ImagePicker from 'expo-image-picker'
+import * as Location from 'expo-location'
 import ScreenHeader from '../../components/layout/ScreenHeader'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
@@ -546,6 +547,30 @@ export default function EquipmentScreen() {
         const url = Ndef.uri.decodePayload(payload as unknown as number[])
         const match = url.match(/\/equipment\/scan\/(\d+)/)
         if (match) {
+          const machineId = parseInt(match[1], 10)
+
+          // Grab GPS and record scan location in background
+          ;(async () => {
+            try {
+              const { status } = await Location.requestForegroundPermissionsAsync()
+              if (status === 'granted') {
+                const loc = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Balanced,
+                })
+                await api.equipment.recordScanLocation(machineId, {
+                  lat: loc.coords.latitude,
+                  lng: loc.coords.longitude,
+                })
+              } else {
+                // Record scan without coordinates
+                await api.equipment.recordScanLocation(machineId, {})
+              }
+            } catch {
+              // Record scan without coordinates on error
+              api.equipment.recordScanLocation(machineId, {}).catch(() => {})
+            }
+          })()
+
           setNfcScanning(false)
           router.push({ pathname: '/machine/[id]', params: { id: match[1] } })
           return

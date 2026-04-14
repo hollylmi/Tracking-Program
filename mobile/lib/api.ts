@@ -273,6 +273,10 @@ export const api = {
     // Machine hours
     machineHours: (machineId: number) =>
       apiClient.get<{ hours_logs: MachineHoursLogEntry[] }>(`/equipment/machine/${machineId}/hours`),
+
+    // NFC scan location
+    recordScanLocation: (machineId: number, data: { lat?: number; lng?: number; address?: string }) =>
+      apiClient.post(`/equipment/${machineId}/scan-location`, data),
   },
 
   tasks: {

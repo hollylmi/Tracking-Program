@@ -278,6 +278,31 @@
     {% endif %}
   </div>
 
+  <!-- Last Known Location -->
+  <div id="locationCard" class="info-card bg-light mt-3" style="display:none;">
+    <div class="fw-bold small mb-1"><i class="bi bi-geo-alt me-1"></i>Location Recorded</div>
+    <div id="locationStatus" class="small text-muted">Acquiring location...</div>
+  </div>
+
+  {% if machine.last_scanned_at %}
+  <div class="info-card bg-light mt-2">
+    <div class="fw-bold small mb-1"><i class="bi bi-geo-alt-fill me-1 text-primary"></i>Last Known Location</div>
+    <div class="small text-muted">
+      Scanned {{ machine.last_scanned_at.strftime('%d/%m/%Y %H:%M') }}
+      {% if machine.last_scanned_by_user %}by {{ machine.last_scanned_by_user.display_name or machine.last_scanned_by_user.username }}{% endif %}
+    </div>
+    {% if machine.last_scanned_address %}
+    <div class="small mt-1"><i class="bi bi-pin-map me-1"></i>{{ machine.last_scanned_address }}</div>
+    {% endif %}
+    {% if machine.last_scanned_lat and machine.last_scanned_lng %}
+    <a href="https://www.google.com/maps?q={{ machine.last_scanned_lat }},{{ machine.last_scanned_lng }}"
+       target="_blank" class="btn btn-sm btn-outline-primary mt-1">
+      <i class="bi bi-map me-1"></i>View on Map
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- NFC URL for programming (admin only) -->
   {% if current_user.role == 'admin' %}
   <div class="info-card bg-light mt-3">
@@ -298,6 +323,39 @@
 
 {% block scripts %}
 <script>
+  // ── Geolocation: record scan location on page load ──
+  (function() {
+    if (!navigator.geolocation) return;
+    const card = document.getElementById('locationCard');
+    const status = document.getElementById('locationStatus');
+    card.style.display = 'block';
+
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        status.innerHTML = '<i class="bi bi-check-circle text-success me-1"></i>Location recorded (' +
+          lat.toFixed(5) + ', ' + lng.toFixed(5) + ')';
+
+        fetch('{{ url_for("equipment.record_scan_location_web", machine_id=machine.id) }}', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({lat: lat, lng: lng})
+        }).catch(function() {});
+      },
+      function(err) {
+        // Still record the scan even without coords
+        status.innerHTML = '<i class="bi bi-exclamation-circle text-warning me-1"></i>Location unavailable — scan recorded without GPS';
+        fetch('{{ url_for("equipment.record_scan_location_web", machine_id=machine.id) }}', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        }).catch(function() {});
+      },
+      {enableHighAccuracy: true, timeout: 10000, maximumAge: 60000}
+    );
+  })();
+
   function togglePanel(id, btn) {
     const panel = document.getElementById(id);
     const isShowing = panel.classList.contains('show');
