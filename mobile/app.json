@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.lmigroup.plytrack",
+      "deploymentTarget": "16.0",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
