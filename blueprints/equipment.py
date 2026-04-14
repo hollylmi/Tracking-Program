@@ -3,7 +3,7 @@ import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, make_response
 from flask_login import current_user
 
 from blueprints.auth import require_role
@@ -1147,14 +1147,16 @@ def machine_scan(machine_id):
 
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
-    return render_template('equipment/scan.html',
+    resp = make_response(render_template('equipment/scan.html',
                            machine=m, assignment=assignment,
                            recent_checks=recent_checks,
                            active_breakdowns=active_breakdowns,
                            pending_transfers=pending_transfers,
                            latest_hours=latest_hours,
                            projects=projects,
-                           today=date.today())
+                           today=date.today()))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 @equipment_bp.route('/equipment/scan/<int:machine_id>/location', methods=['POST'])

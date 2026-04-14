@@ -16,6 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lmigroup.plytrack",
       "deploymentTarget": "16.0",
+      "associatedDomains": [
+        "applinks:tracking-program-production.up.railway.app"
+      ],
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"

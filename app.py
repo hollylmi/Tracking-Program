@@ -75,6 +75,23 @@ app.register_blueprint(api_auth_bp, url_prefix='/api')
 from blueprints.api.data import api_data_bp
 app.register_blueprint(api_data_bp, url_prefix='/api')
 
+
+# ── Universal Links: Apple App Site Association ──────────────────────────────
+from flask import jsonify
+
+@app.route('/.well-known/apple-app-site-association')
+def apple_app_site_association():
+    return jsonify({
+        "applinks": {
+            "apps": [],
+            "details": [{
+                "appID": "M8NXJMFDNB.com.lmigroup.plytrack",
+                "paths": ["/equipment/scan/*"]
+            }]
+        }
+    }), 200, {'Content-Type': 'application/json'}
+
+
 @app.template_filter('breakdown_json')
 def breakdown_json_filter(bd):
     """Serialize a MachineBreakdown model to HTML-attribute-safe JSON.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Stack } from 'expo-router'
+import { Linking } from 'react-native'
+import { Stack, useRouter } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from '../store/auth'
@@ -27,6 +28,28 @@ function GlobalToast() {
   return <Toast visible={visible} message={message} type={type} onHide={hide} />
 }
 
+function useUniversalLinkHandler() {
+  const router = useRouter()
+
+  useEffect(() => {
+    function handleUrl(event: { url: string }) {
+      const match = event.url.match(/\/equipment\/scan\/(\d+)/)
+      if (match) {
+        router.push({ pathname: '/machine/[id]', params: { id: match[1] } })
+      }
+    }
+
+    // Handle URL that opened the app
+    Linking.getInitialURL().then(url => {
+      if (url) handleUrl({ url })
+    })
+
+    // Handle URL while app is already running
+    const sub = Linking.addEventListener('url', handleUrl)
+    return () => sub.remove()
+  }, [router])
+}
+
 export default function RootLayout() {
   const { isLoading, loadStoredAuth, updateUser } = useAuthStore()
   // Stays true until both loadStoredAuth and the /me refresh are done,
@@ -34,6 +57,7 @@ export default function RootLayout() {
   const [initializing, setInitializing] = useState(true)
 
   useBackgroundSync()
+  useUniversalLinkHandler()
 
   useEffect(() => {
     const init = async () => {
