@@ -122,8 +122,20 @@
     </div>
     <form method="POST" action="{{ url_for('equipment.daily_check_submit') }}" enctype="multipart/form-data">
       <input type="hidden" name="machine_id" value="{{ machine.id }}">
-      <input type="hidden" name="project_id" value="{{ assignment.project_id if assignment else '' }}">
       <input type="hidden" name="redirect_url" value="{{ url_for('equipment.machine_scan', machine_id=machine.id) }}">
+      {% if assignment %}
+      <input type="hidden" name="project_id" value="{{ assignment.project_id }}">
+      {% else %}
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Project *</label>
+        <select name="project_id" class="form-select form-select-sm" required>
+          <option value="">— Select project —</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
       <div class="mb-2">
         <label class="form-label small fw-semibold mb-1">Condition</label>
         <div class="d-flex gap-2 flex-wrap">

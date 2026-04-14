@@ -914,6 +914,12 @@ def daily_check_submit():
     hours_str = request.form.get('hours_reading', '').strip()
     hours_reading = float(hours_str) if hours_str else None
 
+    # Auto-detect project from machine assignment if not provided
+    if not project_id and machine_id:
+        pm = ProjectMachine.query.filter_by(machine_id=machine_id).first()
+        if pm:
+            project_id = pm.project_id
+
     if not project_id or (not machine_id and not hired_machine_id):
         flash('Project and machine are required.', 'danger')
         return redirect(request.form.get('redirect_url') or url_for('equipment.equipment_overview'))
@@ -1133,12 +1139,15 @@ def machine_scan(machine_id):
     latest_hours = MachineHoursLog.query.filter_by(machine_id=machine_id).order_by(
         MachineHoursLog.log_date.desc()).first()
 
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+
     return render_template('equipment/scan.html',
                            machine=m, assignment=assignment,
                            recent_checks=recent_checks,
                            active_breakdowns=active_breakdowns,
                            pending_transfers=pending_transfers,
                            latest_hours=latest_hours,
+                           projects=projects,
                            today=date.today())
 
 
