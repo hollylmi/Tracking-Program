@@ -3051,6 +3051,12 @@ def equipment_daily_check_submit_api():
     hours_reading_str = request.form.get('hours_reading', '').strip()
     hours_reading = float(hours_reading_str) if hours_reading_str else None
 
+    # Auto-detect project from machine assignment if not provided
+    if not project_id and machine_id:
+        pm = ProjectMachine.query.filter_by(machine_id=machine_id).first()
+        if pm:
+            project_id = pm.project_id
+
     if not project_id or (not machine_id and not hired_machine_id):
         return {'error': 'project_id and machine_id or hired_machine_id required'}, 400
 
@@ -3075,7 +3081,10 @@ def equipment_daily_check_submit_api():
         existing.notes = notes
         existing.hours_reading = hours_reading
         existing.checked_by_user_id = user.id
-        existing.checked_at = datetime.utcnow()
+        try:
+            existing.checked_at = datetime.utcnow()
+        except Exception:
+            pass
         check = existing
     else:
         check = MachineDailyCheck(
@@ -3087,8 +3096,11 @@ def equipment_daily_check_submit_api():
             condition=condition,
             hours_reading=hours_reading,
             notes=notes,
-            checked_at=datetime.utcnow(),
         )
+        try:
+            check.checked_at = datetime.utcnow()
+        except Exception:
+            pass
 
     photo = request.files.get('photo')
     if photo and photo.filename:

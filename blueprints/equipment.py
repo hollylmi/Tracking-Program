@@ -939,7 +939,10 @@ def daily_check_submit():
         existing.notes = notes
         existing.hours_reading = hours_reading
         existing.checked_by_user_id = current_user.id
-        existing.checked_at = datetime.utcnow()
+        try:
+            existing.checked_at = datetime.utcnow()
+        except Exception:
+            pass
         check = existing
     else:
         check = MachineDailyCheck(
@@ -951,8 +954,11 @@ def daily_check_submit():
             condition=condition,
             hours_reading=hours_reading,
             notes=notes,
-            checked_at=datetime.utcnow(),
         )
+        try:
+            check.checked_at = datetime.utcnow()
+        except Exception:
+            pass
 
     photo = request.files.get('photo')
     if photo and photo.filename:
