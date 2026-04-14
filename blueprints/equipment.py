@@ -1116,8 +1116,8 @@ def serve_daily_check_photo(filename):
 
 
 @equipment_bp.route('/equipment/machine-photo/<filename>')
-@require_role('admin', 'supervisor', 'site')
 def serve_machine_photo(filename):
+    """Serve machine display photo — no auth required (filenames are UUIDs)."""
     return storage.serve_file(
         f'machine_photos/{filename}',
         os.path.join(UPLOAD_FOLDER, 'machine_photos', filename)
