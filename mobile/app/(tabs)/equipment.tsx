@@ -17,7 +17,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import NfcManager, { NfcTech, Ndef } from 'react-native-nfc-manager'
+// NFC — optional, only works in native builds (not Expo Go)
+let NfcManager: any = null
+let NfcTech: any = null
+let Ndef: any = null
+try {
+  const nfc = require('react-native-nfc-manager')
+  NfcManager = nfc.default
+  NfcTech = nfc.NfcTech
+  Ndef = nfc.Ndef
+} catch {
+  // NFC not available (Expo Go)
+}
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import * as ImagePicker from 'expo-image-picker'
 import ScreenHeader from '../../components/layout/ScreenHeader'
@@ -516,7 +527,9 @@ export default function EquipmentScreen() {
   const [nfcSupported, setNfcSupported] = useState(false)
 
   useEffect(() => {
-    NfcManager.isSupported().then(setNfcSupported).catch(() => setNfcSupported(false))
+    if (NfcManager) {
+      NfcManager.isSupported().then(setNfcSupported).catch(() => setNfcSupported(false))
+    }
   }, [])
 
   const handleNfcScan = useCallback(async () => {
