@@ -851,19 +851,27 @@ export default function MachineDetailScreen() {
   }
 
   const handleChangePhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Photo library access is needed to select a photo.')
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    })
-    if (result.canceled || result.assets.length === 0) return
+    Alert.alert('Equipment Photo', 'Choose a source', [
+      { text: 'Camera', onPress: async () => {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync()
+        if (status !== 'granted') { Alert.alert('Permission required', 'Camera access is needed.'); return }
+        const result = await ImagePicker.launchCameraAsync({ quality: 0.8 })
+        if (!result.canceled && result.assets.length > 0) uploadPhoto(result.assets[0].uri)
+      }},
+      { text: 'Photo Library', onPress: async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+        if (status !== 'granted') { Alert.alert('Permission required', 'Photo library access is needed.'); return }
+        const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
+        if (!result.canceled && result.assets.length > 0) uploadPhoto(result.assets[0].uri)
+      }},
+      { text: 'Cancel', style: 'cancel' },
+    ])
+  }
+
+  const uploadPhoto = async (uri: string) => {
     setUploadingPhoto(true)
     try {
-      const compressed = await compressImage(result.assets[0].uri)
+      const compressed = await compressImage(uri)
       const filename = `machine_${id}_${Date.now()}.jpg`
       const res = await api.equipment.uploadMachinePhoto(Number(id), compressed, filename)
       if (res.photo_url) {
@@ -965,7 +973,7 @@ export default function MachineDetailScreen() {
               </TouchableOpacity>
             )}
           </View>
-        ) : canEdit ? (
+        ) : (
           <TouchableOpacity
             style={styles.addPhotoBtn}
             onPress={handleChangePhoto}
@@ -981,7 +989,7 @@ export default function MachineDetailScreen() {
               </>
             )}
           </TouchableOpacity>
-        ) : null}
+        )}
 
         {/* Quick action buttons */}
         <QuickActions machineId={Number(id)} display={display} breakdowns={displayBreakdowns} />
