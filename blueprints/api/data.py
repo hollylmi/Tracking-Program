@@ -36,6 +36,20 @@ UPLOAD_FOLDER = os.path.join(
 )
 
 
+def _photo_url(r2_key, fallback_path):
+    """Return a presigned R2 URL if R2 is enabled, otherwise a relative path."""
+    import storage as _st
+    if _st.USE_R2:
+        try:
+            return _st._client().generate_presigned_url(
+                'get_object',
+                Params={'Bucket': _st._R2_BUCKET, 'Key': r2_key},
+                ExpiresIn=3600)
+        except Exception:
+            pass
+    return fallback_path
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -953,7 +967,7 @@ def get_equipment():
                 'active': m.active,
                 'group_id': m.group_id,
                 'group_name': m.group.name if m.group else None,
-                'photo_url': f'/equipment/machine-photo/{m.photo_filename}' if m.photo_filename else None,
+                'photo_url': _photo_url(f'machine_photos/{m.photo_filename}', f'/equipment/machine-photo/{m.photo_filename}') if m.photo_filename else None,
             }
             for m in machines
         ]
@@ -1126,7 +1140,8 @@ def get_machine(machine_id):
 
     photo_url = None
     if machine.photo_filename:
-        photo_url = f'/equipment/machine-photo/{machine.photo_filename}'
+        photo_url = _photo_url(f'machine_photos/{machine.photo_filename}',
+                               f'/equipment/machine-photo/{machine.photo_filename}')
 
     # Assignment
     assignment = ProjectMachine.query.filter_by(machine_id=machine_id).first()
@@ -1243,7 +1258,7 @@ def update_machine(machine_id):
         'description': machine.description,
         'delay_rate': machine.delay_rate,
         'active': machine.active,
-        'photo_url': f'/equipment/machine-photo/{machine.photo_filename}' if machine.photo_filename else None,
+        'photo_url': _photo_url(f'machine_photos/{machine.photo_filename}', f'/equipment/machine-photo/{machine.photo_filename}') if machine.photo_filename else None,
     }, 200
 
 
@@ -1276,7 +1291,7 @@ def upload_machine_photo(machine_id):
     machine.photo_original_name = photo.filename
     db.session.commit()
     return {
-        'photo_url': f'/equipment/machine-photo/{stored_name}',
+        'photo_url': _photo_url(f'machine_photos/{stored_name}', f'/equipment/machine-photo/{stored_name}'),
     }, 200
 
 

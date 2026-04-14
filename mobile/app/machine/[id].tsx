@@ -951,7 +951,7 @@ export default function MachineDetailScreen() {
         {display.photo_url ? (
           <View style={styles.machinePhotoWrap}>
             <Image
-              source={{ uri: `${API_BASE_URL}${display.photo_url}` }}
+              source={{ uri: display.photo_url?.startsWith('http') ? display.photo_url : `${API_BASE_URL}${display.photo_url}` }}
               style={styles.machinePhoto}
               resizeMode="cover"
             />

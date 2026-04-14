@@ -77,7 +77,7 @@ function MachineCard({
     ? 'warning-outline'
     : 'checkmark-circle-outline'
 
-  const photoUri = machine.photo_url ? `${API_BASE_URL}${machine.photo_url}` : null
+  const photoUri = machine.photo_url ? (machine.photo_url.startsWith('http') ? machine.photo_url : `${API_BASE_URL}${machine.photo_url}`) : null
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
