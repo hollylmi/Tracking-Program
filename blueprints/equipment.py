@@ -391,6 +391,9 @@ def breakdown_add():
             db.session.add(BreakdownPhoto(breakdown_id=bd.id, filename=stored, original_name=photo.filename))
     db.session.commit()
     flash('Breakdown recorded.', 'warning')
+    redirect_url = request.form.get('redirect_url')
+    if redirect_url:
+        return redirect(redirect_url)
     return redirect(url_for('equipment.equipment_overview') + '#tab-own' if not hired_machine_id else '#tab-hired')
 
 
@@ -900,7 +903,7 @@ def transfer_batch_detail(batch_id):
 # ---------------------------------------------------------------------------
 
 @equipment_bp.route('/equipment/daily-check/submit', methods=['POST'])
-@require_role('admin', 'supervisor')
+@require_role('admin', 'supervisor', 'site')
 def daily_check_submit():
     """Supervisor submits a daily check for one machine."""
     machine_id = request.form.get('machine_id', type=int)
@@ -913,18 +916,37 @@ def daily_check_submit():
 
     if not project_id or (not machine_id and not hired_machine_id):
         flash('Project and machine are required.', 'danger')
-        return redirect(url_for('equipment.equipment_overview'))
+        return redirect(request.form.get('redirect_url') or url_for('equipment.equipment_overview'))
 
-    check = MachineDailyCheck(
-        machine_id=machine_id or None,
-        hired_machine_id=hired_machine_id or None,
-        project_id=project_id,
-        check_date=date.today(),
-        checked_by_user_id=current_user.id,
-        condition=condition,
-        hours_reading=hours_reading,
-        notes=notes,
-    )
+    today = date.today()
+    # Check for existing check today — update instead of duplicate
+    existing = None
+    if machine_id:
+        existing = MachineDailyCheck.query.filter_by(
+            machine_id=machine_id, project_id=project_id, check_date=today).first()
+    elif hired_machine_id:
+        existing = MachineDailyCheck.query.filter_by(
+            hired_machine_id=hired_machine_id, project_id=project_id, check_date=today).first()
+
+    if existing:
+        existing.condition = condition
+        existing.notes = notes
+        existing.hours_reading = hours_reading
+        existing.checked_by_user_id = current_user.id
+        existing.checked_at = datetime.utcnow()
+        check = existing
+    else:
+        check = MachineDailyCheck(
+            machine_id=machine_id or None,
+            hired_machine_id=hired_machine_id or None,
+            project_id=project_id,
+            check_date=today,
+            checked_by_user_id=current_user.id,
+            condition=condition,
+            hours_reading=hours_reading,
+            notes=notes,
+            checked_at=datetime.utcnow(),
+        )
 
     photo = request.files.get('photo')
     if photo and photo.filename:
@@ -963,7 +985,8 @@ def daily_check_submit():
         except Exception:
             pass
 
-    db.session.add(check)
+    if not existing:
+        db.session.add(check)
     db.session.flush()
 
     # Auto-log hours
@@ -978,7 +1001,9 @@ def daily_check_submit():
 
     db.session.commit()
     flash('Daily check recorded.', 'success')
-    # Redirect back to the checks page if we came from there
+    redirect_url = request.form.get('redirect_url')
+    if redirect_url:
+        return redirect(redirect_url)
     if request.referrer and 'daily-checks/do' in request.referrer:
         return redirect(request.referrer)
     return redirect(url_for('equipment.daily_checks_do', project_id=project_id))

@@ -102,22 +102,85 @@
 
   <!-- Quick Actions -->
   <div class="action-grid">
-    <a href="{{ url_for('equipment.daily_checks_do') }}?machine_id={{ machine.id }}{% if assignment %}&project_id={{ assignment.project_id }}{% endif %}" class="action-btn action-prestart">
+    <button class="action-btn action-prestart" onclick="document.getElementById('checkSection').style.display='block'; this.scrollIntoView({behavior:'smooth'})">
       <i class="bi bi-check-circle text-success"></i>
       Pre-Start Check
-    </a>
-    <a href="{{ url_for('equipment.equipment_overview') }}#breakdown" onclick="localStorage.setItem('nfc_breakdown_machine', '{{ machine.id }}');" class="action-btn action-breakdown">
+    </button>
+    <button class="action-btn action-breakdown" onclick="document.getElementById('breakdownSection').style.display='block'; this.scrollIntoView({behavior:'smooth'})">
       <i class="bi bi-exclamation-triangle text-danger"></i>
       Report Breakdown
-    </a>
+    </button>
     <a href="{{ url_for('equipment.machine_detail', machine_id=machine.id) }}" class="action-btn action-detail">
       <i class="bi bi-info-circle text-secondary"></i>
       Full Details
     </a>
-    <a href="{{ url_for('equipment.equipment_overview') }}#transfer" onclick="localStorage.setItem('nfc_transfer_machine', '{{ machine.id }}');" class="action-btn action-transfer">
-      <i class="bi bi-arrow-left-right text-primary"></i>
-      Transfer
+    <a href="{{ url_for('equipment.daily_checks_do') }}?machine_id={{ machine.id }}{% if assignment %}&project_id={{ assignment.project_id }}{% endif %}" class="action-btn action-transfer">
+      <i class="bi bi-clock-history text-primary"></i>
+      Check History
     </a>
+  </div>
+
+  <!-- Quick Check Form (hidden until tapped) -->
+  <div id="checkSection" style="display:none;" class="info-card border-success">
+    <div class="fw-bold small mb-2 text-success"><i class="bi bi-check-circle me-1"></i>Pre-Start Check</div>
+    <form method="POST" action="{{ url_for('equipment.submit_daily_check') }}" enctype="multipart/form-data">
+      <input type="hidden" name="machine_id" value="{{ machine.id }}">
+      <input type="hidden" name="project_id" value="{{ assignment.project_id if assignment else '' }}">
+      <input type="hidden" name="redirect_url" value="{{ url_for('equipment.machine_scan', machine_id=machine.id) }}">
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Condition</label>
+        <div class="d-flex gap-2 flex-wrap">
+          {% for val, label, color in [('good','Good','success'), ('fair','Fair','warning'), ('poor','Poor','danger'), ('broken_down','Broken Down','danger')] %}
+          <label class="btn btn-outline-{{ color }} btn-sm {% if val == 'good' %}active{% endif %}" style="font-size:.8rem;">
+            <input type="radio" name="condition" value="{{ val }}" class="btn-check" {{ 'checked' if val == 'good' }}> {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Hours Reading</label>
+        <input type="number" name="hours_reading" class="form-control form-control-sm" step="0.1" placeholder="Current hours meter">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Notes</label>
+        <input type="text" name="notes" class="form-control form-control-sm" placeholder="Any observations...">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Photo</label>
+        <input type="file" name="photo" class="form-control form-control-sm" accept="image/*" capture="environment">
+      </div>
+      <button type="submit" class="btn btn-success btn-sm w-100">
+        <i class="bi bi-check-lg me-1"></i>Submit Check
+      </button>
+    </form>
+  </div>
+
+  <!-- Quick Breakdown Form (hidden until tapped) -->
+  <div id="breakdownSection" style="display:none;" class="info-card border-danger">
+    <div class="fw-bold small mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Report Breakdown</div>
+    <form method="POST" action="{{ url_for('equipment.add_breakdown') }}">
+      <input type="hidden" name="machine_id" value="{{ machine.id }}">
+      <input type="hidden" name="redirect_url" value="{{ url_for('equipment.machine_scan', machine_id=machine.id) }}">
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Date</label>
+        <input type="date" name="incident_date" class="form-control form-control-sm" value="{{ today.strftime('%Y-%m-%d') }}" required>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Time</label>
+        <input type="time" name="incident_time" class="form-control form-control-sm">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Description *</label>
+        <textarea name="description" class="form-control form-control-sm" rows="3" placeholder="Describe the breakdown..." required></textarea>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-1">Being Repaired By</label>
+        <input type="text" name="repairing_by" class="form-control form-control-sm" placeholder="Who is fixing it?">
+      </div>
+      <button type="submit" class="btn btn-danger btn-sm w-100">
+        <i class="bi bi-exclamation-triangle me-1"></i>Report Breakdown
+      </button>
+    </form>
   </div>
 
   <!-- Machine Info -->
