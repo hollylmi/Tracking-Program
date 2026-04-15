@@ -459,58 +459,7 @@
               </div>
             </div>
 
-            <!-- ═══ 5. EQUIPMENT ON SITE (admin only) ═══ -->
-            {% if site_rate_items %}
-            <div class="col-12">
-              <div class="card border shadow-sm">
-                <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
-                  <span class="fw-semibold small"><i class="bi bi-currency-dollar me-1 text-success"></i>Equipment on Site <span class="text-muted fw-normal">(for delay cost calculation)</span></span>
-                  <span class="badge bg-success-subtle text-success fw-bold" id="siteCostRate">$0.00/hr</span>
-                </div>
-                <div class="card-body p-2">
-                  <table class="table table-sm table-borderless mb-2 align-middle" style="font-size:.82rem;" id="siteCostTable">
-                    <thead class="table-light">
-                      <tr>
-                        <th>Item</th>
-                        <th style="width:100px">Rate ($/hr)</th>
-                        <th style="width:70px">Qty</th>
-                        <th style="width:100px" class="text-end">Cost/hr</th>
-                        <th style="width:36px"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% if entry and entry.site_cost_lines %}
-                        {% set known_names = site_rate_items|map(attribute='name')|list %}
-                        {% for cl in entry.site_cost_lines %}
-                        <tr class="site-cost-row">
-                          <td>
-                            <select name="cost_item_name[]" class="form-select form-select-sm" onchange="onCostItemSelect(this)">
-                              <option value="">— Select —</option>
-                              {% for ri in site_rate_items %}
-                              <option value="{{ ri.name }}" data-rate="{{ ri.rate }}"
-                                {{ 'selected' if ri.name == cl.item_name }}>{{ ri.name }} — ${{ '%.2f'|format(ri.rate) }}/hr</option>
-                              {% endfor %}
-                            </select>
-                          </td>
-                          <td><input type="number" name="cost_rate[]" class="form-control form-control-sm bg-light" step="0.01" min="0" value="{{ cl.rate }}" readonly></td>
-                          <td><input type="number" name="cost_qty[]" class="form-control form-control-sm" step="1" min="1" value="{{ cl.quantity|int }}" oninput="updateSiteCostTotal()"></td>
-                          <td class="text-end fw-semibold cost-line-total">${{ '%.2f'|format((cl.rate or 0) * (cl.quantity or 0)) }}</td>
-                          <td><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateSiteCostTotal()"><i class="bi bi-x-lg"></i></button></td>
-                        </tr>
-                        {% endfor %}
-                      {% endif %}
-                    </tbody>
-                  </table>
-                  <button type="button" class="btn btn-sm btn-outline-success py-0" onclick="addCostRow()">
-                    <i class="bi bi-plus me-1"></i>Add Item
-                  </button>
-                </div>
-                <div class="card-footer bg-white py-1">
-                  <div class="form-text" style="font-size:.7rem;">Select all equipment/resources on site today. If a delay is recorded, the cost will be calculated as delay hours &times; total hourly rate.</div>
-                </div>
-              </div>
-            </div>
-            {% endif %}
+            <!-- Equipment on Site moved to right column -->
 
             <!-- ═══ 6. PERSON-HOURS SUMMARY ═══ -->
             <div class="col-12" id="personHoursSummary">
@@ -759,8 +708,60 @@
         </div>
       </div>
 
+      <!-- Equipment on Site (Rate Card) — admin only -->
+      {% if site_rate_items %}
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-currency-dollar me-2 text-success"></i>Equipment on Site</h5>
+          <span class="badge bg-success rounded-pill" id="siteCostRate">$0.00/hr</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="px-3 py-2 border-bottom bg-light">
+            <input type="text" class="form-control form-control-sm" id="rateItemSearch"
+                   placeholder="Search items..." oninput="filterRateItems()">
+          </div>
+          <div class="checkbox-scroll-list" id="rateItemList">
+            {% set selected_cost_names = [] %}
+            {% if entry and entry.site_cost_lines %}
+              {% for cl in entry.site_cost_lines %}
+                {% set _ = selected_cost_names.append(cl.item_name) %}
+              {% endfor %}
+            {% endif %}
+            {% for ri in site_rate_items %}
+            {% set is_selected = ri.name in selected_cost_names %}
+            {% set existing_qty = 1 %}
+            {% if entry and entry.site_cost_lines %}
+              {% for cl in entry.site_cost_lines if cl.item_name == ri.name %}
+                {% set existing_qty = cl.quantity|int %}
+              {% endfor %}
+            {% endif %}
+            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2 rate-item-row" data-name="{{ ri.name|lower }}">
+              <input type="checkbox" class="form-check-input rate-check mt-0"
+                     value="{{ ri.name }}" data-rate="{{ ri.rate }}"
+                     {{ 'checked' if is_selected }}
+                     onchange="updateSiteCostTotal()">
+              <span class="flex-grow-1">
+                {{ ri.name }}
+                <small class="text-muted ms-1">${{ '%.2f'|format(ri.rate) }}/hr</small>
+              </span>
+              <input type="number" class="form-control form-control-sm rate-qty" style="width:55px;"
+                     min="1" step="1" value="{{ existing_qty }}"
+                     oninput="updateSiteCostTotal()" title="Quantity">
+            </label>
+            {% endfor %}
+          </div>
+          <div class="px-3 py-2 border-top bg-light">
+            <div class="form-text" style="font-size:.7rem;">Tick items on site today. Delay cost = delay hours &times; total hourly rate.</div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
     </div>
   </div>
+
+  <!-- Hidden fields for site cost submission -->
+  <div id="siteCostHiddenFields"></div>
 
   <!-- Submit Buttons -->
   <div class="d-flex gap-2 mb-5">
@@ -1471,47 +1472,31 @@
     refreshAllCrewLists();
   }
 
-  // ── Site Cost lines ──────────────────────────────────────────────────
-  const RATE_ITEMS = {{ site_rate_items | default([], true) | tojson }};
-
-  function addCostRow() {
-    const tbody = document.querySelector('#siteCostTable tbody');
-    const tr = document.createElement('tr');
-    tr.className = 'site-cost-row';
-    let opts = '<option value="">— Select —</option>';
-    RATE_ITEMS.forEach(ri => {
-      opts += `<option value="${ri.name}" data-rate="${ri.rate}">${ri.name} — $${Number(ri.rate).toFixed(2)}/hr</option>`;
+  // ── Site Cost (rate card checkboxes) ──────────────────────────────────
+  function filterRateItems() {
+    const q = document.getElementById('rateItemSearch').value.toLowerCase();
+    document.querySelectorAll('.rate-item-row').forEach(row => {
+      row.style.display = row.dataset.name.includes(q) ? '' : 'none';
     });
-    tr.innerHTML = `
-      <td><select name="cost_item_name[]" class="form-select form-select-sm" onchange="onCostItemSelect(this)">${opts}</select></td>
-      <td><input type="number" name="cost_rate[]" class="form-control form-control-sm bg-light" step="0.01" min="0" readonly></td>
-      <td><input type="number" name="cost_qty[]" class="form-control form-control-sm" step="1" min="1" value="1" oninput="updateSiteCostTotal()"></td>
-      <td class="text-end fw-semibold cost-line-total">$0.00</td>
-      <td><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateSiteCostTotal()"><i class="bi bi-x-lg"></i></button></td>
-    `;
-    tbody.appendChild(tr);
-  }
-
-  function onCostItemSelect(sel) {
-    const row = sel.closest('tr');
-    const rateInput = row.querySelector('input[name="cost_rate[]"]');
-    if (sel.value) {
-      const opt = sel.selectedOptions[0];
-      rateInput.value = opt.dataset.rate || '';
-    } else {
-      rateInput.value = '';
-    }
-    updateSiteCostTotal();
   }
 
   function updateSiteCostTotal() {
     let grand = 0;
-    document.querySelectorAll('.site-cost-row').forEach(row => {
-      const rate = parseFloat(row.querySelector('input[name="cost_rate[]"]').value) || 0;
-      const qty = parseFloat(row.querySelector('input[name="cost_qty[]"]').value) || 0;
-      const lineTotal = rate * qty;
-      row.querySelector('.cost-line-total').textContent = '$' + lineTotal.toFixed(2);
-      grand += lineTotal;
+    // Update hidden fields for form submission
+    const container = document.getElementById('siteCostHiddenFields');
+    if (container) container.innerHTML = '';
+    document.querySelectorAll('.rate-check').forEach(cb => {
+      if (cb.checked) {
+        const rate = parseFloat(cb.dataset.rate) || 0;
+        const qtyInput = cb.closest('label').querySelector('.rate-qty');
+        const qty = parseInt(qtyInput.value) || 1;
+        grand += rate * qty;
+        if (container) {
+          container.innerHTML += '<input type="hidden" name="cost_item_name[]" value="' + cb.value + '">';
+          container.innerHTML += '<input type="hidden" name="cost_rate[]" value="' + rate + '">';
+          container.innerHTML += '<input type="hidden" name="cost_qty[]" value="' + qty + '">';
+        }
+      }
     });
     const badge = document.getElementById('siteCostRate');
     if (badge) badge.textContent = '$' + grand.toFixed(2) + '/hr';
