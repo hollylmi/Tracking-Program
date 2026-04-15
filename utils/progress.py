@@ -511,8 +511,15 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
         role_counts = {}
         for emp in entry.employees:
             if emp.delay_rate:
-                label = emp.role if emp.role else emp.name
                 rate = emp.delay_rate
+                # Find the role whose delay_rate matches the charged rate
+                label = None
+                for r in (emp.roles or []):
+                    if r.delay_rate and abs(r.delay_rate - rate) < 0.01:
+                        label = r.name
+                        break
+                if not label:
+                    label = emp.role if emp.role else emp.name
                 key = (label, rate)
                 role_counts[key] = role_counts.get(key, 0) + 1
 
