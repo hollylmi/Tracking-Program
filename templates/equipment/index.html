@@ -300,7 +300,8 @@
               {% set _ = machine_assignments.append(pm_item) %}
             {% endfor %}
             {% set projs = own_machine_projects.get(m.id, []) %}
-            {% set proj_ids = projs | map(attribute=0) | map(attribute='id') | list %}
+            {% set proj_ids = [] %}
+            {% for p_tuple in projs %}{% if p_tuple[0] %}{% set _ = proj_ids.append(p_tuple[0].id) %}{% endif %}{% endfor %}
             {% set row_proj = machine_assigned_project.get(m.id) %}
             {% set row_colours = project_colour_map.get(row_proj.id) if row_proj else None %}
             <tr class="fleet-row {{ 'table-danger' if bd else ('table-secondary opacity-75' if not m.active else '') }}"
