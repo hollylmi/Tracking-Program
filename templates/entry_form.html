@@ -1474,12 +1474,15 @@
     const q = el.value.trim().toLowerCase();
     document.querySelectorAll('.rate-item-row').forEach(row => {
       if (!q) {
-        row.style.display = '';
+        row.classList.remove('d-none');
       } else {
-        // Search all words in the item name
-        const name = (row.dataset.name || '').toLowerCase();
+        const name = (row.dataset.name || '');
         const match = q.split(/\s+/).every(word => name.includes(word));
-        row.style.display = match ? '' : 'none';
+        if (match) {
+          row.classList.remove('d-none');
+        } else {
+          row.classList.add('d-none');
+        }
       }
     });
   }

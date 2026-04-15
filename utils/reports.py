@@ -129,41 +129,56 @@ def generate_pdf(hm, date_from, date_to, days, summary, settings):
 
 
 def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings):
-    """Build a client delay charge report PDF and return bytes."""
+    """Build a delay cost report PDF and return bytes."""
     pdf = FPDF()
     pdf.set_margins(15, 15, 15)
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
+    page_w = pdf.w - pdf.l_margin - pdf.r_margin
 
     company = safe(settings.get('company_name', '') or 'Project Tracker')
 
-    pdf.set_font('Helvetica', 'B', 18)
-    pdf.cell(0, 10, company, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-    pdf.set_font('Helvetica', 'B', 13)
-    pdf.cell(0, 8, 'DELAY CHARGE REPORT', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    # Logo + header
+    _static = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
+    logo_path = None
+    for ext in ('png', 'jpg', 'jpeg', 'gif'):
+        _p = os.path.join(_static, f'logo.{ext}')
+        if os.path.exists(_p):
+            logo_path = _p
+            break
+
+    header_y = pdf.get_y()
+    text_x = pdf.l_margin
+    if logo_path:
+        pdf.image(logo_path, x=pdf.l_margin, y=header_y, h=14, keep_aspect_ratio=True)
+        text_x = pdf.l_margin + 38
+    pdf.set_xy(text_x, header_y)
+    tw = page_w - (38 if logo_path else 0)
+    pdf.set_font('Helvetica', 'B', 14)
+    pdf.cell(tw, 6, 'DELAY COST REPORT', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_x(text_x)
     pdf.set_font('Helvetica', '', 9)
-    pdf.cell(0, 5, f'Generated: {date.today().strftime("%d/%m/%Y")}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-    pdf.ln(5)
-
-    pdf.set_fill_color(240, 244, 255)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 7, 'REPORT DETAILS', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
-
-    def detail_row(label, value):
-        pdf.set_font('Helvetica', 'B', 9)
-        pdf.cell(45, 6, label + ':')
-        pdf.set_font('Helvetica', '', 9)
-        pdf.cell(0, 6, safe(value) if value else '-', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-    detail_row('Period', f'{date_from.strftime("%d/%m/%Y")} to {date_to.strftime("%d/%m/%Y")}')
-    detail_row('Project', project_name or 'All Projects')
-    detail_row('Billable Delay Events', str(summary['billable_count']))
-    detail_row('Total Billable Hours', f'{summary["total_hours_billable"]} hrs')
-    detail_row('Non-Billable Events', str(summary['non_billable_count']))
+    pdf.cell(tw, 4, safe(project_name or 'All Projects'), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_x(text_x)
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(tw, 3, f'{date_from.strftime("%d/%m/%Y")} to {date_to.strftime("%d/%m/%Y")}  |  Generated {date.today().strftime("%d/%m/%Y")}', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(max(pdf.get_y(), header_y + 15))
+    pdf.set_draw_color(135, 200, 235)
+    pdf.set_line_width(0.6)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
     pdf.ln(4)
 
-    billable_rows = [r for r in rows if r['billable']]
-    non_billable_rows = [r for r in rows if not r['billable']]
+    # Summary bar
+    pdf.set_fill_color(240, 244, 255)
+    pdf.set_font('Helvetica', 'B', 9)
+    total_events = len(rows)
+    total_hours = summary.get('total_hours_billable', 0) + summary.get('total_hours_non_billable', 0)
+    pdf.cell(page_w / 3, 6, f'  {total_events} delay events', fill=True)
+    pdf.cell(page_w / 3, 6, f'  {total_hours} total hours', fill=True, align='C')
+    pdf.cell(page_w / 3, 6, f'  Total: ${summary["total_cost"]:,.2f}', fill=True, align='R')
+    pdf.ln(6)
 
     def render_rows(rows_list, title, fill_color):
         if not rows_list:
@@ -251,22 +266,14 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
             pdf.set_text_color(0, 0, 0)
             pdf.ln(3)
 
-    render_rows(billable_rows, 'BILLABLE DELAYS (CHARGED TO CLIENT)', (255, 235, 235))
-    render_rows(non_billable_rows, 'NON-BILLABLE DELAYS (OWN COST)', (235, 245, 255))
+    render_rows(rows, 'DELAY COSTS', (245, 248, 255))
 
     pdf.ln(3)
     pdf.set_fill_color(30, 80, 180)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font('Helvetica', 'B', 12)
-    pdf.cell(0, 10, f'  TOTAL BILLABLE DELAY CHARGES:  ${summary["total_cost"]:,.2f}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+    pdf.cell(0, 10, f'  TOTAL DELAY COSTS:  ${summary["total_cost"]:,.2f}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
     pdf.set_text_color(0, 0, 0)
-
-    pdf.ln(8)
-    pdf.set_font('Helvetica', '', 9)
-    pdf.cell(90, 6, 'Authorised by: ________________________________')
-    pdf.cell(0, 6, 'Date: ____________________', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(3)
-    pdf.cell(90, 6, 'Signature: ___________________________________', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     return bytes(pdf.output())
 
