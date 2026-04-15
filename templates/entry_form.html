@@ -721,31 +721,25 @@
                    placeholder="Search items..." oninput="filterRateItems()">
           </div>
           <div class="checkbox-scroll-list" id="rateItemList">
-            {% set selected_cost_names = [] %}
+            {% set cost_map = {} %}
             {% if entry and entry.site_cost_lines %}
               {% for cl in entry.site_cost_lines %}
-                {% set _ = selected_cost_names.append(cl.item_name) %}
+                {% set _ = cost_map.update({cl.item_name: cl.quantity|int}) %}
               {% endfor %}
             {% endif %}
             {% for ri in site_rate_items %}
-            {% set is_selected = ri.name in selected_cost_names %}
-            {% set existing_qty = 1 %}
-            {% if entry and entry.site_cost_lines %}
-              {% for cl in entry.site_cost_lines if cl.item_name == ri.name %}
-                {% set existing_qty = cl.quantity|int %}
-              {% endfor %}
-            {% endif %}
+            {% set saved_qty = cost_map.get(ri.name) %}
             <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2 rate-item-row" data-name="{{ ri.name|lower }}">
               <input type="checkbox" class="form-check-input rate-check mt-0"
                      value="{{ ri.name }}" data-rate="{{ ri.rate }}"
-                     {{ 'checked' if is_selected }}
+                     {{ 'checked' if saved_qty is not none }}
                      onchange="updateSiteCostTotal()">
               <span class="flex-grow-1">
                 {{ ri.name }}
                 <small class="text-muted ms-1">${{ '%.2f'|format(ri.rate) }}/hr</small>
               </span>
               <input type="number" class="form-control form-control-sm rate-qty" style="width:55px;"
-                     min="1" step="1" value="{{ existing_qty }}"
+                     min="1" step="1" value="{{ saved_qty if saved_qty is not none else 1 }}"
                      oninput="updateSiteCostTotal()" title="Quantity">
             </label>
             {% endfor %}
