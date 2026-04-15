@@ -128,7 +128,7 @@ def generate_pdf(hm, date_from, date_to, days, summary, settings):
     return bytes(pdf.output())
 
 
-def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings):
+def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings, gantt_data=None):
     """Build a delay cost report PDF and return bytes."""
     pdf = FPDF()
     pdf.set_margins(15, 15, 15)
@@ -274,6 +274,225 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 10, f'  TOTAL DELAY COSTS:  ${summary["total_cost"]:,.2f}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
     pdf.set_text_color(0, 0, 0)
+
+    # ── Gantt chart on landscape page ──────────────────────────────────
+    if gantt_data and gantt_data.get('rows'):
+        pdf.add_page('L')  # Landscape
+        lw = pdf.w - pdf.l_margin - pdf.r_margin
+
+        # Header with logo
+        header_y = pdf.get_y()
+        text_x = pdf.l_margin
+        if logo_path:
+            pdf.image(logo_path, x=pdf.l_margin, y=header_y, h=12, keep_aspect_ratio=True)
+            text_x = pdf.l_margin + 35
+        pdf.set_xy(text_x, header_y)
+        pdf.set_font('Helvetica', 'B', 13)
+        pdf.cell(lw - 35 if logo_path else lw, 5, 'PROJECT SCHEDULE', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_x(text_x)
+        pdf.set_font('Helvetica', '', 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(lw, 4, safe(f'{project_name}  |  {date_from.strftime("%d/%m/%Y")} to {date_to.strftime("%d/%m/%Y")}'), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_y(max(pdf.get_y(), header_y + 13))
+
+        # Divider line
+        pdf.set_draw_color(135, 200, 235)
+        pdf.set_line_width(0.5)
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+        pdf.ln(3)
+
+        # Legend
+        legend_y = pdf.get_y()
+        pdf.set_font('Helvetica', '', 6)
+        legends = [
+            ((96, 165, 250), 'Planned'),
+            ((34, 197, 94), 'Actual'),
+            ((245, 158, 11), 'Forecast'),
+            ((239, 68, 68), 'Delay'),
+        ]
+        x = pdf.l_margin
+        for colour, label in legends:
+            pdf.set_fill_color(*colour)
+            pdf.rect(x, legend_y + 1, 8, 4, 'F')
+            pdf.set_xy(x + 9, legend_y)
+            pdf.cell(20, 6, label)
+            x += 30
+        # Today / Target line legends
+        pdf.set_draw_color(239, 68, 68)
+        pdf.set_line_width(0.8)
+        pdf.line(x, legend_y + 1, x, legend_y + 5)
+        pdf.set_xy(x + 2, legend_y)
+        pdf.cell(15, 6, 'Today')
+        x += 20
+        pdf.set_draw_color(59, 130, 246)
+        pdf.line(x, legend_y + 1, x, legend_y + 5)
+        pdf.set_xy(x + 2, legend_y)
+        pdf.cell(15, 6, 'Target')
+        pdf.ln(6)
+
+        # Compute layout constants
+        label_w = 45   # mm for task labels
+        var_w = 18     # mm for variance column
+        bar_w = lw - label_w - var_w
+        row_h = 7      # mm per task row
+        gantt_rows = gantt_data['rows']
+        day_w_pct = gantt_data['day_width_pct']
+        shade_stripes = gantt_data.get('shade_stripes', [])
+        today_pct = gantt_data.get('today_pct')
+        target_pct = gantt_data.get('target_finish_pct')
+
+        # Check if we need to scale rows to fit the page
+        avail_h = pdf.h - pdf.get_y() - pdf.b_margin - 18  # leave room for summary
+        total_rows_h = len(gantt_rows) * row_h + 8  # +8 for month header
+        if total_rows_h > avail_h and len(gantt_rows) > 0:
+            row_h = max(4, (avail_h - 8) / len(gantt_rows))
+
+        bar_x = pdf.l_margin + label_w
+        chart_top = pdf.get_y()
+
+        # Month markers header
+        pdf.set_font('Helvetica', 'B', 5.5)
+        pdf.set_text_color(60, 70, 80)
+        for m in gantt_data.get('month_markers', []):
+            mx = bar_x + (m['left_pct'] / 100.0) * bar_w
+            if pdf.l_margin < mx < pdf.w - pdf.r_margin - 10:
+                pdf.set_xy(mx, chart_top)
+                pdf.cell(20, 4, m['label'])
+        pdf.set_text_color(0, 0, 0)
+
+        # Week ticks
+        pdf.set_draw_color(210, 215, 220)
+        pdf.set_line_width(0.15)
+        tick_top = chart_top + 5
+        for w in gantt_data.get('week_markers', []):
+            wx = bar_x + (w['left_pct'] / 100.0) * bar_w
+            if bar_x <= wx <= bar_x + bar_w:
+                pdf.line(wx, tick_top, wx, tick_top + len(gantt_rows) * row_h)
+
+        y = chart_top + 6
+
+        for row in gantt_rows:
+            # Task label
+            pdf.set_font('Helvetica', '', 6)
+            pdf.set_xy(pdf.l_margin, y)
+            pdf.cell(label_w - 2, row_h, safe(row['label'][:35]), align='R')
+
+            # Bar background
+            pdf.set_fill_color(250, 251, 252)
+            pdf.rect(bar_x, y, bar_w, row_h, 'F')
+
+            # Shade stripes (delays — single red for client, non-work = grey)
+            for s in shade_stripes:
+                if s['type'] in ('wwd', 'cld'):
+                    sx = bar_x + (s['left'] / 100.0) * bar_w
+                    sw = (s['w'] / 100.0) * bar_w
+                    pdf.set_fill_color(253, 226, 226)  # pastel red (15% red on white)
+                    pdf.rect(sx, y, sw, row_h, 'F')
+                elif s['type'] == 'nwd':
+                    sx = bar_x + (s['left'] / 100.0) * bar_w
+                    sw = (s['w'] / 100.0) * bar_w
+                    pdf.set_fill_color(240, 242, 245)  # very light grey
+                    pdf.rect(sx, y, sw, row_h, 'F')
+
+            # Planned bars (top half — pastel blue)
+            pdf.set_fill_color(160, 200, 250)
+            bar_top_h = row_h * 0.42
+            for lft in row.get('planned_days', []):
+                bx = bar_x + (lft / 100.0) * bar_w
+                bw = max(0.5, (day_w_pct / 100.0) * bar_w)
+                pdf.rect(bx, y + 0.5, bw, bar_top_h, 'F')
+
+            # Actual bars (bottom half — solid green)
+            pdf.set_fill_color(34, 197, 94)
+            bar_bot_y = y + row_h * 0.5
+            bar_bot_h = row_h * 0.42
+            for lft in row.get('actual_days', []):
+                bx = bar_x + (lft / 100.0) * bar_w
+                bw = max(0.5, (day_w_pct / 100.0) * bar_w)
+                pdf.rect(bx, bar_bot_y, bw, bar_bot_h, 'F')
+
+            # Forecast bars (bottom half — warm amber)
+            pdf.set_fill_color(250, 190, 70)
+            for lft in row.get('forecast_days', []):
+                bx = bar_x + (lft / 100.0) * bar_w
+                bw = max(0.5, (day_w_pct / 100.0) * bar_w)
+                pdf.rect(bx, bar_bot_y, bw, bar_bot_h, 'F')
+
+            # Row border
+            pdf.set_draw_color(230, 233, 236)
+            pdf.set_line_width(0.1)
+            pdf.line(bar_x, y + row_h, bar_x + bar_w, y + row_h)
+
+            # Variance label
+            vd = row.get('variance_days')
+            if vd is not None:
+                if vd > 0:
+                    pdf.set_text_color(239, 68, 68)
+                    vtxt = f'+{vd}d'
+                elif vd < 0:
+                    pdf.set_text_color(22, 163, 74)
+                    vtxt = f'{vd}d'
+                else:
+                    pdf.set_text_color(107, 114, 128)
+                    vtxt = 'On time'
+                pdf.set_font('Helvetica', 'B', 5.5)
+                pdf.set_xy(bar_x + bar_w + 2, y)
+                pdf.cell(var_w, row_h, vtxt)
+                pdf.set_text_color(0, 0, 0)
+
+            y += row_h
+
+        # Today line
+        if today_pct is not None and 0 <= today_pct <= 100:
+            tx = bar_x + (today_pct / 100.0) * bar_w
+            pdf.set_draw_color(239, 68, 68)
+            pdf.set_line_width(0.6)
+            pdf.line(tx, chart_top + 5, tx, y)
+
+        # Target finish line
+        if target_pct is not None and 0 <= target_pct <= 100:
+            tx = bar_x + (target_pct / 100.0) * bar_w
+            pdf.set_draw_color(59, 130, 246)
+            pdf.set_line_width(0.6)
+            pdf.line(tx, chart_top + 5, tx, y)
+
+        # Summary box
+        pdf.ln(3)
+        pdf.set_y(y + 3)
+        pdf.set_font('Helvetica', '', 7)
+        pdf.set_fill_color(245, 247, 250)
+        summary_y = pdf.get_y()
+        pdf.rect(pdf.l_margin, summary_y, lw, 12, 'F')
+        pdf.set_draw_color(200, 205, 210)
+        pdf.set_line_width(0.3)
+        pdf.rect(pdf.l_margin, summary_y, lw, 12, 'D')
+
+        pdf.set_xy(pdf.l_margin + 3, summary_y + 1)
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(35, 5, 'TARGET FINISH:')
+        pdf.set_font('Helvetica', '', 7)
+        pdf.cell(30, 5, gantt_data.get('target_finish', '—'))
+
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(30, 5, 'EST. FINISH:')
+        pdf.set_font('Helvetica', '', 7)
+        pdf.cell(30, 5, gantt_data.get('est_finish', '—'))
+
+        vd = gantt_data.get('variance_days')
+        if vd is not None:
+            pdf.set_font('Helvetica', 'B', 7)
+            pdf.cell(25, 5, 'VARIANCE:')
+            if vd > 0:
+                pdf.set_text_color(239, 68, 68)
+                pdf.cell(30, 5, f'+{vd} days (BEHIND)')
+            elif vd < 0:
+                pdf.set_text_color(22, 163, 74)
+                pdf.cell(30, 5, f'{vd} days (AHEAD)')
+            else:
+                pdf.set_text_color(107, 114, 128)
+                pdf.cell(30, 5, 'ON SCHEDULE')
+            pdf.set_text_color(0, 0, 0)
 
     return bytes(pdf.output())
 

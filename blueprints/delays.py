@@ -67,11 +67,15 @@ def delay_report_pdf():
     settings = load_settings()
 
     project_name = ''
+    gantt_data = None
     if project_id:
         p = Project.query.get(int(project_id))
         project_name = p.name if p else ''
+        if p:
+            from utils.gantt import compute_gantt_data
+            gantt_data = compute_gantt_data(int(project_id), mode='client')
 
-    pdf_bytes = generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings)
+    pdf_bytes = generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings, gantt_data=gantt_data)
     filename = f"delay_report_{date_from_str}_to_{date_to_str}.pdf"
     return Response(pdf_bytes, mimetype='application/pdf',
                     headers={'Content-Disposition': f'attachment; filename="{filename}"'})
