@@ -217,7 +217,7 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
             pdf.ln(1)
 
             # Cost table (employees + equipment)
-            if row['emp_lines'] or row['machine_lines']:
+            if row['emp_lines'] or row['machine_lines'] or row.get('accom_lines'):
                 pdf.set_font('Helvetica', 'B', 8)
                 pdf.set_fill_color(210, 218, 255)
                 for header, w in zip(['Role / Equipment', 'Rate ($/hr)', 'Hours', 'Cost ($)'], col_w):
@@ -236,6 +236,12 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
                     pdf.cell(col_w[0], 5, safe('  ' + icon + line['name']), border=1)
                     pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
                     pdf.cell(col_w[2], 5, str(line['hours']), border=1)
+                    pdf.cell(col_w[3], 5, f'${line["cost"]:.2f}', border=1)
+                    pdf.ln()
+                for line in row.get('accom_lines', []):
+                    pdf.cell(col_w[0], 5, safe('  ' + line['name']), border=1)
+                    pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
+                    pdf.cell(col_w[2], 5, str(line.get('count', line['hours'])), border=1)
                     pdf.cell(col_w[3], 5, f'${line["cost"]:.2f}', border=1)
                     pdf.ln()
 

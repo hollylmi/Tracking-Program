@@ -382,6 +382,29 @@
                       <i class="bi bi-pause-circle me-1"></i>Hired machines stood down (no hire charges today)
                     </label>
                   </div>
+                  {% if current_user.role == 'admin' %}
+                  <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" name="include_accommodation"
+                           id="includeAccomCheck" value="1"
+                           {% if entry and entry.include_accommodation %}checked{% endif %}
+                           onchange="toggleDayRateWarning()">
+                    <label class="form-check-label small" for="includeAccomCheck">
+                      <i class="bi bi-house me-1"></i>Include accommodation costs
+                    </label>
+                  </div>
+                  <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" name="charge_day_rate"
+                           id="chargeDayRateCheck" value="1"
+                           {% if entry and entry.charge_day_rate %}checked{% endif %}
+                           onchange="toggleDayRateWarning()">
+                    <label class="form-check-label small" for="chargeDayRateCheck">
+                      <i class="bi bi-cash-stack me-1"></i>Charge day rate (overrides all other delay costs)
+                    </label>
+                  </div>
+                  <div id="dayRateWarning" class="small text-warning mt-1" style="display:none;">
+                    <i class="bi bi-exclamation-triangle me-1"></i>Day rate will replace all people, equipment, and accommodation costs for this delay.
+                  </div>
+                  {% endif %}
                 </div>
               </div>
             </div>
@@ -1495,6 +1518,13 @@
   }
 
   document.addEventListener('DOMContentLoaded', updateSiteCostTotal);
+
+  function toggleDayRateWarning() {
+    const warn = document.getElementById('dayRateWarning');
+    const cb = document.getElementById('chargeDayRateCheck');
+    if (warn && cb) warn.style.display = cb.checked ? '' : 'none';
+  }
+  document.addEventListener('DOMContentLoaded', toggleDayRateWarning);
 
   // ── Other Activity lines ────────────────────────────────────────────────
   function addOtherActivityLine() {

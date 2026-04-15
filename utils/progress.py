@@ -551,8 +551,34 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
             var_machine_lines = []
             var_cost = 0
 
+        # Accommodation costs (if ticked and project has a rate)
+        accom_lines = []
+        if getattr(entry, 'include_accommodation', False) and entry.project and entry.project.accommodation_cost_per_person:
+            headcount = len(entry.employees) if entry.employees else 0
+            if headcount > 0:
+                accom_rate = entry.project.accommodation_cost_per_person
+                accom_cost = round(accom_rate * headcount, 2)
+                accom_lines.append({
+                    'name': f"Accommodation ({headcount} {'person' if headcount == 1 else 'people'} × ${accom_rate:.2f})",
+                    'rate': accom_rate, 'count': headcount,
+                    'hours': 1, 'cost': accom_cost,
+                })
+
+        # Day rate override — replaces all other delay costs
         is_billable = entry.delay_billable if entry.delay_billable is not None else True
-        delay_cost = sum(r['cost'] for r in emp_lines) + sum(r['cost'] for r in machine_lines)
+        if getattr(entry, 'charge_day_rate', False) and entry.project and entry.project.day_rate:
+            day_rate_val = entry.project.day_rate
+            emp_lines = []
+            machine_lines = []
+            accom_lines = [{
+                'name': f"Day Rate (flat)",
+                'rate': day_rate_val, 'count': 1,
+                'hours': 1, 'cost': round(day_rate_val, 2),
+            }]
+
+        delay_cost = (sum(r['cost'] for r in emp_lines)
+                      + sum(r['cost'] for r in machine_lines)
+                      + sum(r['cost'] for r in accom_lines))
         entry_cost = delay_cost + var_cost
 
         if is_billable:
@@ -568,6 +594,7 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
             'entry': entry,
             'emp_lines': emp_lines,
             'machine_lines': machine_lines,
+            'accom_lines': accom_lines,
             'var_lines': var_lines,
             'var_emp_lines': var_emp_lines,
             'var_machine_lines': var_machine_lines,

@@ -343,6 +343,11 @@ with app.app_context():
         "ALTER TABLE flight_booking ADD COLUMN hire_car_booked_for VARCHAR(200)",
         "ALTER TABLE flight_booking ADD COLUMN ground_notes VARCHAR(500)",
         "ALTER TABLE project_assignment ADD COLUMN needs_accommodation BOOLEAN",
+        # ── 2026-04-15: Project delay cost settings + entry overrides ──
+        "ALTER TABLE project ADD COLUMN accommodation_cost_per_person FLOAT",
+        "ALTER TABLE project ADD COLUMN day_rate FLOAT",
+        "ALTER TABLE daily_entry ADD COLUMN include_accommodation BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE daily_entry ADD COLUMN charge_day_rate BOOLEAN DEFAULT FALSE",
     ]:
         try:
             db.session.execute(db.text(stmt))

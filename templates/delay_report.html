@@ -168,7 +168,7 @@
       {% endif %}
 
       <div class="card-body py-2">
-        {% if row.emp_lines or row.machine_lines %}
+        {% if row.emp_lines or row.machine_lines or row.accom_lines %}
         <table class="table table-sm table-borderless mb-0">
           <thead class="table-light">
             <tr class="small text-muted">
@@ -204,6 +204,19 @@
               </td>
               <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
               <td class="text-end text-muted">{{ line.hours }}</td>
+              <td class="text-end fw-semibold">${{ '%.2f'|format(line.cost) }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+            {% if row.accom_lines %}
+            <tr><td colspan="4" class="fw-semibold small pb-0 pt-2 text-muted">
+              <i class="bi bi-house me-1"></i>Accommodation / Day Rate
+            </td></tr>
+            {% for line in row.accom_lines %}
+            <tr>
+              <td class="ps-3">{{ line.name }}</td>
+              <td class="text-end text-muted">${{ '%.2f'|format(line.rate) }}</td>
+              <td class="text-end text-muted">{{ line.count if line.count else line.hours }}</td>
               <td class="text-end fw-semibold">${{ '%.2f'|format(line.cost) }}</td>
             </tr>
             {% endfor %}
@@ -249,7 +262,7 @@
       </div>
       {% endif %}
       <div class="card-body py-2">
-        {% if row.emp_lines or row.machine_lines %}
+        {% if row.emp_lines or row.machine_lines or row.accom_lines %}
         <table class="table table-sm table-borderless mb-0">
           <thead class="table-light">
             <tr class="small text-muted">

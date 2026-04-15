@@ -91,7 +91,9 @@
                             '{{ (project.site_contact or '')|replace("'", "\\'") }}',
                             '{{ project.city or "" }}',
                             '{{ project.nearest_airport or "" }}',
-                            '{{ project.mobilisation_date.strftime("%Y-%m-%d") if project.mobilisation_date else "" }}')"
+                            '{{ project.mobilisation_date.strftime("%Y-%m-%d") if project.mobilisation_date else "" }}',
+                            '{{ project.accommodation_cost_per_person or "" }}',
+                            '{{ project.day_rate or "" }}')"
                           title="Edit">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -231,6 +233,21 @@
             <div class="form-text">Name and/or phone number for the on-site contact.</div>
           </div>
 
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Accommodation Cost <span class="text-muted fw-normal">($/person/day)</span></label>
+              <input type="number" name="accommodation_cost_per_person" id="projectAccomCost" class="form-control"
+                     step="0.01" min="0" placeholder="e.g. 150.00">
+              <div class="form-text">Per-person daily accommodation cost. Used when "Include Accommodation" is ticked on a delay entry.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Day Rate <span class="text-muted fw-normal">($/day flat)</span></label>
+              <input type="number" name="day_rate" id="projectDayRate" class="form-control"
+                     step="0.01" min="0" placeholder="e.g. 15000.00">
+              <div class="form-text">Flat daily charge that overrides all other delay costs (people, equipment, accommodation) when selected.</div>
+            </div>
+          </div>
+
           <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary" id="submitBtn">Add Project</button>
             <button type="button" class="btn btn-outline-secondary d-none" id="cancelEditBtn"
@@ -246,7 +263,7 @@
 
 {% block scripts %}
 <script>
-  function openEditProject(id, name, description, startDate, plannedCrew, hoursPerDay, quotedDays, siteAddress, siteContact, city, airport, mobDate) {
+  function openEditProject(id, name, description, startDate, plannedCrew, hoursPerDay, quotedDays, siteAddress, siteContact, city, airport, mobDate, accomCost, dayRate) {
     document.getElementById('formTitle').textContent = 'Edit Project';
     document.getElementById('formAction').value = 'edit';
     document.getElementById('editId').value = id;
@@ -261,6 +278,8 @@
     document.getElementById('projectSiteContact').value = siteContact || '';
     document.getElementById('projectCity').value = city || '';
     document.getElementById('projectAirport').value = airport || '';
+    document.getElementById('projectAccomCost').value = accomCost || '';
+    document.getElementById('projectDayRate').value = dayRate || '';
     document.getElementById('submitBtn').textContent = 'Save Changes';
     document.getElementById('cancelEditBtn').classList.remove('d-none');
     document.getElementById('projectName').focus();

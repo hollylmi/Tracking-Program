@@ -72,6 +72,8 @@ class Project(db.Model):
     site_contact = db.Column(db.String(200))      # On-site contact name / phone
     site_manager_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     mobilisation_date = db.Column(db.Date, nullable=True)  # When set, project becomes operational on this date
+    accommodation_cost_per_person = db.Column(db.Float, nullable=True)  # $/person/day for delay accom costs
+    day_rate = db.Column(db.Float, nullable=True)                       # flat $/day override for delay billing
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property
@@ -221,6 +223,8 @@ class DailyEntry(db.Model):
     own_delay_hours = db.Column(db.Float, default=0)       # internal delays (hidden from client view)
     own_delay_description = db.Column(db.Text)             # internal delay notes
     machines_stood_down = db.Column(db.Boolean, default=False)  # hired machines stood down
+    include_accommodation = db.Column(db.Boolean, default=False)  # charge accom cost on delay
+    charge_day_rate = db.Column(db.Boolean, default=False)        # override all costs with flat day rate
     weather = db.Column(db.String(200))             # weather conditions for the day
     notes = db.Column(db.Text)
     other_work_description = db.Column(db.Text)

@@ -100,6 +100,8 @@ def new_entry():
         delay_hours = float(request.form.get('delay_hours') or 0)
         delay_billable = request.form.get('delay_billable', 'true') == 'true'
         machines_stood_down = bool(request.form.get('machines_stood_down'))
+        include_accommodation = bool(request.form.get('include_accommodation'))
+        charge_day_rate = bool(request.form.get('charge_day_rate'))
 
         # Parse production lines
         line_activities = request.form.getlist('line_activity[]')
@@ -146,6 +148,8 @@ def new_entry():
             delay_reason=(request.form.get('delay_reason', '').strip() or None) if delay_hours > 0 else None,
             delay_description=request.form.get('delay_description', '').strip() or None,
             machines_stood_down=machines_stood_down,
+            include_accommodation=include_accommodation,
+            charge_day_rate=charge_day_rate,
             weather=request.form.get('weather', '').strip() or None,
             notes=request.form.get('notes', '').strip() or None,
             other_work_description=request.form.get('other_work_description', '').strip() or None,
@@ -353,6 +357,8 @@ def edit_entry(entry_id):
         entry.install_sqm = total_sqm
         entry.install_hours = total_hours
         entry.machines_stood_down = bool(request.form.get('machines_stood_down'))
+        entry.include_accommodation = bool(request.form.get('include_accommodation'))
+        entry.charge_day_rate = bool(request.form.get('charge_day_rate'))
 
         # Delay lines
         entry.delay_lines.clear()
