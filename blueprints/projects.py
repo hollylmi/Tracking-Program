@@ -808,9 +808,11 @@ def project_report_pdf(project_id):
 @require_role('admin', 'supervisor')
 def project_delay_report_pdf(project_id):
     from utils.reports import generate_client_delay_report_pdf
+    from utils.gantt import compute_gantt_data
     project = Project.query.get_or_404(project_id)
     settings = load_settings()
-    pdf_bytes = generate_client_delay_report_pdf(project, settings)
+    gantt_data = compute_gantt_data(project_id, mode='client')
+    pdf_bytes = generate_client_delay_report_pdf(project, settings, gantt_data=gantt_data)
     safe_name = project.name.replace(' ', '_').replace('/', '-')
     filename = f"Delay_Variation_Report_{safe_name}_{date.today().strftime('%Y%m%d')}.pdf"
     return Response(pdf_bytes, mimetype='application/pdf',
