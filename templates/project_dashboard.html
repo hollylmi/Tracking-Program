@@ -6,37 +6,40 @@
 /* ── Gantt chart ────────────────────────────────────────────────────── */
 .gantt-wrap         { overflow-x: auto; }
 .gantt-container    { min-width: 800px; }
-.gantt-header-row   { position: relative; height: 44px; border-bottom: 2px solid #dee2e6; margin-bottom: 4px; }
+.gantt-header-row   { position: relative; height: 44px; border-bottom: 2px solid #e2e6ea; margin-bottom: 4px; }
 .gantt-month-label  { position: absolute; top: 2px; font-size: 0.7rem; font-weight: 600;
-                      color: #495057; white-space: nowrap; transform: translateX(-50%); }
+                      color: #3a4550; white-space: nowrap; transform: translateX(-50%); }
 .gantt-week-tick    { position: absolute; bottom: 0; width: 1px; height: 10px;
-                      background: #ced4da; transform: translateX(-50%); }
-.gantt-week-label   { position: absolute; bottom: 12px; font-size: 0.6rem; color: #adb5bd;
+                      background: #d1d5db; transform: translateX(-50%); }
+.gantt-week-label   { position: absolute; bottom: 12px; font-size: 0.6rem; color: #9ca3af;
                       transform: translateX(-50%); white-space: nowrap; }
-/* Shade stripes */
+/* Shade stripes — muted, professional palette */
 .gantt-stripe       { position: absolute; top: 0; height: 100%; pointer-events: none; z-index: 0; }
-.gantt-stripe-sun   { background: rgba(255,105,180,0.18); }
-.gantt-stripe-nwd   { background: rgba(100,180,255,0.28); }
-.gantt-stripe-wwd   { background: rgba(0,180,160,0.30); }   /* weather delay = teal green */
-.gantt-stripe-cld   { background: rgba(255,140,0,0.30); }  /* client delay = orange */
+.gantt-stripe-sun   { background: rgba(148,163,184,0.12); }          /* light grey for weekends */
+.gantt-stripe-nwd   { background: rgba(148,163,184,0.18); }          /* slightly darker grey for non-work */
+.gantt-stripe-wwd   { background: rgba(59,130,246,0.12); }           /* soft blue for weather */
+.gantt-stripe-cld   { background: rgba(245,158,11,0.15); }           /* soft amber for client delay */
 /* Reference lines */
 .gantt-today-line   { position: absolute; top: 0; height: 100%; width: 2px;
-                      background: #dc3545; z-index: 10; pointer-events: none; }
+                      background: #ef4444; z-index: 10; pointer-events: none; }
 .gantt-target-line  { position: absolute; top: 0; height: 100%; width: 2px;
-                      background: #0d6efd; z-index: 9; pointer-events: none; }
-/* Individual day bars */
-.gantt-day          { position: absolute; border-radius: 2px; pointer-events: none; z-index: 5; }
-.gantt-planned      { background: deeppink; opacity: 0.35; top: 2px; height: 22px; }
-.gantt-actual       { background: #00c060; border: 1px solid rgba(0,0,0,0.18);
+                      background: #3b82f6; z-index: 9; pointer-events: none; opacity: 0.7; }
+/* Individual day bars — clean, solid colours */
+.gantt-day          { position: absolute; border-radius: 3px; pointer-events: none; z-index: 5; }
+.gantt-planned      { background: #93c5fd; opacity: 0.6; top: 2px; height: 22px; }
+.gantt-actual       { background: #22c55e; border: 1px solid rgba(0,0,0,0.1);
                       opacity: 0.9; top: 26px; height: 22px; }
-.gantt-forecast     { background: gold; border: 1px dashed rgba(0,0,0,0.25);
-                      opacity: 0.85; top: 26px; height: 22px; }
+.gantt-forecast     { background: #f59e0b; border: 1px dashed rgba(0,0,0,0.15);
+                      opacity: 0.8; top: 26px; height: 22px; }
 /* Variance column */
 .gantt-var          { min-width: 72px; text-align: left; padding-left: 8px;
                       font-size: 0.72rem; font-weight: 700; line-height: 1.2; align-self: center; }
-.gantt-var-late     { color: #dc3545; }
-.gantt-var-early    { color: #198754; }
-.gantt-var-ontime   { color: #6c757d; }
+.gantt-var-late     { color: #ef4444; }
+.gantt-var-early    { color: #16a34a; }
+.gantt-var-ontime   { color: #6b7280; }
+/* Toggle buttons */
+.gantt-mode-btn     { font-size: 0.78rem; padding: 0.2rem 0.6rem; border-radius: 4px; }
+.gantt-mode-btn.active { font-weight: 700; }
 </style>
 {% endblock %}
 
@@ -430,24 +433,33 @@
     <!-- ── Gantt Chart ────────────────────────────────────────────── -->
     {% if gantt_data %}
     <div class="card border-0 shadow-sm mb-4">
-      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <h5 class="mb-0 fw-semibold"><i class="bi bi-bar-chart-steps me-2 text-primary"></i>Schedule Gantt</h5>
+      <div class="card-header bg-white py-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+          <h5 class="mb-0 fw-semibold"><i class="bi bi-bar-chart-steps me-2 text-primary"></i>Schedule Gantt</h5>
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm gantt-mode-btn btn-primary active" id="btnGanttInternal"
+                    onclick="switchGanttMode('internal')">Internal</button>
+            <button type="button" class="btn btn-sm gantt-mode-btn btn-outline-primary" id="btnGanttClient"
+                    onclick="switchGanttMode('client')">Client</button>
+          </div>
+        </div>
         <div class="d-flex flex-wrap gap-3 small text-muted align-items-center">
           <label style="cursor:pointer;" title="Toggle planned bars">
             <input type="checkbox" id="togglePlanned" checked onchange="togglePlannedBars(this.checked)" class="form-check-input me-1" style="vertical-align:middle;">
-            <span style="display:inline-block;width:14px;height:10px;background:deeppink;opacity:0.4;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Planned
+            <span style="display:inline-block;width:14px;height:10px;background:#93c5fd;opacity:0.7;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Planned
           </label>
-          <span><span style="display:inline-block;width:14px;height:10px;background:#00c060;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Actual</span>
-          <span><span style="display:inline-block;width:14px;height:10px;background:gold;border:1px dashed #aaa;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Forecast</span>
-          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,105,180,0.4);vertical-align:middle;margin-right:3px;"></span>Weekend</span>
-          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(100,180,255,0.45);vertical-align:middle;margin-right:3px;"></span>Non-work</span>
-          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(0,180,160,0.45);vertical-align:middle;margin-right:3px;"></span>Weather</span>
-          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(255,140,0,0.4);vertical-align:middle;margin-right:3px;"></span>Delay</span>
-          <span><span style="display:inline-block;width:2px;height:12px;background:#dc3545;vertical-align:middle;margin-right:3px;"></span>Today</span>
-          <span><span style="display:inline-block;width:2px;height:12px;background:#0d6efd;vertical-align:middle;margin-right:3px;"></span>Target</span>
+          <span><span style="display:inline-block;width:14px;height:10px;background:#22c55e;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Actual</span>
+          <span><span style="display:inline-block;width:14px;height:10px;background:#f59e0b;border:1px dashed #aaa;border-radius:2px;vertical-align:middle;margin-right:3px;"></span>Forecast</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(148,163,184,0.25);vertical-align:middle;margin-right:3px;"></span>Non-work</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(59,130,246,0.2);vertical-align:middle;margin-right:3px;"></span>Weather</span>
+          <span><span style="display:inline-block;width:12px;height:10px;background:rgba(245,158,11,0.25);vertical-align:middle;margin-right:3px;"></span>Delay</span>
+          <span><span style="display:inline-block;width:2px;height:12px;background:#ef4444;vertical-align:middle;margin-right:3px;"></span>Today</span>
+          <span><span style="display:inline-block;width:2px;height:12px;background:#3b82f6;vertical-align:middle;margin-right:3px;"></span>Target</span>
         </div>
       </div>
       <div class="card-body pb-2">
+        <!-- INTERNAL GANTT -->
+        <div id="ganttInternal">
         <div class="gantt-wrap">
           <div class="gantt-container">
 
@@ -534,11 +546,11 @@
               <div style="flex:1;position:relative;height:18px;">
                 {% if gantt_data.today_pct is not none and gantt_data.today_pct >= 0 and gantt_data.today_pct <= 100 %}
                 <div style="position:absolute;left:{{ gantt_data.today_pct }}%;transform:translateX(-50%);
-                            font-size:0.6rem;font-weight:700;color:#dc3545;white-space:nowrap;">Today</div>
+                            font-size:0.6rem;font-weight:700;color:#ef4444;white-space:nowrap;">Today</div>
                 {% endif %}
                 {% if gantt_data.target_finish_pct is not none %}
                 <div style="position:absolute;left:{{ gantt_data.target_finish_pct }}%;transform:translateX(-50%);
-                            font-size:0.6rem;font-weight:700;color:#0d6efd;white-space:nowrap;">Target</div>
+                            font-size:0.6rem;font-weight:700;color:#3b82f6;white-space:nowrap;">Target</div>
                 {% endif %}
               </div>
               <div style="min-width:72px;"></div>
@@ -550,7 +562,8 @@
         <!-- Summary box -->
         <div class="mt-3 p-3 rounded small" style="background:#f8f9fa;font-family:monospace;border:1px solid #dee2e6;">
           <div><strong>TARGET FINISH: </strong>{{ gantt_data.target_finish or '—' }}</div>
-          <div><strong>EST. FINISH:   </strong>{{ gantt_data.est_finish or '—' }}</div>
+          <div><strong>EST. FINISH:   </strong>{{ gantt_data.est_finish or '—' }}
+            <span class="text-muted">(based on actual productivity)</span></div>
           {% if gantt_data.variance_days is not none %}
           <div class="{% if gantt_data.variance_days > 0 %}text-danger{% elif gantt_data.variance_days < 0 %}text-success{% else %}text-muted{% endif %} fw-bold">
             VARIANCE:      {% if gantt_data.variance_days > 0 %}+{% endif %}{{ gantt_data.variance_days }} DAYS
@@ -558,6 +571,94 @@
           </div>
           {% endif %}
         </div>
+        </div>{# end ganttInternal #}
+
+        <!-- CLIENT GANTT -->
+        {% if gantt_data_client %}
+        <div id="ganttClient" style="display:none;">
+        <div class="gantt-wrap">
+          <div class="gantt-container">
+            <div style="display:flex;">
+              <div style="min-width:160px;max-width:160px;"></div>
+              <div style="flex:1;position:relative;" class="gantt-header-row">
+                {% for m in gantt_data_client.month_markers %}
+                <div class="gantt-month-label" style="left:{{ m.left_pct }}%;">{{ m.label }}</div>
+                {% endfor %}
+                {% for w in gantt_data_client.week_markers %}
+                <div class="gantt-week-tick" style="left:{{ w.left_pct }}%;"></div>
+                <div class="gantt-week-label" style="left:{{ w.left_pct }}%;">{{ w.date }}</div>
+                {% endfor %}
+              </div>
+              <div style="min-width:72px;"></div>
+            </div>
+            {% for row in gantt_data_client.rows %}
+            <div style="display:flex;margin-bottom:4px;">
+              <div style="min-width:160px;max-width:160px;padding-right:8px;display:flex;align-items:center;">
+                <div style="font-size:0.74rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                     title="{{ row.label }}">{{ row.label }}</div>
+              </div>
+              <div style="flex:1;position:relative;height:52px;overflow:hidden;">
+                {% for s in gantt_data_client.shade_stripes %}
+                <div class="gantt-stripe gantt-stripe-{{ s.type }}"
+                     style="left:{{ s.left }}%;width:{{ s.w }}%;"></div>
+                {% endfor %}
+                {% if gantt_data_client.today_pct is not none and gantt_data_client.today_pct >= 0 and gantt_data_client.today_pct <= 100 %}
+                <div class="gantt-today-line" style="left:{{ gantt_data_client.today_pct }}%;"></div>
+                {% endif %}
+                {% if gantt_data_client.target_finish_pct is not none %}
+                <div class="gantt-target-line" style="left:{{ gantt_data_client.target_finish_pct }}%;"></div>
+                {% endif %}
+                {% for lft in row.planned_days %}
+                <div class="gantt-day gantt-planned"
+                     style="left:{{ lft }}%;width:{{ gantt_data_client.day_width_pct }}%;"></div>
+                {% endfor %}
+                {% for lft in row.actual_days %}
+                <div class="gantt-day gantt-actual"
+                     style="left:{{ lft }}%;width:{{ gantt_data_client.day_width_pct }}%;"></div>
+                {% endfor %}
+                {% for lft in row.forecast_days %}
+                <div class="gantt-day gantt-forecast"
+                     style="left:{{ lft }}%;width:{{ gantt_data_client.day_width_pct }}%;"></div>
+                {% endfor %}
+              </div>
+              <div class="gantt-var {% if row.variance_days is not none %}{% if row.variance_days > 0 %}gantt-var-late{% elif row.variance_days < 0 %}gantt-var-early{% else %}gantt-var-ontime{% endif %}{% endif %}">
+                {% if row.variance_days is not none %}
+                  {% if row.variance_days > 0 %}+{{ row.variance_days }}d
+                  {% elif row.variance_days < 0 %}{{ row.variance_days }}d
+                  {% else %}On time{% endif %}
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+            <div style="display:flex;margin-top:4px;">
+              <div style="min-width:160px;max-width:160px;"></div>
+              <div style="flex:1;position:relative;height:18px;">
+                {% if gantt_data_client.today_pct is not none and gantt_data_client.today_pct >= 0 and gantt_data_client.today_pct <= 100 %}
+                <div style="position:absolute;left:{{ gantt_data_client.today_pct }}%;transform:translateX(-50%);
+                            font-size:0.6rem;font-weight:700;color:#ef4444;white-space:nowrap;">Today</div>
+                {% endif %}
+                {% if gantt_data_client.target_finish_pct is not none %}
+                <div style="position:absolute;left:{{ gantt_data_client.target_finish_pct }}%;transform:translateX(-50%);
+                            font-size:0.6rem;font-weight:700;color:#3b82f6;white-space:nowrap;">Target</div>
+                {% endif %}
+              </div>
+              <div style="min-width:72px;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 p-3 rounded small" style="background:#f8f9fa;font-family:monospace;border:1px solid #dee2e6;">
+          <div><strong>TARGET FINISH: </strong>{{ gantt_data_client.target_finish or '—' }}</div>
+          <div><strong>EST. FINISH:   </strong>{{ gantt_data_client.est_finish or '—' }}
+            <span class="text-muted">(based on planned rates)</span></div>
+          {% if gantt_data_client.variance_days is not none %}
+          <div class="{% if gantt_data_client.variance_days > 0 %}text-danger{% elif gantt_data_client.variance_days < 0 %}text-success{% else %}text-muted{% endif %} fw-bold">
+            VARIANCE:      {% if gantt_data_client.variance_days > 0 %}+{% endif %}{{ gantt_data_client.variance_days }} DAYS
+            {% if gantt_data_client.variance_days > 0 %} (BEHIND){% elif gantt_data_client.variance_days < 0 %} (AHEAD){% else %} (ON SCHEDULE){% endif %}
+          </div>
+          {% endif %}
+        </div>
+        </div>{# end ganttClient #}
+        {% endif %}
 
       </div>
     </div>
@@ -1746,6 +1847,25 @@ function togglePlannedBars(show) {
   document.querySelectorAll('.gantt-planned').forEach(el => {
     el.style.display = show ? '' : 'none';
   });
+}
+
+// Switch between Internal and Client Gantt
+function switchGanttMode(mode) {
+  const internal = document.getElementById('ganttInternal');
+  const client = document.getElementById('ganttClient');
+  const btnInt = document.getElementById('btnGanttInternal');
+  const btnCli = document.getElementById('btnGanttClient');
+  if (mode === 'client' && client) {
+    internal.style.display = 'none';
+    client.style.display = '';
+    btnInt.className = 'btn btn-sm gantt-mode-btn btn-outline-primary';
+    btnCli.className = 'btn btn-sm gantt-mode-btn btn-primary active';
+  } else {
+    internal.style.display = '';
+    if (client) client.style.display = 'none';
+    btnInt.className = 'btn btn-sm gantt-mode-btn btn-primary active';
+    btnCli.className = 'btn btn-sm gantt-mode-btn btn-outline-primary';
+  }
 }
 
 // Restore active tab from URL hash

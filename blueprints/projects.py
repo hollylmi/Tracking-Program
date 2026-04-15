@@ -194,7 +194,8 @@ def api_planned_options():
 def project_dashboard(project_id):
     project = Project.query.get_or_404(project_id)
     progress = compute_project_progress(project_id)
-    gantt_data = compute_gantt_data(project_id)
+    gantt_data = compute_gantt_data(project_id, mode='internal')
+    gantt_data_client = compute_gantt_data(project_id, mode='client')
     delay_summary = compute_delay_summary(project_id)
     productivity = compute_material_productivity(project_id)
     non_work_dates = ProjectNonWorkDate.query.filter_by(project_id=project_id).order_by(ProjectNonWorkDate.date).all()
@@ -389,6 +390,7 @@ def project_dashboard(project_id):
     return render_template('project_dashboard.html',
                            project=project, progress=progress,
                            gantt_data=gantt_data,
+                           gantt_data_client=gantt_data_client,
                            delay_summary=delay_summary,
                            productivity=productivity,
                            non_work_dates=non_work_dates,
@@ -772,7 +774,7 @@ def project_report_pdf(project_id):
 
     progress = compute_project_progress(project_id)
     delay_summary = compute_delay_summary(project_id)
-    gantt_data = compute_gantt_data(project_id)
+    gantt_data = compute_gantt_data(project_id, mode='client')
     settings = load_settings()
 
     progress_dict = None

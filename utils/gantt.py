@@ -5,8 +5,11 @@ from models import PlannedData, DailyEntry, ProjectWorkedSunday, Project, Public
 from utils.helpers import _natural_key
 
 
-def compute_gantt_data(project_id):
+def compute_gantt_data(project_id, mode='internal'):
     """Build day-by-day Gantt data matching the matplotlib approach.
+
+    mode='internal': forecast uses actual productivity rates (m²/person-hr)
+    mode='client':   forecast uses planned rates from PlannedData (planned sqm/day)
 
     Each planned/actual/forecast entry produces individual 1-day-wide bars
     (not spans), shading is applied per-day for Sundays and non-work dates,
@@ -203,16 +206,21 @@ def compute_gantt_data(project_id):
         start_f = next_work_day(candidate)
 
         if remaining > planned_sqm * 0.005 and daily_cap_hrs > 0:
-            actual_p_hrs = act['p_hrs'] if act else 0.0
-            actual_sqm_val = act['sqm'] if act else 0.0
-            if actual_p_hrs > 0 and actual_sqm_val > 0:
-                # Use m²/person-hr rate × crew × hours_per_day to get daily forecast
-                sqm_per_person_hr = actual_sqm_val / actual_p_hrs
-                effective_daily_sqm = sqm_per_person_hr * curr_crew * hours_per_day
-                days_req = max(1, math.ceil(remaining / effective_daily_sqm - 0.001))
+            if mode == 'client':
+                # Client mode: use planned rate (planned sqm / planned days)
+                planned_day_count = len(info['planned_dates']) if info['planned_dates'] else 1
+                planned_daily_sqm = planned_sqm / planned_day_count if planned_day_count > 0 else planned_sqm
+                days_req = max(1, math.ceil(remaining / planned_daily_sqm - 0.001))
             else:
-                # No actuals yet — use planned number of days
-                days_req = max(1, len(info['planned_dates']))
+                # Internal mode: use actual productivity rate
+                actual_p_hrs = act['p_hrs'] if act else 0.0
+                actual_sqm_val = act['sqm'] if act else 0.0
+                if actual_p_hrs > 0 and actual_sqm_val > 0:
+                    sqm_per_person_hr = actual_sqm_val / actual_p_hrs
+                    effective_daily_sqm = sqm_per_person_hr * curr_crew * hours_per_day
+                    days_req = max(1, math.ceil(remaining / effective_daily_sqm - 0.001))
+                else:
+                    days_req = max(1, len(info['planned_dates']))
             forecast_dates = []
             temp = start_f
             for _ in range(days_req):
