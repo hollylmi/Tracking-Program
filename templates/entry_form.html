@@ -718,7 +718,8 @@
         <div class="card-body p-0">
           <div class="px-3 py-2 border-bottom bg-light">
             <input type="text" class="form-control form-control-sm" id="rateItemSearch"
-                   placeholder="Search items..." oninput="filterRateItems()">
+                   placeholder="Search items..." oninput="filterRateItems()"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();}">
           </div>
           <div class="checkbox-scroll-list" id="rateItemList">
             {% set cost_map = {} %}
@@ -1468,9 +1469,18 @@
 
   // ── Site Cost (rate card checkboxes) ──────────────────────────────────
   function filterRateItems() {
-    const q = document.getElementById('rateItemSearch').value.toLowerCase();
+    const el = document.getElementById('rateItemSearch');
+    if (!el) return;
+    const q = el.value.trim().toLowerCase();
     document.querySelectorAll('.rate-item-row').forEach(row => {
-      row.style.display = row.dataset.name.includes(q) ? '' : 'none';
+      if (!q) {
+        row.style.display = '';
+      } else {
+        // Search all words in the item name
+        const name = (row.dataset.name || '').toLowerCase();
+        const match = q.split(/\s+/).every(word => name.includes(word));
+        row.style.display = match ? '' : 'none';
+      }
     });
   }
 
