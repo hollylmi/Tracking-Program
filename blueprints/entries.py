@@ -10,10 +10,11 @@ from werkzeug.utils import secure_filename
 from datetime import date, datetime
 
 from models import (db, Project, Employee, Machine, MachineGroup, DailyEntry, EntryProductionLine,
-                    EntryDelayLine, EntryVariationLine, EntryOtherActivityLine, HiredMachine, StandDown,
-                    EntryPhoto, ProjectMachine, ProjectAssignment)
+                    EntryDelayLine, EntryVariationLine, EntryOtherActivityLine, EntrySiteCostLine,
+                    HiredMachine, StandDown, EntryPhoto, ProjectMachine, ProjectAssignment)
 import storage
 from utils.files import allowed_photo
+from utils.settings import load_settings
 
 entries_bp = Blueprint('entries', __name__)
 
@@ -85,7 +86,7 @@ def new_entry():
             flash('Project and date are required.', 'danger')
             return render_template('entry_form.html', projects=projects, employees=employees,
                                    machines=machines, hired_machines=hired_machines,
-                                   machine_groups=machine_groups,
+                                   machine_groups=machine_groups, site_rate_items=[],
                                    standdown_machine_ids=[], today=date.today())
         try:
             entry_date = datetime.strptime(entry_date_str, '%Y-%m-%d').date()
@@ -93,7 +94,7 @@ def new_entry():
             flash('Invalid date format.', 'danger')
             return render_template('entry_form.html', projects=projects, employees=employees,
                                    machines=machines, hired_machines=hired_machines,
-                                   machine_groups=machine_groups,
+                                   machine_groups=machine_groups, site_rate_items=[],
                                    standdown_machine_ids=[], today=date.today())
 
         delay_hours = float(request.form.get('delay_hours') or 0)
@@ -179,6 +180,25 @@ def new_entry():
                 db.session.add(EntryOtherActivityLine(
                     entry_id=entry.id, description=odesc,
                     hours=ohrs, employee_ids_json=oemp))
+
+        # Site cost lines (admin only)
+        if current_user.role == 'admin':
+            cost_names = request.form.getlist('cost_item_name[]')
+            cost_customs = request.form.getlist('cost_item_custom[]')
+            cost_rates = request.form.getlist('cost_rate[]')
+            cost_units = request.form.getlist('cost_unit[]')
+            cost_qtys = request.form.getlist('cost_qty[]')
+            for i in range(len(cost_names)):
+                name = cost_names[i].strip() if i < len(cost_names) else ''
+                if name == '__custom__':
+                    name = (cost_customs[i].strip() if i < len(cost_customs) else '') or ''
+                rate = float(cost_rates[i] or 0) if i < len(cost_rates) else 0
+                unit = (cost_units[i].strip() if i < len(cost_units) else 'day') or 'day'
+                qty = float(cost_qtys[i] or 0) if i < len(cost_qtys) else 0
+                if name and rate > 0 and qty > 0:
+                    db.session.add(EntrySiteCostLine(
+                        entry_id=entry.id, item_name=name, rate=rate,
+                        quantity=qty, unit=unit, line_total=rate * qty))
 
         # Delay lines
         delay_reasons = request.form.getlist('delay_reason[]')
@@ -269,10 +289,12 @@ def new_entry():
         machine_project_map.setdefault(pm.machine_id, [])
         machine_project_map[pm.machine_id].append(pm.project_id)
 
+    site_rate_items = load_settings().get('site_rate_items', []) if current_user.role == 'admin' else []
     return render_template('entry_form.html', projects=projects, employees=employees,
                            machines=machines, hired_machines=hired_machines,
                            machine_groups=machine_groups,
                            machine_project_map=machine_project_map,
+                           site_rate_items=site_rate_items,
                            standdown_machine_ids=[], today=date.today())
 
 
@@ -401,6 +423,27 @@ def edit_entry(entry_id):
                     entry_id=entry.id, description=odesc,
                     hours=ohrs, employee_ids_json=oemp))
 
+        # Site cost lines (admin only)
+        if current_user.role == 'admin':
+            entry.site_cost_lines.clear()
+            db.session.flush()
+            cost_names = request.form.getlist('cost_item_name[]')
+            cost_customs = request.form.getlist('cost_item_custom[]')
+            cost_rates = request.form.getlist('cost_rate[]')
+            cost_units = request.form.getlist('cost_unit[]')
+            cost_qtys = request.form.getlist('cost_qty[]')
+            for i in range(len(cost_names)):
+                name = cost_names[i].strip() if i < len(cost_names) else ''
+                if name == '__custom__':
+                    name = (cost_customs[i].strip() if i < len(cost_customs) else '') or ''
+                rate = float(cost_rates[i] or 0) if i < len(cost_rates) else 0
+                unit = (cost_units[i].strip() if i < len(cost_units) else 'day') or 'day'
+                qty = float(cost_qtys[i] or 0) if i < len(cost_qtys) else 0
+                if name and rate > 0 and qty > 0:
+                    db.session.add(EntrySiteCostLine(
+                        entry_id=entry.id, item_name=name, rate=rate,
+                        quantity=qty, unit=unit, line_total=rate * qty))
+
         # Own delays
         entry.own_delay_hours = float(request.form.get('own_delay_hours') or 0)
         entry.own_delay_description = request.form.get('own_delay_description', '').strip() or None
@@ -464,11 +507,13 @@ def edit_entry(entry_id):
         machine_project_map.setdefault(pm.machine_id, [])
         machine_project_map[pm.machine_id].append(pm.project_id)
 
+    site_rate_items = load_settings().get('site_rate_items', []) if current_user.role == 'admin' else []
     return render_template('entry_form.html', entry=entry, projects=projects,
                            employees=employees, machines=machines,
                            hired_machines=hired_machines,
                            machine_groups=machine_groups,
                            machine_project_map=machine_project_map,
+                           site_rate_items=site_rate_items,
                            standdown_machine_ids=existing_sd_ids,
                            selected_employee_ids=[e.id for e in entry.employees],
                            selected_machine_ids=[m.id for m in entry.machines],

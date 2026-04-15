@@ -436,7 +436,63 @@
               </div>
             </div>
 
-            <!-- ═══ 5. PERSON-HOURS SUMMARY ═══ -->
+            <!-- ═══ 5. SITE COSTS (admin only) ═══ -->
+            {% if site_rate_items %}
+            <div class="col-12">
+              <div class="card border shadow-sm">
+                <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold small"><i class="bi bi-currency-dollar me-1 text-success"></i>Site Costs</span>
+                  <span class="badge bg-success-subtle text-success fw-bold" id="siteCostTotal">$0.00</span>
+                </div>
+                <div class="card-body p-2">
+                  <table class="table table-sm table-borderless mb-2 align-middle" style="font-size:.82rem;" id="siteCostTable">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Item</th>
+                        <th style="width:90px">Rate</th>
+                        <th style="width:60px">Unit</th>
+                        <th style="width:70px">Qty</th>
+                        <th style="width:90px" class="text-end">Total</th>
+                        <th style="width:36px"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% if entry and entry.site_cost_lines %}
+                        {% for cl in entry.site_cost_lines %}
+                        <tr class="site-cost-row">
+                          <td>
+                            <select name="cost_item_name[]" class="form-select form-select-sm" onchange="onCostItemSelect(this)">
+                              <option value="">— Select —</option>
+                              {% for ri in site_rate_items %}
+                              <option value="{{ ri.name }}" data-rate="{{ ri.rate }}" data-unit="{{ ri.unit }}"
+                                {{ 'selected' if ri.name == cl.item_name }}>{{ ri.name }}</option>
+                              {% endfor %}
+                              <option value="__custom__">Custom item...</option>
+                            </select>
+                            <input type="text" name="cost_item_custom[]" class="form-control form-control-sm mt-1"
+                                   placeholder="Custom item name"
+                                   value="{{ cl.item_name if cl.item_name not in site_rate_items|map(attribute='name')|list else '' }}"
+                                   style="{{ '' if cl.item_name not in site_rate_items|map(attribute='name')|list else 'display:none' }}">
+                          </td>
+                          <td><input type="number" name="cost_rate[]" class="form-control form-control-sm" step="0.01" min="0" value="{{ cl.rate }}" oninput="updateCostRow(this)"></td>
+                          <td><input type="text" name="cost_unit[]" class="form-control form-control-sm" value="{{ cl.unit or 'day' }}" readonly style="background:#f8f9fa;"></td>
+                          <td><input type="number" name="cost_qty[]" class="form-control form-control-sm" step="0.5" min="0" value="{{ cl.quantity }}" oninput="updateCostRow(this)"></td>
+                          <td class="text-end fw-semibold cost-line-total">${{ '%.2f'|format(cl.line_total or 0) }}</td>
+                          <td><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateSiteCostTotal()"><i class="bi bi-x-lg"></i></button></td>
+                        </tr>
+                        {% endfor %}
+                      {% endif %}
+                    </tbody>
+                  </table>
+                  <button type="button" class="btn btn-sm btn-outline-success py-0" onclick="addCostRow()">
+                    <i class="bi bi-plus me-1"></i>Add Item
+                  </button>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+
+            <!-- ═══ 6. PERSON-HOURS SUMMARY ═══ -->
             <div class="col-12" id="personHoursSummary">
               <div class="card border shadow-sm">
                 <div class="card-body py-2 px-3">
@@ -1394,6 +1450,77 @@
     });
     refreshAllCrewLists();
   }
+
+  // ── Site Cost lines ────────────���─────────────────────────────────────────
+  const RATE_ITEMS = {{ site_rate_items | default([], true) | tojson }};
+
+  function addCostRow() {
+    const tbody = document.querySelector('#siteCostTable tbody');
+    const tr = document.createElement('tr');
+    tr.className = 'site-cost-row';
+    let opts = '<option value="">— Select —</option>';
+    RATE_ITEMS.forEach(ri => {
+      opts += `<option value="${ri.name}" data-rate="${ri.rate}" data-unit="${ri.unit}">${ri.name}</option>`;
+    });
+    opts += '<option value="__custom__">Custom item...</option>';
+    tr.innerHTML = `
+      <td>
+        <select name="cost_item_name[]" class="form-select form-select-sm" onchange="onCostItemSelect(this)">${opts}</select>
+        <input type="text" name="cost_item_custom[]" class="form-control form-control-sm mt-1" placeholder="Custom item name" style="display:none">
+      </td>
+      <td><input type="number" name="cost_rate[]" class="form-control form-control-sm" step="0.01" min="0" placeholder="0.00" oninput="updateCostRow(this)"></td>
+      <td><input type="text" name="cost_unit[]" class="form-control form-control-sm" value="day" readonly style="background:#f8f9fa;"></td>
+      <td><input type="number" name="cost_qty[]" class="form-control form-control-sm" step="0.5" min="0" value="1" oninput="updateCostRow(this)"></td>
+      <td class="text-end fw-semibold cost-line-total">$0.00</td>
+      <td><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="this.closest('tr').remove(); updateSiteCostTotal()"><i class="bi bi-x-lg"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  function onCostItemSelect(sel) {
+    const row = sel.closest('tr');
+    const customInput = row.querySelector('input[name="cost_item_custom[]"]');
+    const rateInput = row.querySelector('input[name="cost_rate[]"]');
+    const unitInput = row.querySelector('input[name="cost_unit[]"]');
+    if (sel.value === '__custom__') {
+      customInput.style.display = '';
+      customInput.focus();
+      rateInput.value = '';
+      unitInput.value = 'day';
+      unitInput.readOnly = false;
+      unitInput.style.background = '';
+    } else if (sel.value) {
+      customInput.style.display = 'none';
+      customInput.value = '';
+      const opt = sel.selectedOptions[0];
+      rateInput.value = opt.dataset.rate || '';
+      unitInput.value = opt.dataset.unit || 'day';
+      unitInput.readOnly = true;
+      unitInput.style.background = '#f8f9fa';
+      updateCostRow(rateInput);
+    }
+  }
+
+  function updateCostRow(el) {
+    const row = el.closest('tr');
+    const rate = parseFloat(row.querySelector('input[name="cost_rate[]"]').value) || 0;
+    const qty = parseFloat(row.querySelector('input[name="cost_qty[]"]').value) || 0;
+    const total = rate * qty;
+    row.querySelector('.cost-line-total').textContent = '$' + total.toFixed(2);
+    updateSiteCostTotal();
+  }
+
+  function updateSiteCostTotal() {
+    let grand = 0;
+    document.querySelectorAll('.cost-line-total').forEach(el => {
+      grand += parseFloat(el.textContent.replace('$', '')) || 0;
+    });
+    const badge = document.getElementById('siteCostTotal');
+    if (badge) badge.textContent = '$' + grand.toFixed(2);
+  }
+
+  // Run on page load to set initial total
+  document.addEventListener('DOMContentLoaded', updateSiteCostTotal);
 
   // ── Other Activity lines ────────────────────────────────────────────────
   function addOtherActivityLine() {

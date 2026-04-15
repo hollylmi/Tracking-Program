@@ -252,6 +252,9 @@ class DailyEntry(db.Model):
     other_activity_lines = db.relationship('EntryOtherActivityLine', backref='entry',
                                             cascade='all, delete-orphan', lazy=True,
                                             order_by='EntryOtherActivityLine.id')
+    site_cost_lines = db.relationship('EntrySiteCostLine', backref='entry',
+                                      cascade='all, delete-orphan', lazy=True,
+                                      order_by='EntrySiteCostLine.id')
 
     @property
     def day_name(self):
@@ -433,6 +436,20 @@ class EntryOtherActivityLine(db.Model):
 
     def __repr__(self):
         return f'<EntryOtherActivityLine {self.description} {self.hours}h>'
+
+
+class EntrySiteCostLine(db.Model):
+    """Per-entry equipment/item cost line — admin selects items + qty from rate card."""
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
+    item_name = db.Column(db.String(200), nullable=False)
+    rate = db.Column(db.Float, nullable=False)         # $/unit at time of entry
+    quantity = db.Column(db.Float, default=1)
+    unit = db.Column(db.String(50), default='day')     # day, hr, ea, etc.
+    line_total = db.Column(db.Float, default=0)        # rate × quantity (denormalised)
+
+    def __repr__(self):
+        return f'<EntrySiteCostLine {self.item_name} {self.quantity}x${self.rate}>'
 
 
 class EntryPhoto(db.Model):
