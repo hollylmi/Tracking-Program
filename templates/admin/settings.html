@@ -138,41 +138,6 @@
       </div>
     </div>
 
-    <!-- Site Rate Card -->
-    <div class="card border-0 shadow-sm mb-4">
-      <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-        <h5 class="mb-0 fw-semibold"><i class="bi bi-currency-dollar me-2 text-success"></i>Site Rate Card</h5>
-        <button class="btn btn-sm btn-outline-success" onclick="addRateRow()"><i class="bi bi-plus-lg me-1"></i>Add Item</button>
-      </div>
-      <div class="card-body">
-        <p class="text-muted small mb-3">Equipment, labour, and other items with daily/hourly rates. These appear on the daily entry form for admins to select and calculate on-site costs.</p>
-        <form method="POST" action="{{ url_for('admin.admin_save_site_rates') }}">
-          <table class="table table-sm align-middle mb-3" id="siteRatesTable">
-            <thead class="table-light">
-              <tr><th>Item Name</th><th style="width:120px">Rate ($)</th><th style="width:100px">Unit</th><th style="width:50px"></th></tr>
-            </thead>
-            <tbody>
-              {% for item in settings.get('site_rate_items', []) %}
-              <tr>
-                <td><input name="rate_name" class="form-control form-control-sm" value="{{ item.name }}" placeholder="e.g. 45T Crane" required></td>
-                <td><input name="rate_amount" type="number" step="0.01" min="0" class="form-control form-control-sm" value="{{ item.rate }}" placeholder="0.00" required></td>
-                <td>
-                  <select name="rate_unit" class="form-select form-select-sm">
-                    {% for u in ['day', 'hr', 'ea', 'wk', 'm²'] %}
-                    <option value="{{ u }}" {{ 'selected' if item.unit == u }}>{{ u }}</option>
-                    {% endfor %}
-                  </select>
-                </td>
-                <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-save me-1"></i>Save Rate Card</button>
-        </form>
-      </div>
-    </div>
-
     <!-- Drive Pairs -->
     <div class="card border-0 shadow-sm mb-4">
       <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
@@ -300,27 +265,6 @@ function addAirportRow() {
   tr.innerHTML = `
     <td><input name="airport_code" class="form-control form-control-sm" placeholder="e.g. MKY" required style="text-transform:uppercase"></td>
     <td><input name="airport_name" class="form-control form-control-sm" placeholder="e.g. Mackay" required></td>
-    <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
-  `;
-  tbody.appendChild(tr);
-  tr.querySelector('input').focus();
-}
-
-function addRateRow() {
-  const tbody = document.querySelector('#siteRatesTable tbody');
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td><input name="rate_name" class="form-control form-control-sm" placeholder="e.g. 45T Crane" required></td>
-    <td><input name="rate_amount" type="number" step="0.01" min="0" class="form-control form-control-sm" placeholder="0.00" required></td>
-    <td>
-      <select name="rate_unit" class="form-select form-select-sm">
-        <option value="day">day</option>
-        <option value="hr">hr</option>
-        <option value="ea">ea</option>
-        <option value="wk">wk</option>
-        <option value="m²">m²</option>
-      </select>
-    </td>
     <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
   `;
   tbody.appendChild(tr);

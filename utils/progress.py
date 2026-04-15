@@ -526,30 +526,18 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
                 'hours': entry.delay_hours, 'cost': cost,
             })
 
-        # Equipment costs — group machines by MachineGroup
+        # Equipment costs — from site rate card items selected on the entry
         machine_lines = []
-        seen_groups = {}
-        for m in entry.machines:
-            if m.group and m.group.delay_rate:
-                # Charge the group rate once per group, not per machine
-                if m.group.id not in seen_groups:
-                    cost = round(entry.delay_hours * m.group.delay_rate, 2)
-                    machine_lines.append({
-                        'name': m.group.name,
-                        'rate': m.group.delay_rate,
-                        'hours': entry.delay_hours, 'cost': cost,
-                        'is_group': True,
-                    })
-                    seen_groups[m.group.id] = True
-            elif m.delay_rate:
-                # Individual machine (not in a group or group has no rate)
-                cost = round(entry.delay_hours * m.delay_rate, 2)
-                machine_lines.append({
-                    'name': f"{m.name}{' (' + m.plant_id + ')' if m.plant_id else ''}",
-                    'rate': m.delay_rate,
-                    'hours': entry.delay_hours, 'cost': cost,
-                    'is_group': False,
-                })
+        for cl in (entry.site_cost_lines or []):
+            hourly = cl.rate * (cl.quantity or 1)
+            cost = round(entry.delay_hours * hourly, 2)
+            qty_label = f" x{int(cl.quantity)}" if cl.quantity and cl.quantity > 1 else ""
+            machine_lines.append({
+                'name': f"{cl.item_name}{qty_label}",
+                'rate': hourly,
+                'hours': entry.delay_hours, 'cost': cost,
+                'is_group': False,
+            })
 
         # Variation lines for this entry (if any) — with their own billing
         if entry.variation_lines:

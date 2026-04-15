@@ -1161,26 +1161,24 @@ def admin_save_locations():
     return redirect(url_for('admin.admin_settings'))
 
 
-@admin_bp.route('/admin/settings/site-rates', methods=['POST'])
+@admin_bp.route('/admin/site-rates', methods=['GET', 'POST'])
 @require_role('admin')
-def admin_save_site_rates():
+def admin_site_rates():
     settings = load_settings()
-    names = request.form.getlist('rate_name')
-    amounts = request.form.getlist('rate_amount')
-    units = request.form.getlist('rate_unit')
-    items = []
-    for name, amount, unit in zip(names, amounts, units):
-        name = name.strip()
-        if name and amount:
-            items.append({
-                'name': name,
-                'rate': float(amount),
-                'unit': unit.strip() or 'day',
-            })
-    settings['site_rate_items'] = items
-    save_settings(settings)
-    flash(f'{len(items)} rate items saved.', 'success')
-    return redirect(url_for('admin.admin_settings'))
+    if request.method == 'POST':
+        names = request.form.getlist('rate_name')
+        amounts = request.form.getlist('rate_amount')
+        items = []
+        for name, amount in zip(names, amounts):
+            name = name.strip()
+            if name and amount:
+                items.append({'name': name, 'rate': float(amount)})
+        settings['site_rate_items'] = items
+        save_settings(settings)
+        flash(f'{len(items)} rate items saved.', 'success')
+        return redirect(url_for('admin.admin_site_rates'))
+    return render_template('admin/site_rates.html',
+                           rate_items=settings.get('site_rate_items', []))
 
 
 @admin_bp.route('/admin/settings/drive-pairs', methods=['POST'])

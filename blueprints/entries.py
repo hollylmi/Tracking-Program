@@ -184,21 +184,16 @@ def new_entry():
         # Site cost lines (admin only)
         if current_user.role == 'admin':
             cost_names = request.form.getlist('cost_item_name[]')
-            cost_customs = request.form.getlist('cost_item_custom[]')
             cost_rates = request.form.getlist('cost_rate[]')
-            cost_units = request.form.getlist('cost_unit[]')
             cost_qtys = request.form.getlist('cost_qty[]')
             for i in range(len(cost_names)):
                 name = cost_names[i].strip() if i < len(cost_names) else ''
-                if name == '__custom__':
-                    name = (cost_customs[i].strip() if i < len(cost_customs) else '') or ''
                 rate = float(cost_rates[i] or 0) if i < len(cost_rates) else 0
-                unit = (cost_units[i].strip() if i < len(cost_units) else 'day') or 'day'
                 qty = float(cost_qtys[i] or 0) if i < len(cost_qtys) else 0
                 if name and rate > 0 and qty > 0:
                     db.session.add(EntrySiteCostLine(
                         entry_id=entry.id, item_name=name, rate=rate,
-                        quantity=qty, unit=unit, line_total=rate * qty))
+                        quantity=qty))
 
         # Delay lines
         delay_reasons = request.form.getlist('delay_reason[]')
@@ -428,21 +423,16 @@ def edit_entry(entry_id):
             entry.site_cost_lines.clear()
             db.session.flush()
             cost_names = request.form.getlist('cost_item_name[]')
-            cost_customs = request.form.getlist('cost_item_custom[]')
             cost_rates = request.form.getlist('cost_rate[]')
-            cost_units = request.form.getlist('cost_unit[]')
             cost_qtys = request.form.getlist('cost_qty[]')
             for i in range(len(cost_names)):
                 name = cost_names[i].strip() if i < len(cost_names) else ''
-                if name == '__custom__':
-                    name = (cost_customs[i].strip() if i < len(cost_customs) else '') or ''
                 rate = float(cost_rates[i] or 0) if i < len(cost_rates) else 0
-                unit = (cost_units[i].strip() if i < len(cost_units) else 'day') or 'day'
                 qty = float(cost_qtys[i] or 0) if i < len(cost_qtys) else 0
                 if name and rate > 0 and qty > 0:
                     db.session.add(EntrySiteCostLine(
                         entry_id=entry.id, item_name=name, rate=rate,
-                        quantity=qty, unit=unit, line_total=rate * qty))
+                        quantity=qty))
 
         # Own delays
         entry.own_delay_hours = float(request.form.get('own_delay_hours') or 0)

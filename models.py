@@ -443,10 +443,8 @@ class EntrySiteCostLine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     entry_id = db.Column(db.Integer, db.ForeignKey('daily_entry.id'), nullable=False)
     item_name = db.Column(db.String(200), nullable=False)
-    rate = db.Column(db.Float, nullable=False)         # $/unit at time of entry
-    quantity = db.Column(db.Float, default=1)
-    unit = db.Column(db.String(50), default='day')     # day, hr, ea, etc.
-    line_total = db.Column(db.Float, default=0)        # rate × quantity (denormalised)
+    rate = db.Column(db.Float, nullable=False)         # $/hr at time of entry
+    quantity = db.Column(db.Float, default=1)           # number of units on site
 
     def __repr__(self):
         return f'<EntrySiteCostLine {self.item_name} {self.quantity}x${self.rate}>'
