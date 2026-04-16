@@ -568,10 +568,16 @@
         </div>
         <div class="card-body p-0">
           {% if employees %}
+          <div class="px-3 py-2 border-bottom bg-light">
+            <input type="text" class="form-control form-control-sm" id="employeeSearch"
+                   placeholder="Search crew..." oninput="filterEmployeeSearch()"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+          </div>
           <div id="employeeHint" class="px-3 py-2 text-muted small border-bottom bg-light" style="display:none"></div>
-          <div class="checkbox-scroll-list">
+          <div class="checkbox-scroll-list" id="employeeList">
             {% for employee in employees %}
-            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2">
+            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2"
+                   data-employee-name="{{ employee.name|lower }}{% if employee.role %} {{ employee.role|lower }}{% endif %}">
               <input type="checkbox" name="employee_ids" value="{{ employee.id }}"
                      class="form-check-input employee-check mt-0"
                      {% if selected_employee_ids is defined and employee.id in selected_employee_ids %}checked{% endif %}>
@@ -608,9 +614,13 @@
         </div>
         <div class="card-body p-0">
           {% if machines %}
+          <div class="px-3 py-2 border-bottom bg-light">
+            <input type="text" class="form-control form-control-sm" id="machineSearch"
+                   placeholder="Search machines..." oninput="filterMachineSearch()"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+          </div>
           <div id="machineHint" class="px-3 py-2 text-muted small border-bottom bg-light" style="display:none">
             <i class="bi bi-info-circle me-1"></i>Showing machines assigned to selected project.
-            <a href="#" id="showAllMachinesLink">Show all</a>
           </div>
 
           {# Group quick-select buttons #}
@@ -633,6 +643,7 @@
             {% for machine in machines %}
             <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2"
                    data-machine-id="{{ machine.id }}"
+                   data-machine-name="{{ machine.name|lower }}{% if machine.plant_id %} {{ machine.plant_id|lower }}{% endif %}{% if machine.machine_type %} {{ machine.machine_type|lower }}{% endif %}{% if machine.group %} {{ machine.group.name|lower }}{% endif %}"
                    data-project-ids="{{ machine_project_map.get(machine.id, [])|tojson if machine_project_map is defined else '[]' }}">
               <input type="checkbox" name="machine_ids" value="{{ machine.id }}"
                      class="form-check-input machine-check mt-0"
@@ -678,9 +689,10 @@
             Tick hired machines stood down due to this delay — a stand-down record and the delay description
             will be used for morning emails to hire companies.
           </div>
-          <div class="checkbox-scroll-list">
+          <div class="checkbox-scroll-list" id="standdownList">
             {% for hm in hired_machines %}
-            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2">
+            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2"
+                   data-hired-project-id="{{ hm.project_id }}">
               <input type="checkbox" name="standdown_machine_ids" value="{{ hm.id }}"
                      class="form-check-input standdown-check mt-0"
                      {% if hm.id in standdown_machine_ids %}checked{% endif %}>
@@ -1124,15 +1136,13 @@
     });
   }
 
-  // Machine filtering by project
-  let showAllMachines = false;
-
+  // Machine filtering by project — strict, no "show all" bypass
   function filterMachinesByProject() {
     const projectId = parseInt(document.getElementById('projectSelect').value);
     const machineItems = document.querySelectorAll('#machineList .checkbox-item[data-machine-id]');
     const hint = document.getElementById('machineHint');
 
-    if (!projectId || showAllMachines) {
+    if (!projectId) {
       machineItems.forEach(item => item.style.display = '');
       if (hint) hint.style.display = 'none';
       return;
@@ -1144,27 +1154,89 @@
       try { projectIds = JSON.parse(item.dataset.projectIds || '[]'); } catch(e) {}
       const assigned = projectIds.includes(projectId);
       item.style.display = assigned ? '' : 'none';
+      // Uncheck machines not assigned to this project
+      if (!assigned) {
+        const cb = item.querySelector('.machine-check');
+        if (cb) cb.checked = false;
+      }
       if (assigned) hasAssigned = true;
     });
 
     if (hint) hint.style.display = hasAssigned ? '' : 'none';
+    updateMachineCount();
   }
 
-  document.getElementById('showAllMachinesLink')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    showAllMachines = true;
-    filterMachinesByProject();
-    showAllMachines = false; // reset so next project change filters again
-    document.getElementById('machineHint').style.display = 'none';
-  });
+  // Filter hired machines standdown list by selected project
+  function filterStanddownByProject() {
+    const projectId = parseInt(document.getElementById('projectSelect').value);
+    const items = document.querySelectorAll('#standdownList .checkbox-item[data-hired-project-id]');
+    if (!projectId) {
+      items.forEach(item => item.style.display = '');
+      return;
+    }
+    items.forEach(item => {
+      const hiredProjectId = parseInt(item.dataset.hiredProjectId);
+      if (hiredProjectId === projectId) {
+        item.style.display = '';
+      } else {
+        item.style.display = 'none';
+        const cb = item.querySelector('.standdown-check');
+        if (cb) cb.checked = false;
+      }
+    });
+  }
+
+  // Text search for crew members
+  function filterEmployeeSearch() {
+    const q = (document.getElementById('employeeSearch').value || '').trim().toLowerCase();
+    document.querySelectorAll('#employeeList .checkbox-item[data-employee-name]').forEach(item => {
+      if (!q) {
+        // Respect project filter — only show if not hidden by project filter
+        if (!item.dataset.hiddenByProject) item.style.display = '';
+      } else {
+        const name = item.dataset.employeeName || '';
+        const match = q.split(/\s+/).every(word => name.includes(word));
+        item.style.display = match && !item.dataset.hiddenByProject ? '' : 'none';
+      }
+    });
+  }
+
+  // Text search for machines
+  function filterMachineSearch() {
+    const q = (document.getElementById('machineSearch').value || '').trim().toLowerCase();
+    const projectId = parseInt(document.getElementById('projectSelect').value);
+    document.querySelectorAll('#machineList .checkbox-item[data-machine-id]').forEach(item => {
+      // First check project assignment
+      let projectIds = [];
+      try { projectIds = JSON.parse(item.dataset.projectIds || '[]'); } catch(e) {}
+      const assignedToProject = !projectId || projectIds.includes(projectId);
+
+      if (!assignedToProject) {
+        item.style.display = 'none';
+        return;
+      }
+      if (!q) {
+        item.style.display = '';
+      } else {
+        const name = item.dataset.machineName || '';
+        const match = q.split(/\s+/).every(word => name.includes(word));
+        item.style.display = match ? '' : 'none';
+      }
+    });
+  }
 
   document.getElementById('projectSelect').addEventListener('change', () => {
-    showAllMachines = false;
     updateLotVisibility();
     filterMachinesByProject();
+    filterStanddownByProject();
     fetchPlannedOptions();
     scheduleProgress();
     filterEmployeesByProject();
+    // Clear search boxes on project change
+    const ms = document.getElementById('machineSearch');
+    if (ms) ms.value = '';
+    const es = document.getElementById('employeeSearch');
+    if (es) es.value = '';
   });
 
   document.getElementById('entryDate').addEventListener('change', () => {
@@ -1172,7 +1244,6 @@
   });
 
   // Filter employees to those assigned to the project on the selected date
-  let allEmployeesShown = false;
   function filterEmployeesByProject() {
     const projectId = document.getElementById('projectSelect').value;
     const entryDate = document.getElementById('entryDate').value;
@@ -1181,7 +1252,16 @@
     fetch(`/api/project-employees?project_id=${projectId}&date=${entryDate}`)
       .then(r => r.json())
       .then(data => {
-        if (!data.filtered) return; // no assignments — show all
+        if (!data.filtered) {
+          // No assignments — show all, clear hidden flags
+          document.querySelectorAll('#employeeList .checkbox-item').forEach(item => {
+            delete item.dataset.hiddenByProject;
+            item.style.display = '';
+          });
+          const hint = document.getElementById('employeeHint');
+          if (hint) hint.style.display = 'none';
+          return;
+        }
         const assignedIds = new Set(data.employees.map(e => String(e.id)));
         const hint = document.getElementById('employeeHint');
         document.querySelectorAll('.employee-check').forEach(cb => {
@@ -1189,10 +1269,12 @@
           if (!item) return;
           const empId = cb.value;
           if (assignedIds.has(empId)) {
+            delete item.dataset.hiddenByProject;
             item.style.display = '';
           } else {
+            item.dataset.hiddenByProject = '1';
             item.style.display = 'none';
-            if (!cb.checked) cb.checked = false; // don't uncheck already selected
+            if (!cb.checked) cb.checked = false;
           }
         });
         if (hint) {
@@ -1200,12 +1282,15 @@
           hint.innerHTML = '<i class="bi bi-info-circle me-1"></i>Showing crew assigned to this project on ' + entryDate + '. <a href="#" id="showAllEmployeesLink">Show all</a>';
           document.getElementById('showAllEmployeesLink')?.addEventListener('click', (e) => {
             e.preventDefault();
-            document.querySelectorAll('.employee-check').forEach(cb => {
-              cb.closest('.checkbox-item').style.display = '';
+            document.querySelectorAll('#employeeList .checkbox-item').forEach(item => {
+              delete item.dataset.hiddenByProject;
+              item.style.display = '';
             });
             hint.style.display = 'none';
           });
         }
+        // Re-apply search filter on top of project filter
+        filterEmployeeSearch();
         updateEmployeeCount();
       })
       .catch(() => {});
@@ -1213,6 +1298,7 @@
 
   // Run on page load
   try { filterMachinesByProject(); } catch(e) { console.error('filterMachines error:', e); }
+  try { filterStanddownByProject(); } catch(e) { console.error('filterStanddown error:', e); }
   try { filterEmployeesByProject(); } catch(e) { console.error('filterEmployees error:', e); }
 
   // Initial load — populate lot/material datalists
