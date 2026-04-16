@@ -1136,6 +1136,10 @@
     });
   }
 
+  // Show/hide helpers — Bootstrap d-flex uses !important so we must match it
+  function showItem(el) { el.style.removeProperty('display'); }
+  function hideItem(el) { el.style.setProperty('display', 'none', 'important'); }
+
   // Machine filtering by project — strict, no "show all" bypass
   function filterMachinesByProject() {
     const projectId = parseInt(document.getElementById('projectSelect').value);
@@ -1143,7 +1147,7 @@
     const hint = document.getElementById('machineHint');
 
     if (!projectId) {
-      machineItems.forEach(item => item.style.display = '');
+      machineItems.forEach(item => showItem(item));
       if (hint) hint.style.display = 'none';
       return;
     }
@@ -1153,13 +1157,12 @@
       let projectIds = [];
       try { projectIds = JSON.parse(item.dataset.projectIds || '[]'); } catch(e) {}
       const assigned = projectIds.includes(projectId);
-      item.style.display = assigned ? '' : 'none';
-      // Uncheck machines not assigned to this project
-      if (!assigned) {
+      if (assigned) { showItem(item); hasAssigned = true; }
+      else {
+        hideItem(item);
         const cb = item.querySelector('.machine-check');
         if (cb) cb.checked = false;
       }
-      if (assigned) hasAssigned = true;
     });
 
     if (hint) hint.style.display = hasAssigned ? '' : 'none';
@@ -1171,15 +1174,15 @@
     const projectId = parseInt(document.getElementById('projectSelect').value);
     const items = document.querySelectorAll('#standdownList .checkbox-item[data-hired-project-id]');
     if (!projectId) {
-      items.forEach(item => item.style.display = '');
+      items.forEach(item => showItem(item));
       return;
     }
     items.forEach(item => {
       const hiredProjectId = parseInt(item.dataset.hiredProjectId);
       if (hiredProjectId === projectId) {
-        item.style.display = '';
+        showItem(item);
       } else {
-        item.style.display = 'none';
+        hideItem(item);
         const cb = item.querySelector('.standdown-check');
         if (cb) cb.checked = false;
       }
@@ -1191,12 +1194,12 @@
     const q = (document.getElementById('employeeSearch').value || '').trim().toLowerCase();
     document.querySelectorAll('#employeeList .checkbox-item[data-employee-name]').forEach(item => {
       if (!q) {
-        // Respect project filter — only show if not hidden by project filter
-        if (!item.dataset.hiddenByProject) item.style.display = '';
+        if (!item.dataset.hiddenByProject) showItem(item);
       } else {
         const name = item.dataset.employeeName || '';
         const match = q.split(/\s+/).every(word => name.includes(word));
-        item.style.display = match && !item.dataset.hiddenByProject ? '' : 'none';
+        if (match && !item.dataset.hiddenByProject) showItem(item);
+        else hideItem(item);
       }
     });
   }
@@ -1206,21 +1209,16 @@
     const q = (document.getElementById('machineSearch').value || '').trim().toLowerCase();
     const projectId = parseInt(document.getElementById('projectSelect').value);
     document.querySelectorAll('#machineList .checkbox-item[data-machine-id]').forEach(item => {
-      // First check project assignment
       let projectIds = [];
       try { projectIds = JSON.parse(item.dataset.projectIds || '[]'); } catch(e) {}
       const assignedToProject = !projectId || projectIds.includes(projectId);
 
-      if (!assignedToProject) {
-        item.style.display = 'none';
-        return;
-      }
-      if (!q) {
-        item.style.display = '';
-      } else {
+      if (!assignedToProject) { hideItem(item); return; }
+      if (!q) { showItem(item); }
+      else {
         const name = item.dataset.machineName || '';
         const match = q.split(/\s+/).every(word => name.includes(word));
-        item.style.display = match ? '' : 'none';
+        if (match) showItem(item); else hideItem(item);
       }
     });
   }
@@ -1253,10 +1251,9 @@
       .then(r => r.json())
       .then(data => {
         if (!data.filtered) {
-          // No assignments — show all, clear hidden flags
           document.querySelectorAll('#employeeList .checkbox-item').forEach(item => {
             delete item.dataset.hiddenByProject;
-            item.style.display = '';
+            showItem(item);
           });
           const hint = document.getElementById('employeeHint');
           if (hint) hint.style.display = 'none';
@@ -1270,10 +1267,10 @@
           const empId = cb.value;
           if (assignedIds.has(empId)) {
             delete item.dataset.hiddenByProject;
-            item.style.display = '';
+            showItem(item);
           } else {
             item.dataset.hiddenByProject = '1';
-            item.style.display = 'none';
+            hideItem(item);
             if (!cb.checked) cb.checked = false;
           }
         });
@@ -1284,12 +1281,11 @@
             e.preventDefault();
             document.querySelectorAll('#employeeList .checkbox-item').forEach(item => {
               delete item.dataset.hiddenByProject;
-              item.style.display = '';
+              showItem(item);
             });
             hint.style.display = 'none';
           });
         }
-        // Re-apply search filter on top of project filter
         filterEmployeeSearch();
         updateEmployeeCount();
       })
