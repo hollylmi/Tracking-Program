@@ -109,6 +109,24 @@ def read_text(key, local_path):
         return None
 
 
+def read_bytes(key, local_path):
+    """
+    Read binary content of a file (e.g. image).
+    Returns None if not found.
+    """
+    if USE_R2:
+        try:
+            obj = _client().get_object(Bucket=_R2_BUCKET, Key=key)
+            return obj['Body'].read()
+        except Exception:
+            return None
+    else:
+        if os.path.exists(local_path):
+            with open(local_path, 'rb') as f:
+                return f.read()
+        return None
+
+
 def delete_file(key, local_path=None):
     """
     Delete a file.

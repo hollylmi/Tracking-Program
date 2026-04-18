@@ -2,11 +2,22 @@ import os
 import tempfile
 from collections import defaultdict
 from datetime import date
+from io import BytesIO
 
 from fpdf import FPDF, XPos, YPos
 
 from models import DailyEntry
 from utils.files import safe
+
+
+def _resolve_logo_path():
+    """Return absolute path to the LMI logo, trying common extensions."""
+    _static = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
+    for ext in ('png', 'jpg', 'jpeg', 'gif'):
+        _p = os.path.join(_static, f'logo.{ext}')
+        if os.path.exists(_p):
+            return _p
+    return None
 
 
 def generate_pdf(hm, date_from, date_to, days, summary, settings):
@@ -1990,5 +2001,249 @@ def generate_client_delay_report_pdf(project, settings, gantt_data=None):
     pdf.set_text_color(160, 160, 160)
     pdf.cell(0, 3, safe(f'Generated {today.strftime("%d/%m/%Y")} | {company}'),
              new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+
+    return bytes(pdf.output())
+
+
+def generate_entry_pdf(entry, settings):
+    """Build a single-entry detail PDF (mirrors the entry inspect page)."""
+    import storage
+
+    pdf = FPDF()
+    pdf.set_margins(15, 15, 15)
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    page_w = pdf.w - pdf.l_margin - pdf.r_margin
+
+    logo_path = _resolve_logo_path()
+
+    # ── Header with LMI logo ──────────────────────────────────────────
+    header_y = pdf.get_y()
+    text_x = pdf.l_margin
+    if logo_path:
+        pdf.image(logo_path, x=pdf.l_margin, y=header_y, h=14, keep_aspect_ratio=True)
+        text_x = pdf.l_margin + 38
+    pdf.set_xy(text_x, header_y)
+    tw = page_w - (38 if logo_path else 0)
+    pdf.set_font('Helvetica', 'B', 14)
+    pdf.cell(tw, 6, 'DAILY ENTRY REPORT', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_x(text_x)
+    pdf.set_font('Helvetica', '', 9)
+    pdf.cell(tw, 4, safe(entry.project.name if entry.project else ''),
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_x(text_x)
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(tw, 3,
+             safe(f'{entry.entry_date.strftime("%A, %d %B %Y")}  |  '
+                  f'Generated {date.today().strftime("%d/%m/%Y")}'),
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_y(max(pdf.get_y(), header_y + 15))
+    pdf.set_draw_color(135, 200, 235)
+    pdf.set_line_width(0.6)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.ln(4)
+
+    # ── Helpers ───────────────────────────────────────────────────────
+    def section_header(title):
+        pdf.set_fill_color(240, 244, 255)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(0, 7, f'  {title}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+        pdf.ln(1)
+
+    def kv_row(label, value):
+        if value is None or value == '':
+            return
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.cell(45, 6, safe(label) + ':')
+        pdf.set_font('Helvetica', '', 9)
+        remaining = pdf.w - pdf.r_margin - pdf.get_x()
+        pdf.multi_cell(remaining, 6, safe(str(value)),
+                       new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    def table_header(headers, widths):
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(220, 230, 255)
+        for header, w in zip(headers, widths):
+            pdf.cell(w, 6, header, border=1, fill=True)
+        pdf.ln()
+
+    # ── Basic Info ────────────────────────────────────────────────────
+    section_header('BASIC INFO')
+    kv_row('Date', entry.entry_date.strftime('%A, %d %B %Y'))
+    kv_row('Project', entry.project.name if entry.project else '')
+    if not entry.production_lines and (entry.lot_number or entry.material):
+        combined = ''
+        if entry.lot_number:
+            combined = f'Lot {entry.lot_number}'
+        if entry.material:
+            combined += (' — ' if combined else '') + entry.material
+        kv_row('Lot / Material', combined)
+    kv_row('Location', entry.location)
+    kv_row('Weather', entry.weather)
+    submitter = getattr(entry, 'submitted_by_user', None)
+    if submitter:
+        kv_row('Submitted by', submitter.display_name or submitter.username)
+    if entry.created_at:
+        kv_row('Submitted at', entry.created_at.strftime('%d %b %Y %H:%M'))
+    pdf.ln(3)
+
+    # ── Production summary ────────────────────────────────────────────
+    section_header('PRODUCTION')
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_text_color(30, 80, 180)
+    third = page_w / 3
+    pdf.cell(third, 8, safe(f'{entry.total_hours} hrs'), align='C')
+    pdf.cell(third, 8, safe(f'{entry.total_sqm} m2'), align='C')
+    pdf.cell(third, 8, safe(f'{entry.num_people or "-"} crew'),
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.set_text_color(110, 110, 110)
+    pdf.set_font('Helvetica', '', 7)
+    pdf.cell(third, 4, 'Install Hours', align='C')
+    pdf.cell(third, 4, 'Area Installed', align='C')
+    pdf.cell(third, 4, 'Crew Size', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(2)
+
+    if entry.production_lines:
+        col_w = [25, 60, 25, 25, page_w - 135]
+        table_header(['Lot', 'Material', 'Hours', 'Area (m2)', 'Activity'], col_w)
+        pdf.set_font('Helvetica', '', 8)
+        for pl in entry.production_lines:
+            pdf.cell(col_w[0], 5, safe(pl.lot_number or '-'), border=1)
+            pdf.cell(col_w[1], 5, safe((pl.material or '-')[:50]), border=1)
+            pdf.cell(col_w[2], 5, safe(f'{pl.install_hours or 0}'), border=1)
+            pdf.cell(col_w[3], 5, safe(f'{pl.install_sqm or 0}'), border=1)
+            pdf.cell(col_w[4], 5, safe(pl.activity_type or '-'), border=1,
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(3)
+
+    # ── Crew on Site ──────────────────────────────────────────────────
+    if entry.employees:
+        section_header(f'CREW ON SITE ({len(entry.employees)})')
+        col_w = [page_w * 0.55, page_w * 0.45]
+        table_header(['Name', 'Role'], col_w)
+        pdf.set_font('Helvetica', '', 9)
+        for emp in entry.employees:
+            pdf.cell(col_w[0], 6, safe(emp.name), border=1)
+            pdf.cell(col_w[1], 6, safe(emp.role or '-'), border=1,
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(3)
+
+    # ── Equipment Used ────────────────────────────────────────────────
+    if entry.machines:
+        section_header(f'EQUIPMENT USED ({len(entry.machines)})')
+        col_w = [page_w * 0.40, page_w * 0.25, page_w * 0.35]
+        table_header(['Machine', 'Plant ID', 'Type'], col_w)
+        pdf.set_font('Helvetica', '', 9)
+        for m in entry.machines:
+            pdf.cell(col_w[0], 6, safe(m.name), border=1)
+            pdf.cell(col_w[1], 6, safe(m.plant_id or '-'), border=1)
+            pdf.cell(col_w[2], 6, safe(m.machine_type or '-'), border=1,
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(3)
+
+    # ── Site Delays ───────────────────────────────────────────────────
+    total_delay = entry.total_delay_hours_from_lines
+    has_legacy_delay = (entry.delay_hours or 0) > 0
+    if entry.delay_lines or has_legacy_delay:
+        section_header(f'SITE DELAYS  ({total_delay}h total)')
+        if entry.delay_lines:
+            col_w = [50, 20, page_w - 70]
+            table_header(['Reason', 'Hours', 'Description'], col_w)
+            pdf.set_font('Helvetica', '', 9)
+            for dl in entry.delay_lines:
+                pdf.cell(col_w[0], 6, safe(dl.reason or '-'), border=1)
+                pdf.cell(col_w[1], 6, safe(f'{dl.hours or 0}h'), border=1)
+                pdf.cell(col_w[2], 6, safe((dl.description or '-')[:80]), border=1,
+                         new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        elif has_legacy_delay:
+            kv_row('Hours', f'{entry.delay_hours}h')
+            if entry.delay_reason:
+                kv_row('Reason', entry.delay_reason)
+            if entry.delay_description:
+                kv_row('Description', entry.delay_description)
+
+        standdowns = getattr(entry, 'stand_downs', None) or []
+        if standdowns:
+            pdf.ln(1)
+            pdf.set_font('Helvetica', 'B', 8)
+            pdf.set_text_color(110, 110, 110)
+            pdf.cell(0, 5, 'HIRED MACHINES STOOD DOWN',
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font('Helvetica', '', 9)
+            for sd in standdowns:
+                name = sd.hired_machine.machine_name if sd.hired_machine else '-'
+                pdf.cell(0, 5, safe(f'  - {name}'),
+                         new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(3)
+
+    # ── Variations ────────────────────────────────────────────────────
+    if entry.variation_lines:
+        section_header(f'VARIATIONS  ({entry.total_variation_hours}h total)')
+        col_w = [30, page_w - 55, 25]
+        table_header(['Variation #', 'Description', 'Hours'], col_w)
+        pdf.set_font('Helvetica', '', 9)
+        for vl in entry.variation_lines:
+            pdf.cell(col_w[0], 6, safe(vl.variation_number or '-'), border=1)
+            pdf.cell(col_w[1], 6, safe((vl.description or '-')[:80]), border=1)
+            pdf.cell(col_w[2], 6, safe(f'{vl.hours or 0}h'), border=1,
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(3)
+
+    # ── Own Delays (internal) ─────────────────────────────────────────
+    if (entry.own_delay_hours or 0) > 0:
+        section_header('OWN DELAYS (INTERNAL)')
+        kv_row('Hours', f'{entry.own_delay_hours}h')
+        if entry.own_delay_description:
+            kv_row('Description', entry.own_delay_description)
+        pdf.ln(3)
+
+    # ── Notes ─────────────────────────────────────────────────────────
+    if entry.notes:
+        section_header('NOTES')
+        pdf.set_font('Helvetica', '', 9)
+        pdf.multi_cell(0, 5, safe(entry.notes))
+        pdf.ln(3)
+
+    # ── Other Work ────────────────────────────────────────────────────
+    if entry.other_work_description:
+        section_header('OTHER WORK')
+        pdf.set_font('Helvetica', '', 9)
+        pdf.multi_cell(0, 5, safe(entry.other_work_description))
+        pdf.ln(3)
+
+    # ── Photos ────────────────────────────────────────────────────────
+    if entry.photos:
+        upload_folder = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 'instance', 'uploads')
+        section_header(f'PHOTOS ({len(entry.photos)})')
+        cell_w = (page_w - 4) / 3.0
+        cell_h = 45
+        col = 0
+        for photo in entry.photos:
+            img_bytes = storage.read_bytes(
+                f'photos/{photo.filename}',
+                os.path.join(upload_folder, photo.filename))
+            if not img_bytes:
+                continue
+            if pdf.get_y() + cell_h > pdf.h - pdf.b_margin:
+                pdf.add_page()
+                col = 0
+            x = pdf.l_margin + col * (cell_w + 2)
+            y = pdf.get_y()
+            try:
+                pdf.image(BytesIO(img_bytes), x=x, y=y, w=cell_w, h=cell_h,
+                          keep_aspect_ratio=True)
+            except Exception:
+                continue
+            col += 1
+            if col >= 3:
+                col = 0
+                pdf.set_y(y + cell_h + 2)
+        if col != 0:
+            pdf.set_y(pdf.get_y() + cell_h + 2)
 
     return bytes(pdf.output())

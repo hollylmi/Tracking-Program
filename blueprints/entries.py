@@ -1,7 +1,7 @@
 import os
 import uuid
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from flask_login import current_user
 
 from blueprints.auth import require_role
@@ -554,6 +554,19 @@ def serve_entry_photo(filename):
 def view_entry(entry_id):
     entry = DailyEntry.query.get_or_404(entry_id)
     return render_template('entry_detail.html', entry=entry)
+
+
+@entries_bp.route('/entry/<int:entry_id>/pdf')
+@require_role('admin', 'supervisor', 'site')
+def entry_pdf(entry_id):
+    from utils.reports import generate_entry_pdf
+    entry = DailyEntry.query.get_or_404(entry_id)
+    settings = load_settings()
+    pdf_bytes = generate_entry_pdf(entry, settings)
+    project_slug = (entry.project.name if entry.project else 'entry').replace(' ', '_').replace('/', '-')
+    filename = f"entry_{project_slug}_{entry.entry_date.strftime('%Y%m%d')}.pdf"
+    return Response(pdf_bytes, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="{filename}"'})
 
 
 @entries_bp.route('/entries')
