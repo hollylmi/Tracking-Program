@@ -422,6 +422,8 @@ def require_login():
         return  # Apple App Site Association must be public
     if request.path.startswith('/e/'):
         return  # Public equipment info page (NFC tag target)
+    if request.path.startswith('/equipment/machine-photo/'):
+        return  # Public machine photos (UUID filenames, embedded in public info page)
     public_endpoints = {'auth.login', 'auth.logout', 'auth.no_project', 'static'}
     if request.endpoint not in public_endpoints and not current_user.is_authenticated:
         return redirect(url_for('auth.login', next=request.url))
