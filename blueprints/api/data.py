@@ -19,6 +19,7 @@ from models import (
     MachineDocument, MachineHoursLog, ProjectDailyTaskAssignment,
     ScheduledEquipmentCheck, ScheduledCheckCompletion,
     FlightBooking, AccommodationBooking, AccommodationProperty, AccommodationDocument,
+    NFCTag,
 )
 from utils.files import allowed_photo
 import storage
@@ -4165,3 +4166,110 @@ def record_scan_location(machine_id):
 
     db.session.commit()
     return {'ok': True}, 200
+
+
+# ─── NFC tag management (mobile write/retire flow) ───────────────────────────
+
+def _nfc_tag_to_dict(t):
+    return {
+        'id': t.id,
+        'uid': t.uid,
+        'machine_id': t.machine_id,
+        'status': t.status,
+        'label': t.label,
+        'notes': t.notes,
+        'assigned_at': t.assigned_at.isoformat() if t.assigned_at else None,
+        'retired_at': t.retired_at.isoformat() if t.retired_at else None,
+    }
+
+
+@api_data_bp.route('/equipment/<int:machine_id>/nfc-tags', methods=['GET'])
+@jwt_required()
+def list_machine_nfc_tags(machine_id):
+    """Return all NFC tags for a machine (active + retired)."""
+    if not Machine.query.get(machine_id):
+        return {'error': 'Machine not found'}, 404
+    tags = NFCTag.query.filter_by(machine_id=machine_id).order_by(
+        NFCTag.status.desc(), NFCTag.assigned_at.desc()).all()
+    return {'tags': [_nfc_tag_to_dict(t) for t in tags]}, 200
+
+
+@api_data_bp.route('/equipment/<int:machine_id>/nfc-tags', methods=['POST'])
+@jwt_required()
+def register_machine_nfc_tag(machine_id):
+    """Register a new NFC tag UID against a machine (called by mobile after a successful write).
+    If the machine already has an active tag, it is automatically retired."""
+    if not Machine.query.get(machine_id):
+        return {'error': 'Machine not found'}, 404
+
+    data = request.get_json(silent=True) or {}
+    uid = (data.get('uid') or '').strip()
+    if not uid:
+        return {'error': 'uid required'}, 400
+    label = (data.get('label') or '').strip() or None
+
+    existing = NFCTag.query.filter_by(uid=uid).first()
+    if existing:
+        if existing.machine_id == machine_id and existing.status == 'active':
+            return {'ok': True, 'tag': _nfc_tag_to_dict(existing), 'already_assigned': True}, 200
+        return {
+            'error': 'UID already registered',
+            'conflict': {
+                'machine_id': existing.machine_id,
+                'machine_name': existing.machine.name,
+                'status': existing.status,
+            },
+        }, 409
+
+    user_id = int(get_jwt_identity())
+    for t in NFCTag.query.filter_by(machine_id=machine_id, status='active').all():
+        t.status = 'retired'
+        t.retired_at = datetime.utcnow()
+        t.retired_by_user_id = user_id
+        t.retired_reason = 'Replaced by new tag'
+
+    tag = NFCTag(
+        uid=uid,
+        machine_id=machine_id,
+        label=label,
+        assigned_by_user_id=user_id,
+    )
+    db.session.add(tag)
+    db.session.commit()
+    return {'ok': True, 'tag': _nfc_tag_to_dict(tag)}, 201
+
+
+@api_data_bp.route('/nfc-tags/<int:tag_id>/retire', methods=['POST'])
+@jwt_required()
+def retire_nfc_tag(tag_id):
+    tag = NFCTag.query.get(tag_id)
+    if not tag:
+        return {'error': 'Tag not found'}, 404
+    if tag.status == 'retired':
+        return {'ok': True, 'tag': _nfc_tag_to_dict(tag)}, 200
+
+    data = request.get_json(silent=True) or {}
+    tag.status = 'retired'
+    tag.retired_at = datetime.utcnow()
+    tag.retired_by_user_id = int(get_jwt_identity())
+    tag.retired_reason = (data.get('reason') or '').strip() or None
+    db.session.commit()
+    return {'ok': True, 'tag': _nfc_tag_to_dict(tag)}, 200
+
+
+@api_data_bp.route('/nfc-tags/lookup', methods=['GET'])
+@jwt_required()
+def lookup_nfc_tag():
+    """Look up a tag by UID — used by mobile after reading a tag to determine
+    status (active/retired/unknown) and which machine it belongs to."""
+    uid = (request.args.get('uid') or '').strip()
+    if not uid:
+        return {'error': 'uid required'}, 400
+    tag = NFCTag.query.filter_by(uid=uid).first()
+    if not tag:
+        return {'found': False}, 200
+    return {
+        'found': True,
+        'tag': _nfc_tag_to_dict(tag),
+        'machine': {'id': tag.machine.id, 'name': tag.machine.name, 'plant_id': tag.machine.plant_id},
+    }, 200

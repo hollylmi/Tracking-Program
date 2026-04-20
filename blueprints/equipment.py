@@ -3,7 +3,7 @@ import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, make_response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, make_response, abort
 from flask_login import current_user
 
 from blueprints.auth import require_role
@@ -16,7 +16,7 @@ from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBre
                     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem,
                     MachineDailyCheck, MachineDocument, MachineHoursLog,
                     ProjectDailyTaskAssignment, ScheduledEquipmentCheck,
-                    ScheduledCheckCompletion, TransferBatch)
+                    ScheduledCheckCompletion, TransferBatch, NFCTag)
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -1181,6 +1181,157 @@ def record_scan_location_web(machine_id):
     return jsonify({'ok': True})
 
 
+# ---------------------------------------------------------------------------
+# Public equipment info page — accessible without login (NFC tag target)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/e/<int:machine_id>')
+def equipment_public(machine_id):
+    """Public landing page for NFC tag scans.
+    Logged-in staff are redirected straight to the full scan page;
+    anonymous users (contractors, etc.) see a read-only info card."""
+    if current_user.is_authenticated:
+        return redirect(url_for('equipment.machine_scan', machine_id=machine_id))
+
+    m = Machine.query.get_or_404(machine_id)
+    assignment = ProjectMachine.query.filter_by(machine_id=machine_id).first()
+    latest_check = MachineDailyCheck.query.filter_by(machine_id=machine_id).order_by(
+        MachineDailyCheck.check_date.desc()).first()
+    recent_checks = MachineDailyCheck.query.filter_by(machine_id=machine_id).order_by(
+        MachineDailyCheck.check_date.desc()).limit(3).all()
+    active_breakdowns = MachineBreakdown.query.filter_by(
+        machine_id=machine_id).filter(
+        MachineBreakdown.repair_status.in_(['pending', 'in_progress'])).all()
+    latest_hours = MachineHoursLog.query.filter_by(machine_id=machine_id).order_by(
+        MachineHoursLog.log_date.desc()).first()
+    certificates = MachineDocument.query.filter_by(
+        machine_id=machine_id, doc_type='certificate').order_by(
+        MachineDocument.uploaded_at.desc()).all()
+
+    active_tag = NFCTag.query.filter_by(machine_id=machine_id, status='active').first()
+    scanned_uid = request.args.get('uid')
+    retired_warning = False
+    if scanned_uid:
+        scanned_tag = NFCTag.query.filter_by(uid=scanned_uid).first()
+        if scanned_tag and scanned_tag.status == 'retired':
+            retired_warning = True
+
+    resp = make_response(render_template('equipment/public_info.html',
+                           machine=m, assignment=assignment,
+                           latest_check=latest_check,
+                           recent_checks=recent_checks,
+                           active_breakdowns=active_breakdowns,
+                           latest_hours=latest_hours,
+                           certificates=certificates,
+                           active_tag=active_tag,
+                           retired_warning=retired_warning,
+                           today=date.today()))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# NFC tag management (web form actions)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/machine/<int:machine_id>/nfc-tag/add', methods=['POST'])
+@require_role('admin', 'supervisor')
+def nfc_tag_add(machine_id):
+    """Manually register an NFC tag UID against a machine (web form fallback for
+    cases where the mobile write flow isn't used). Retires any existing active tag."""
+    Machine.query.get_or_404(machine_id)
+    uid = (request.form.get('uid') or '').strip()
+    label = (request.form.get('label') or '').strip() or None
+    if not uid:
+        flash('Tag UID is required.', 'danger')
+        return redirect(url_for('equipment.machine_detail', machine_id=machine_id) + '#nfc-tags')
+
+    existing = NFCTag.query.filter_by(uid=uid).first()
+    if existing:
+        if existing.machine_id == machine_id and existing.status == 'active':
+            flash('That tag is already assigned to this machine.', 'info')
+        else:
+            flash(f'Tag UID already exists (machine: {existing.machine.name}, status: {existing.status}).', 'danger')
+        return redirect(url_for('equipment.machine_detail', machine_id=machine_id) + '#nfc-tags')
+
+    # Retire any existing active tag on this machine (one active at a time)
+    current_active = NFCTag.query.filter_by(machine_id=machine_id, status='active').all()
+    for t in current_active:
+        t.status = 'retired'
+        t.retired_at = datetime.utcnow()
+        t.retired_by_user_id = current_user.id
+        t.retired_reason = 'Replaced by new tag'
+
+    tag = NFCTag(
+        uid=uid,
+        machine_id=machine_id,
+        label=label,
+        assigned_by_user_id=current_user.id,
+    )
+    db.session.add(tag)
+    db.session.commit()
+    flash('NFC tag assigned.', 'success')
+    return redirect(url_for('equipment.machine_detail', machine_id=machine_id) + '#nfc-tags')
+
+
+@equipment_bp.route('/equipment/nfc-tag/<int:tag_id>/retire', methods=['POST'])
+@require_role('admin', 'supervisor')
+def nfc_tag_retire(tag_id):
+    tag = NFCTag.query.get_or_404(tag_id)
+    if tag.status == 'retired':
+        flash('Tag already retired.', 'info')
+    else:
+        tag.status = 'retired'
+        tag.retired_at = datetime.utcnow()
+        tag.retired_by_user_id = current_user.id
+        tag.retired_reason = (request.form.get('reason') or '').strip() or None
+        db.session.commit()
+        flash('Tag retired.', 'success')
+    back = request.form.get('back') or url_for('equipment.machine_detail', machine_id=tag.machine_id)
+    return redirect(back + '#nfc-tags')
+
+
+@equipment_bp.route('/equipment/nfc-tag/<int:tag_id>/reactivate', methods=['POST'])
+@require_role('admin', 'supervisor')
+def nfc_tag_reactivate(tag_id):
+    tag = NFCTag.query.get_or_404(tag_id)
+    # Retire any other active tag on the same machine first
+    current_active = NFCTag.query.filter_by(
+        machine_id=tag.machine_id, status='active').all()
+    for t in current_active:
+        if t.id != tag.id:
+            t.status = 'retired'
+            t.retired_at = datetime.utcnow()
+            t.retired_by_user_id = current_user.id
+            t.retired_reason = 'Replaced — other tag reactivated'
+    tag.status = 'active'
+    tag.retired_at = None
+    tag.retired_by_user_id = None
+    tag.retired_reason = None
+    db.session.commit()
+    flash('Tag reactivated.', 'success')
+    back = request.form.get('back') or url_for('equipment.machine_detail', machine_id=tag.machine_id)
+    return redirect(back + '#nfc-tags')
+
+
+@equipment_bp.route('/admin/nfc-tags')
+@require_role('admin', 'supervisor')
+def nfc_tags_admin():
+    """List all NFC tags across all machines — filter by status."""
+    status_filter = request.args.get('status', 'all')
+    q = NFCTag.query.join(Machine).order_by(NFCTag.assigned_at.desc())
+    if status_filter in ('active', 'retired'):
+        q = q.filter(NFCTag.status == status_filter)
+    tags = q.all()
+    counts = {
+        'all': NFCTag.query.count(),
+        'active': NFCTag.query.filter_by(status='active').count(),
+        'retired': NFCTag.query.filter_by(status='retired').count(),
+    }
+    return render_template('admin/nfc_tags.html',
+                           tags=tags, status_filter=status_filter, counts=counts)
+
+
 @equipment_bp.route('/equipment/machine/<int:machine_id>')
 @require_role('admin', 'supervisor', 'site')
 def machine_detail(machine_id):
@@ -1196,12 +1347,15 @@ def machine_detail(machine_id):
         MachineTransfer.status.in_(['scheduled', 'in_transit'])
     ).all()
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    nfc_tags = NFCTag.query.filter_by(machine_id=machine_id).order_by(
+        NFCTag.status.desc(), NFCTag.assigned_at.desc()).all()
 
     return render_template('equipment/machine_detail.html',
                            machine=m, docs=docs, hours_logs=hours_logs,
                            recent_checks=recent_checks, breakdowns=breakdowns,
                            assignment=assignment, transfers=transfers,
-                           projects=projects, today=date.today())
+                           projects=projects, today=date.today(),
+                           nfc_tags=nfc_tags)
 
 
 # ---------------------------------------------------------------------------
@@ -1248,6 +1402,20 @@ def serve_machine_doc(filename):
     return storage.serve_file(
         f'machine_docs/{filename}',
         os.path.join(UPLOAD_FOLDER, 'machine_docs', filename)
+    )
+
+
+@equipment_bp.route('/e/<int:machine_id>/cert/<int:doc_id>')
+def serve_public_certificate(machine_id, doc_id):
+    """Public certificate viewer — only serves documents with doc_type='certificate'
+    that belong to the given machine. Used from the public info page so contractors
+    can view compliance certs without logging in."""
+    doc = MachineDocument.query.get_or_404(doc_id)
+    if doc.machine_id != machine_id or doc.doc_type != 'certificate':
+        abort(404)
+    return storage.serve_file(
+        f'machine_docs/{doc.filename}',
+        os.path.join(UPLOAD_FOLDER, 'machine_docs', doc.filename)
     )
 
 

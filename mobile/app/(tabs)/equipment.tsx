@@ -542,12 +542,32 @@ export default function EquipmentScreen() {
     try {
       await NfcManager.requestTechnology(NfcTech.Ndef)
       const tag = await NfcManager.getTag()
+      const tagUid: string | undefined = tag?.id
       if (tag?.ndefMessage?.[0]) {
         const payload = tag.ndefMessage[0].payload
         const url = Ndef.uri.decodePayload(payload as unknown as number[])
-        const match = url.match(/\/equipment\/scan\/(\d+)/)
+        // Support both new public URL (/e/<id>) and legacy (/equipment/scan/<id>)
+        const match = url.match(/\/e\/(\d+)/) || url.match(/\/equipment\/scan\/(\d+)/)
         if (match) {
           const machineId = parseInt(match[1], 10)
+
+          // If the tag has a UID, check it's still active
+          if (tagUid) {
+            try {
+              const r = await api.equipment.lookupTag(tagUid)
+              if (r.data.found && r.data.tag?.status === 'retired') {
+                NfcManager.cancelTechnologyRequest().catch(() => {})
+                setNfcScanning(false)
+                Alert.alert(
+                  'Retired Tag',
+                  'This NFC tag has been retired. Please contact the equipment owner to confirm the correct tag.',
+                )
+                return
+              }
+            } catch {
+              // Non-fatal: continue even if lookup fails
+            }
+          }
 
           // Grab GPS and record scan location in background
           ;(async () => {
@@ -562,11 +582,9 @@ export default function EquipmentScreen() {
                   lng: loc.coords.longitude,
                 })
               } else {
-                // Record scan without coordinates
                 await api.equipment.recordScanLocation(machineId, {})
               }
             } catch {
-              // Record scan without coordinates on error
               api.equipment.recordScanLocation(machineId, {}).catch(() => {})
             }
           })()

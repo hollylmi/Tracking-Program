@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -29,7 +29,18 @@ import { compressImage } from '../../lib/compressImage'
 import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
-import { BreakdownDetail, MachineDetail, DailyCheckRecord } from '../../types'
+import { BreakdownDetail, MachineDetail, DailyCheckRecord, NFCTagInfo } from '../../types'
+
+// NFC — optional, only works in native builds (not Expo Go)
+let NfcManager: any = null
+let NfcTech: any = null
+let Ndef: any = null
+try {
+  const nfc = require('react-native-nfc-manager')
+  NfcManager = nfc.default
+  NfcTech = nfc.NfcTech
+  Ndef = nfc.Ndef
+} catch {}
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
@@ -825,6 +836,115 @@ export default function MachineDetailScreen() {
   const [deletingBdId, setDeletingBdId] = useState<number | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
+  // NFC tag management
+  const [nfcTags, setNfcTags] = useState<NFCTagInfo[]>([])
+  const [nfcSupported, setNfcSupported] = useState(false)
+  const [nfcWriting, setNfcWriting] = useState(false)
+  const [tagLabelModalVisible, setTagLabelModalVisible] = useState(false)
+  const [pendingTagLabel, setPendingTagLabel] = useState('')
+
+  useEffect(() => {
+    if (NfcManager) {
+      NfcManager.isSupported().then(setNfcSupported).catch(() => setNfcSupported(false))
+    }
+  }, [])
+
+  const loadNfcTags = async () => {
+    if (!id) return
+    try {
+      const r = await api.equipment.listTags(Number(id))
+      setNfcTags(r.data.tags || [])
+    } catch {
+      setNfcTags([])
+    }
+  }
+
+  useEffect(() => {
+    loadNfcTags()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  const handleWriteNfcTag = async () => {
+    if (!nfcSupported) {
+      Alert.alert('NFC Not Available', 'This device does not support NFC.')
+      return
+    }
+    if (!display) return
+
+    setTagLabelModalVisible(false)
+    setNfcWriting(true)
+    try {
+      await NfcManager.requestTechnology(NfcTech.Ndef)
+      const tag = await NfcManager.getTag()
+      const tagUid: string | undefined = tag?.id
+      if (!tagUid) {
+        throw new Error('Could not read tag UID')
+      }
+
+      // Write the public equipment URL to the tag
+      const url = `${API_BASE_URL}/e/${display.id}`
+      const bytes = Ndef.encodeMessage([Ndef.uriRecord(url)])
+      if (!bytes) {
+        throw new Error('Could not encode tag payload')
+      }
+      await NfcManager.ndefHandler.writeNdefMessage(bytes)
+
+      // Register the UID on the server
+      const resp = await api.equipment.registerTag(display.id, {
+        uid: tagUid,
+        label: pendingTagLabel.trim() || undefined,
+      })
+
+      setNfcWriting(false)
+      NfcManager.cancelTechnologyRequest().catch(() => {})
+
+      if (resp.data.already_assigned) {
+        show('Tag was already assigned — no change.', 'info')
+      } else {
+        show('NFC tag written and registered.', 'success')
+      }
+      setPendingTagLabel('')
+      await loadNfcTags()
+    } catch (e: any) {
+      NfcManager.cancelTechnologyRequest().catch(() => {})
+      setNfcWriting(false)
+      if (e?.message === 'cancelled') return
+      // Check for conflict response
+      const conflict = e?.response?.data?.conflict
+      if (conflict) {
+        Alert.alert(
+          'Tag UID already registered',
+          `This tag is already linked to "${conflict.machine_name}" (${conflict.status}). Use a different tag or retire the old assignment first.`,
+        )
+        return
+      }
+      Alert.alert('Write Failed', e?.message || 'Could not write to NFC tag. Make sure NFC is enabled and the tag is close to the device.')
+    }
+  }
+
+  const handleRetireTag = (tag: NFCTagInfo) => {
+    Alert.alert(
+      'Retire Tag',
+      `Retire tag ${tag.uid}? The physical tag will stop working for this equipment.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Retire',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.equipment.retireTag(tag.id)
+              show('Tag retired.', 'success')
+              await loadNfcTags()
+            } catch {
+              show('Could not retire tag.', 'error')
+            }
+          },
+        },
+      ],
+    )
+  }
+
   const { data: machine, isLoading, isError, refetch } = useQuery({
     queryKey: ['machine', id],
     queryFn: () =>
@@ -1154,6 +1274,65 @@ export default function MachineDetailScreen() {
           </Card>
         )}
 
+        {/* NFC tags section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>NFC Tags</Text>
+            {canEdit && nfcSupported && (
+              <TouchableOpacity
+                style={styles.reportBtn}
+                onPress={() => setTagLabelModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add" size={14} color={Colors.dark} />
+                <Text style={styles.reportBtnText}>Write Tag</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {nfcTags.length === 0 ? (
+            <Card>
+              <Text style={styles.emptyText}>
+                {nfcSupported
+                  ? 'No NFC tag assigned. Tap "Write Tag" and hold an empty NFC tag near your device.'
+                  : 'No NFC tag assigned. NFC not supported on this device.'}
+              </Text>
+            </Card>
+          ) : (
+            <Card padding="none">
+              {nfcTags.map((t, idx) => (
+                <View key={t.id}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: Spacing.md }}>
+                    <Ionicons
+                      name={t.status === 'active' ? 'radio' : 'radio-outline'}
+                      size={22}
+                      color={t.status === 'active' ? Colors.success : Colors.textLight}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ ...Typography.bodySmall, color: Colors.textPrimary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
+                        {t.uid}
+                      </Text>
+                      <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>
+                        {t.status === 'active' ? 'Active' : 'Retired'}
+                        {t.label ? ` · ${t.label}` : ''}
+                        {t.assigned_at ? ` · since ${new Date(t.assigned_at).toLocaleDateString()}` : ''}
+                      </Text>
+                    </View>
+                    {canEdit && t.status === 'active' && (
+                      <TouchableOpacity
+                        onPress={() => handleRetireTag(t)}
+                        style={{ padding: Spacing.xs }}
+                      >
+                        <Text style={{ ...Typography.caption, color: Colors.error, fontWeight: '600' }}>Retire</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {idx < nfcTags.length - 1 && <View style={styles.divider} />}
+                </View>
+              ))}
+            </Card>
+          )}
+        </View>
+
         {/* Daily checks timeline */}
         {(display.daily_checks ?? []).length > 0 && (
           <View style={styles.section}>
@@ -1274,6 +1453,78 @@ export default function MachineDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* NFC tag label modal (pre-write) */}
+      <Modal
+        visible={tagLabelModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTagLabelModalVisible(false)}
+      >
+        <View style={styles.nfcModalOverlay}>
+          <View style={styles.nfcModalCard}>
+            <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginBottom: Spacing.sm }}>
+              Write NFC Tag
+            </Text>
+            <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, marginBottom: Spacing.md }}>
+              Optional: add a short label (e.g. "sticker on rear panel"). Tap Continue then hold an empty NFC tag near the top of your device.
+            </Text>
+            <TextInput
+              style={styles.nfcInput}
+              value={pendingTagLabel}
+              onChangeText={setPendingTagLabel}
+              placeholder="Tag label (optional)"
+              placeholderTextColor={Colors.textLight}
+            />
+            <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md }}>
+              <TouchableOpacity
+                style={[styles.nfcBtn, { backgroundColor: Colors.border }]}
+                onPress={() => { setTagLabelModalVisible(false); setPendingTagLabel('') }}
+              >
+                <Text style={{ ...Typography.body, color: Colors.textPrimary }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.nfcBtn, { backgroundColor: Colors.primary }]}
+                onPress={handleWriteNfcTag}
+              >
+                <Text style={{ ...Typography.body, color: '#fff', fontWeight: '700' }}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* NFC writing modal */}
+      <Modal
+        visible={nfcWriting}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          NfcManager?.cancelTechnologyRequest().catch(() => {})
+          setNfcWriting(false)
+        }}
+      >
+        <View style={styles.nfcModalOverlay}>
+          <View style={styles.nfcModalCard}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginTop: Spacing.md, textAlign: 'center' }}>
+              Hold tag near device
+            </Text>
+            <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.xs }}>
+              Keep the NFC tag close to the top of your phone until writing completes.
+            </Text>
+            <TouchableOpacity
+              style={[styles.nfcBtn, { backgroundColor: Colors.border, marginTop: Spacing.md, alignSelf: 'center' }]}
+              onPress={() => {
+                NfcManager?.cancelTechnologyRequest().catch(() => {})
+                setNfcWriting(false)
+              }}
+            >
+              <Text style={{ ...Typography.body, color: Colors.textPrimary }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit machine modal */}
       {canEdit && machine && (
@@ -1493,6 +1744,37 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   statusText: { ...Typography.caption, fontWeight: '700' },
+
+  nfcModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  nfcModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    width: '100%',
+    maxWidth: 420,
+  },
+  nfcInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    fontSize: 15,
+    color: Colors.textPrimary,
+    backgroundColor: '#fff',
+  },
+  nfcBtn: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+  },
 
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: Colors.border, marginHorizontal: Spacing.md },
 

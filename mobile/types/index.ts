@@ -175,6 +175,17 @@ export interface BreakdownDetail {
   photos?: { id: number; url: string; filename: string }[]
 }
 
+export interface NFCTagInfo {
+  id: number
+  uid: string
+  machine_id: number
+  status: 'active' | 'retired'
+  label: string | null
+  notes: string | null
+  assigned_at: string | null
+  retired_at: string | null
+}
+
 export interface MachineDetail {
   id: number
   name: string

@@ -206,6 +206,29 @@ class Machine(db.Model):
         return f'<Machine {self.name}>'
 
 
+class NFCTag(db.Model):
+    """Physical NFC tag assigned to a machine. Many tags may exist per machine over time
+    (replacements, retired tags), but typically only one is active at once."""
+    id = db.Column(db.Integer, primary_key=True)
+    uid = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='active')  # active / retired
+    label = db.Column(db.String(200), nullable=True)   # optional human label (e.g. "sticker on rear panel")
+    notes = db.Column(db.Text, nullable=True)
+    assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    assigned_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    retired_at = db.Column(db.DateTime, nullable=True)
+    retired_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    retired_reason = db.Column(db.String(300), nullable=True)
+
+    machine = db.relationship('Machine', backref=db.backref('nfc_tags', lazy=True, order_by='NFCTag.assigned_at.desc()'))
+    assigned_by_user = db.relationship('User', foreign_keys=[assigned_by_user_id], lazy=True)
+    retired_by_user = db.relationship('User', foreign_keys=[retired_by_user_id], lazy=True)
+
+    def __repr__(self):
+        return f'<NFCTag {self.uid} machine={self.machine_id} {self.status}>'
+
+
 class DailyEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)

@@ -24,7 +24,8 @@
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "Your location is recorded when you scan an NFC tag to track where equipment was last seen."
+        "NSLocationWhenInUseUsageDescription": "Your location is recorded when you scan an NFC tag to track where equipment was last seen.",
+        "NFCReaderUsageDescription": "Plytrack uses NFC to read and write equipment identification tags."
       }
     },
     "android": {
@@ -61,7 +62,7 @@
           "enableBackgroundRemoteNotifications": true
         }
       ],
-      ["react-native-nfc-manager", { "includeNdefEntitlement": false }]
+      ["react-native-nfc-manager", { "includeNdefEntitlement": true }]
     ],
     "extra": {
       "router": {},

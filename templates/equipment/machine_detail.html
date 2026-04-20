@@ -132,19 +132,77 @@
             {% endif %}
           </div>
         </div>
-        <!-- NFC Tag -->
-        <div class="card border-0 shadow-sm mb-3">
-          <div class="card-header bg-white py-2 fw-semibold small"><i class="bi bi-broadcast me-1"></i>NFC Tag</div>
+        <!-- NFC Tags -->
+        <div class="card border-0 shadow-sm mb-3" id="nfc-tags">
+          <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-broadcast me-1"></i>NFC Tags</span>
+            {% set active_tags = nfc_tags | selectattr('status', 'equalto', 'active') | list %}
+            {% if active_tags %}
+              <span class="badge bg-success">{{ active_tags | length }} active</span>
+            {% else %}
+              <span class="badge bg-secondary">None assigned</span>
+            {% endif %}
+          </div>
           <div class="card-body">
-            <div class="d-flex gap-2 align-items-center">
-              <a href="{{ url_for('equipment.machine_scan', machine_id=machine.id) }}" class="btn btn-sm btn-outline-primary">
+            <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+              <a href="{{ url_for('equipment.equipment_public', machine_id=machine.id) }}" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-phone me-1"></i>Scan Page
               </a>
-              <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText('{{ url_for('equipment.machine_scan', machine_id=machine.id, _external=True) }}'); this.innerHTML='<i class=\'bi bi-check\'></i> Copied';">
-                <i class="bi bi-clipboard me-1"></i>Copy NFC URL
+              <button class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText('{{ url_for('equipment.equipment_public', machine_id=machine.id, _external=True) }}'); this.innerHTML='<i class=\'bi bi-check\'></i> Copied';">
+                <i class="bi bi-clipboard me-1"></i>Copy Tag URL
               </button>
+              {% if current_user.role in ('admin', 'supervisor') %}
+              <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addNfcTagModal">
+                <i class="bi bi-plus-lg me-1"></i>Register Tag UID
+              </button>
+              {% endif %}
             </div>
-            <div class="form-text mt-1">Write this URL to an NFC tag: <code>{{ url_for('equipment.machine_scan', machine_id=machine.id, _external=True) }}</code></div>
+            <div class="form-text mb-2">Write this URL to an NFC tag: <code>{{ url_for('equipment.equipment_public', machine_id=machine.id, _external=True) }}</code></div>
+
+            {% if nfc_tags %}
+            <hr class="my-2">
+            <div class="small fw-semibold mb-1">Assigned Tags</div>
+            <div class="table-responsive">
+              <table class="table table-sm table-borderless mb-0">
+                <thead class="small text-muted">
+                  <tr>
+                    <th>UID</th><th>Label</th><th>Status</th><th>Assigned</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for t in nfc_tags %}
+                  <tr class="small">
+                    <td><code>{{ t.uid }}</code></td>
+                    <td>{{ t.label or '—' }}</td>
+                    <td>
+                      {% if t.status == 'active' %}<span class="badge bg-success">Active</span>
+                      {% else %}<span class="badge bg-secondary">Retired</span>{% endif %}
+                    </td>
+                    <td>{{ t.assigned_at.strftime('%d/%m/%Y') if t.assigned_at else '—' }}</td>
+                    <td class="text-end">
+                      {% if current_user.role in ('admin', 'supervisor') %}
+                        {% if t.status == 'active' %}
+                        <form method="POST" action="{{ url_for('equipment.nfc_tag_retire', tag_id=t.id) }}" class="d-inline" onsubmit="return confirm('Retire this tag?')">
+                          <input type="hidden" name="back" value="{{ url_for('equipment.machine_detail', machine_id=machine.id) }}">
+                          <button class="btn btn-sm btn-outline-danger py-0"><i class="bi bi-x-circle"></i> Retire</button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('equipment.nfc_tag_reactivate', tag_id=t.id) }}" class="d-inline" onsubmit="return confirm('Reactivate this tag? Any currently active tag on this machine will be retired.')">
+                          <input type="hidden" name="back" value="{{ url_for('equipment.machine_detail', machine_id=machine.id) }}">
+                          <button class="btn btn-sm btn-outline-success py-0"><i class="bi bi-arrow-clockwise"></i> Reactivate</button>
+                        </form>
+                        {% endif %}
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <div class="small text-muted fst-italic">No NFC tag UIDs registered yet. Use the mobile app to write a tag, or click "Register Tag UID" if you know the UID.</div>
+            {% endif %}
+
             {% if machine.last_scanned_at %}
             <hr class="my-2">
             <div class="fw-semibold small mb-1"><i class="bi bi-geo-alt-fill text-primary me-1"></i>Last Known Location</div>
@@ -164,6 +222,36 @@
             {% endif %}
           </div>
         </div>
+
+        {% if current_user.role in ('admin', 'supervisor') %}
+        <!-- Register Tag UID Modal -->
+        <div class="modal fade" id="addNfcTagModal" tabindex="-1">
+          <div class="modal-dialog">
+            <form method="POST" action="{{ url_for('equipment.nfc_tag_add', machine_id=machine.id) }}" class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Register NFC Tag UID</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <p class="small text-muted">Use this if you already know the tag UID (e.g. read from another NFC reader). For unprogrammed tags, the mobile app's "Write Tag" flow is easier.</p>
+                <div class="mb-2">
+                  <label class="form-label small fw-semibold">Tag UID</label>
+                  <input type="text" name="uid" class="form-control" required placeholder="e.g. 04:AB:CD:EF:12:34:56">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small fw-semibold">Label (optional)</label>
+                  <input type="text" name="label" class="form-control" placeholder="e.g. sticker on rear panel">
+                </div>
+                <div class="alert alert-info small mb-0">If this machine already has an active tag, it will be automatically retired.</div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Register Tag</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        {% endif %}
         {% if transfers %}
         <div class="card border-0 shadow-sm mb-3 border-start border-warning border-3">
           <div class="card-header bg-white py-2 fw-semibold small">Pending Transfers</div>

@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { API_BASE_URL } from '../constants/api'
 import { useAuthStore } from '../store/auth'
-import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine, DailyChecksResponse, EquipmentChecklist, MachineDocumentInfo, MachineHoursLogEntry, TodoItem, AdminProjectTask, ScheduledCheckDetail } from '../types'
+import { User, Project, Entry, Machine, Breakdown, BreakdownDetail, MachineDetail, Document, RosterDay, LocalEntry, ProjectCosts, HiredMachine, DailyChecksResponse, EquipmentChecklist, MachineDocumentInfo, MachineHoursLogEntry, TodoItem, AdminProjectTask, ScheduledCheckDetail, NFCTagInfo } from '../types'
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -277,6 +277,18 @@ export const api = {
     // NFC scan location
     recordScanLocation: (machineId: number, data: { lat?: number; lng?: number; address?: string }) =>
       apiClient.post(`/equipment/${machineId}/scan-location`, data),
+
+    // NFC tags
+    listTags: (machineId: number) =>
+      apiClient.get<{ tags: NFCTagInfo[] }>(`/equipment/${machineId}/nfc-tags`),
+    registerTag: (machineId: number, data: { uid: string; label?: string }) =>
+      apiClient.post<{ ok: boolean; tag: NFCTagInfo; already_assigned?: boolean }>(
+        `/equipment/${machineId}/nfc-tags`, data),
+    retireTag: (tagId: number, reason?: string) =>
+      apiClient.post<{ ok: boolean; tag: NFCTagInfo }>(`/nfc-tags/${tagId}/retire`, { reason }),
+    lookupTag: (uid: string) =>
+      apiClient.get<{ found: boolean; tag?: NFCTagInfo; machine?: { id: number; name: string; plant_id?: string } }>(
+        `/nfc-tags/lookup`, { params: { uid } }),
   },
 
   tasks: {

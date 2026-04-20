@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% block title %}NFC Tags — Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0"><i class="bi bi-broadcast me-2"></i>NFC Tags</h2>
+</div>
+
+<div class="btn-group mb-3" role="group">
+  <a href="{{ url_for('equipment.nfc_tags_admin', status='all') }}"
+     class="btn btn-sm {{ 'btn-primary' if status_filter == 'all' else 'btn-outline-primary' }}">
+    All <span class="badge bg-light text-dark ms-1">{{ counts.all }}</span>
+  </a>
+  <a href="{{ url_for('equipment.nfc_tags_admin', status='active') }}"
+     class="btn btn-sm {{ 'btn-primary' if status_filter == 'active' else 'btn-outline-primary' }}">
+    Active <span class="badge bg-light text-dark ms-1">{{ counts.active }}</span>
+  </a>
+  <a href="{{ url_for('equipment.nfc_tags_admin', status='retired') }}"
+     class="btn btn-sm {{ 'btn-primary' if status_filter == 'retired' else 'btn-outline-primary' }}">
+    Retired <span class="badge bg-light text-dark ms-1">{{ counts.retired }}</span>
+  </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    {% if tags %}
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>UID</th>
+          <th>Machine</th>
+          <th>Label</th>
+          <th>Status</th>
+          <th>Assigned</th>
+          <th>Retired</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tags %}
+        <tr>
+          <td class="small"><code>{{ t.uid }}</code></td>
+          <td class="small">
+            <a href="{{ url_for('equipment.machine_detail', machine_id=t.machine_id) }}#nfc-tags">
+              {{ t.machine.name }}
+            </a>
+            {% if t.machine.plant_id %}
+              <span class="text-muted">({{ t.machine.plant_id }})</span>
+            {% endif %}
+          </td>
+          <td class="small">{{ t.label or '—' }}</td>
+          <td class="small">
+            {% if t.status == 'active' %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Retired</span>
+            {% endif %}
+          </td>
+          <td class="small">
+            {{ t.assigned_at.strftime('%d/%m/%Y') if t.assigned_at else '—' }}
+            {% if t.assigned_by_user %}
+              <br><span class="text-muted">{{ t.assigned_by_user.display_name or t.assigned_by_user.username }}</span>
+            {% endif %}
+          </td>
+          <td class="small">
+            {% if t.retired_at %}
+              {{ t.retired_at.strftime('%d/%m/%Y') }}
+              {% if t.retired_reason %}<br><span class="text-muted">{{ t.retired_reason }}</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            {% if t.status == 'active' %}
+            <form method="POST" action="{{ url_for('equipment.nfc_tag_retire', tag_id=t.id) }}" class="d-inline" onsubmit="return confirm('Retire this tag?')">
+              <input type="hidden" name="back" value="{{ url_for('equipment.nfc_tags_admin', status=status_filter) }}">
+              <button class="btn btn-sm btn-link text-danger p-0">Retire</button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('equipment.nfc_tag_reactivate', tag_id=t.id) }}" class="d-inline" onsubmit="return confirm('Reactivate this tag? Any currently active tag on this machine will be retired.')">
+              <input type="hidden" name="back" value="{{ url_for('equipment.nfc_tags_admin', status=status_filter) }}">
+              <button class="btn btn-sm btn-link text-success p-0">Reactivate</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-muted text-center py-5">
+      <i class="bi bi-broadcast fs-1 d-block mb-2"></i>
+      No NFC tags found.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
