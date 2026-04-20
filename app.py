@@ -420,8 +420,9 @@ def require_login():
         return  # JWT handles auth for all /api/* routes
     if request.path.startswith('/.well-known/'):
         return  # Apple App Site Association must be public
-    public_endpoints = {'auth.login', 'auth.logout', 'auth.no_project', 'static',
-                        'equipment.equipment_public', 'equipment.serve_public_certificate'}
+    if request.path.startswith('/e/'):
+        return  # Public equipment info page (NFC tag target)
+    public_endpoints = {'auth.login', 'auth.logout', 'auth.no_project', 'static'}
     if request.endpoint not in public_endpoints and not current_user.is_authenticated:
         return redirect(url_for('auth.login', next=request.url))
 
