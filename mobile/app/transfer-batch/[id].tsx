@@ -106,12 +106,24 @@ export default function TransferBatchScreen() {
       Alert.alert('NFC Not Available', 'This device does not support NFC.')
       return
     }
+    // Guard against concurrent calls — if a scan is already in progress,
+    // ignore this request so we don't interfere with the running session.
+    if (scanning) return
+    // Reset any stale verification from a prior scan and proactively close
+    // any existing NFC session. iOS Core NFC won't reliably start a new
+    // session if an old one is lingering after a wrong-tag alert.
+    setVerifiedUid(null)
+    try {
+      await NfcManager.cancelTechnologyRequest()
+    } catch {
+      // Ignore — nothing to cancel
+    }
     setScanning(true)
     try {
       await NfcManager.requestTechnology(NfcTech.Ndef)
       const tag = await NfcManager.getTag()
       const uid: string | undefined = tag?.id
-      NfcManager.cancelTechnologyRequest().catch(() => {})
+      try { await NfcManager.cancelTechnologyRequest() } catch {}
       setScanning(false)
       if (!uid) {
         Alert.alert('Scan Failed', 'Could not read the NFC tag.')
@@ -127,10 +139,10 @@ export default function TransferBatchScreen() {
       setVerifiedUid(uid)
       show('Tag verified. Fill in the check details.', 'success')
     } catch (e: any) {
-      NfcManager.cancelTechnologyRequest().catch(() => {})
+      try { await NfcManager.cancelTechnologyRequest() } catch {}
       setScanning(false)
       if (e?.message !== 'cancelled') {
-        Alert.alert('Scan Failed', 'Could not read the NFC tag.')
+        Alert.alert('Scan Failed', 'Could not read the NFC tag. Try again.')
       }
     }
   }
@@ -381,36 +393,8 @@ export default function TransferBatchScreen() {
         })}
       </ScrollView>
 
-      {/* NFC scan modal */}
-      <Modal visible={scanning} transparent animationType="fade"
-        onRequestClose={() => {
-          NfcManager?.cancelTechnologyRequest().catch(() => {})
-          setScanning(false)
-        }}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginTop: Spacing.md, textAlign: 'center' }}>
-              Scan the NFC tag
-            </Text>
-            <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 }}>
-              Hold your phone against the tag on {activeItem?.machine_name || 'this machine'}.
-            </Text>
-            <TouchableOpacity
-              style={[styles.modalBtn, { backgroundColor: Colors.border, marginTop: Spacing.md, alignSelf: 'center' }]}
-              onPress={() => {
-                NfcManager?.cancelTechnologyRequest().catch(() => {})
-                setScanning(false)
-              }}
-            >
-              <Text style={{ color: Colors.textPrimary }}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Form modal (shown after tag scan) */}
-      <Modal visible={!!activeItem && !scanning} transparent animationType="slide"
+      {/* Form modal — scan overlay renders inside this modal when scanning */}
+      <Modal visible={!!activeItem} transparent animationType="slide"
         onRequestClose={closeForm}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -490,23 +474,59 @@ export default function TransferBatchScreen() {
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: Colors.border }]} onPress={closeForm}>
                 <Text style={{ color: Colors.textPrimary }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, {
-                  backgroundColor: stage === 'pre_check' ? '#28a745' : '#0d6efd',
-                  opacity: submitting ? 0.6 : 1,
-                }]}
-                disabled={submitting}
-                onPress={submitCheck}
-              >
-                {submitting
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={{ color: '#fff', fontWeight: '700' }}>
-                      {stage === 'pre_check' ? 'Submit Pre-Check' : 'Submit Arrival'}
-                    </Text>}
-              </TouchableOpacity>
+              {(() => {
+                const tagRequired = !!activeItem?.active_tag_uid
+                const disabled = submitting || (tagRequired && !verifiedUid)
+                return (
+                  <TouchableOpacity
+                    style={[styles.modalBtn, {
+                      backgroundColor: stage === 'pre_check' ? '#28a745' : '#0d6efd',
+                      opacity: disabled ? 0.5 : 1,
+                    }]}
+                    disabled={disabled}
+                    onPress={submitCheck}
+                  >
+                    {submitting
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={{ color: '#fff', fontWeight: '700' }}>
+                          {tagRequired && !verifiedUid
+                            ? 'Scan tag to enable'
+                            : stage === 'pre_check' ? 'Submit Pre-Check' : 'Submit Arrival'}
+                        </Text>}
+                  </TouchableOpacity>
+                )
+              })()}
             </View>
           </ScrollView>
           </View>
+
+          {/* Scan overlay (rendered inside this same modal to avoid iOS modal stacking) */}
+          {scanning && (
+            <View style={[StyleSheet.absoluteFillObject, {
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              justifyContent: 'center', alignItems: 'center',
+              padding: Spacing.lg,
+            }]}>
+              <View style={[styles.modalCard, { alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginTop: Spacing.md, textAlign: 'center' }}>
+                  Scan the NFC tag
+                </Text>
+                <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 }}>
+                  Hold your phone against the tag on {activeItem?.machine_name || 'this machine'}.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: Colors.border, marginTop: Spacing.md }]}
+                  onPress={async () => {
+                    try { await NfcManager?.cancelTechnologyRequest() } catch {}
+                    setScanning(false)
+                  }}
+                >
+                  <Text style={{ color: Colors.textPrimary }}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </KeyboardAvoidingView>
       </Modal>
 
