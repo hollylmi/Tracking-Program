@@ -72,7 +72,14 @@
             {% if t.machine.plant_id %}<small class="text-muted ms-1">({{ t.machine.plant_id }})</small>{% endif %}
             {% if t.machine.machine_type %}<small class="text-muted ms-1">— {{ t.machine.machine_type }}</small>{% endif %}
           </div>
-          <span class="badge {% if t.status == 'completed' %}bg-success{% elif t.status == 'in_transit' %}bg-warning{% else %}bg-info{% endif %}">{{ t.status | replace('_', ' ') | title }}</span>
+          <div class="d-flex gap-2 align-items-center">
+            <span class="badge {% if t.status == 'completed' %}bg-success{% elif t.status == 'in_transit' %}bg-warning{% else %}bg-info{% endif %}">{{ t.status | replace('_', ' ') | title }}</span>
+            {% if current_user.role == 'admin' and batch.status == 'scheduled' and not t.pre_check_id and not t.arrival_check_id %}
+            <form method="POST" action="{{ url_for('equipment.transfer_item_delete', batch_id=batch.id, transfer_id=t.id) }}" class="d-inline" onsubmit="return confirm('Remove {{ t.machine.name }} from this transfer?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0" title="Remove from transfer"><i class="bi bi-x-lg"></i></button>
+            </form>
+            {% endif %}
+          </div>
         </div>
 
         <div class="row g-2">
@@ -141,6 +148,23 @@
       </div>
     </div>
     {% endfor %}
+
+    {% if current_user.role == 'admin' and batch.status == 'scheduled' and candidate_machines %}
+    <div class="card border-0 shadow-sm mt-3 border-start border-success border-3">
+      <div class="card-body py-2">
+        <form method="POST" action="{{ url_for('equipment.transfer_item_add', batch_id=batch.id) }}" class="d-flex gap-2 align-items-center">
+          <label class="small fw-semibold text-muted mb-0" style="white-space:nowrap;"><i class="bi bi-plus-circle me-1"></i>Add Machine:</label>
+          <select name="machine_id" class="form-select form-select-sm" required style="max-width:260px;">
+            <option value="">— select machine —</option>
+            {% for m in candidate_machines %}
+            <option value="{{ m.id }}">{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-plus"></i> Add</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Sidebar -->

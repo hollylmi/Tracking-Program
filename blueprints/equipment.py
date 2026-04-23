@@ -586,7 +586,7 @@ def checklist_delete(checklist_id):
 # ---------------------------------------------------------------------------
 
 @equipment_bp.route('/equipment/transfer/schedule', methods=['POST'])
-@require_role('admin', 'supervisor')
+@require_role('admin')
 def transfer_schedule():
     """Schedule a transfer batch — one or more machines between projects."""
     from_project_id = request.form.get('from_project_id', type=int)
@@ -696,8 +696,131 @@ def transfer_update(transfer_id):
     return redirect(request.referrer or url_for('equipment.operations_dashboard'))
 
 
+@equipment_bp.route('/equipment/transfer-batch/<int:batch_id>/edit', methods=['POST'])
+@require_role('admin')
+def transfer_batch_edit(batch_id):
+    """Edit the scheduling/location/notes fields on a transfer batch.
+    Only permitted while status is 'scheduled' — once anything has been
+    pre-checked or is in transit, changes go through other flows."""
+    batch = TransferBatch.query.get_or_404(batch_id)
+    if batch.status != 'scheduled':
+        flash('This batch can no longer be edited — it is already in transit or completed.', 'warning')
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch.id))
+
+    # Scheduled date
+    scheduled_date_str = request.form.get('scheduled_date', '').strip()
+    if scheduled_date_str:
+        try:
+            batch.scheduled_date = datetime.strptime(scheduled_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    batch.pickup_location = (request.form.get('pickup_location') or '').strip() or None
+    batch.dropoff_location = (request.form.get('dropoff_location') or '').strip() or None
+    batch.travel_notes = (request.form.get('travel_notes') or '').strip() or None
+    batch.transport_contact = (request.form.get('transport_contact') or '').strip() or None
+
+    pre_check_user_id = request.form.get('pre_check_user_id', type=int)
+    batch.pre_check_user_id = pre_check_user_id or None
+    arrival_user_id = request.form.get('arrival_user_id', type=int)
+    batch.arrival_user_id = arrival_user_id or None
+    transport_user_ids = request.form.getlist('transport_user_ids')
+    batch.transport_user_ids = ','.join(transport_user_ids) if transport_user_ids else None
+
+    # Cascade updated date/locations to child items
+    for item in batch.items:
+        item.scheduled_date = batch.scheduled_date
+        item.travel_notes = batch.travel_notes
+        item.transport_contact = batch.transport_contact
+
+    db.session.commit()
+    flash('Transfer batch updated.', 'success')
+    return redirect(request.referrer or url_for('equipment.operations_dashboard'))
+
+
+@equipment_bp.route('/equipment/transfer-batch/<int:batch_id>/delete', methods=['POST'])
+@require_role('admin')
+def transfer_batch_delete(batch_id):
+    """Delete a transfer batch — only permitted while scheduled (no check work done)."""
+    batch = TransferBatch.query.get_or_404(batch_id)
+    # Refuse if anything has been pre-checked or completed
+    if batch.status != 'scheduled' or any(i.pre_check_id or i.arrival_check_id for i in batch.items):
+        flash('Cannot delete — this batch already has check activity. Cancel it instead.', 'warning')
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch.id))
+    db.session.delete(batch)  # cascade deletes items
+    db.session.commit()
+    flash('Transfer batch deleted.', 'success')
+    return redirect(url_for('equipment.operations_dashboard'))
+
+
+@equipment_bp.route('/equipment/transfer-batch/<int:batch_id>/item/<int:transfer_id>/delete', methods=['POST'])
+@require_role('admin')
+def transfer_item_delete(batch_id, transfer_id):
+    """Remove a single machine from a batch (only if not yet pre-checked)."""
+    item = MachineTransfer.query.get_or_404(transfer_id)
+    if item.batch_id != batch_id:
+        flash('Item does not belong to this batch.', 'danger')
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch_id))
+    if item.pre_check_id or item.arrival_check_id or item.status != 'scheduled':
+        flash('Cannot remove — this item already has check activity.', 'warning')
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch_id))
+    db.session.delete(item)
+    db.session.commit()
+    flash('Machine removed from transfer.', 'success')
+    return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch_id))
+
+
+@equipment_bp.route('/equipment/transfer-batch/<int:batch_id>/item/add', methods=['POST'])
+@require_role('admin')
+def transfer_item_add(batch_id):
+    """Add another machine to an existing scheduled batch."""
+    batch = TransferBatch.query.get_or_404(batch_id)
+    if batch.status != 'scheduled':
+        flash('Cannot add machines — batch is already in transit or completed.', 'warning')
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch.id))
+    machine_id = request.form.get('machine_id', type=int)
+    if not machine_id:
+        flash('Select a machine to add.', 'danger')
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch.id))
+    # Avoid duplicates within the same batch
+    if any(i.machine_id == machine_id for i in batch.items):
+        flash('That machine is already on this transfer.', 'info')
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch.id))
+    db.session.add(MachineTransfer(
+        batch_id=batch.id,
+        machine_id=machine_id,
+        from_project_id=batch.from_project_id,
+        to_project_id=batch.to_project_id,
+        scheduled_date=batch.scheduled_date,
+        travel_notes=batch.travel_notes,
+        transport_contact=batch.transport_contact,
+        status='scheduled',
+        created_by=current_user.display_name or current_user.username,
+    ))
+    db.session.commit()
+    flash('Machine added to transfer.', 'success')
+    return redirect(url_for('equipment.transfer_batch_detail', batch_id=batch.id))
+
+
+@equipment_bp.route('/equipment/transfer/<int:transfer_id>/delete', methods=['POST'])
+@require_role('admin')
+def transfer_delete(transfer_id):
+    """Delete a standalone (non-batched) transfer — only if nothing has been checked."""
+    transfer = MachineTransfer.query.get_or_404(transfer_id)
+    if transfer.batch_id:
+        flash('Use the batch editor for this transfer.', 'warning')
+        return redirect(url_for('equipment.transfer_batch_detail', batch_id=transfer.batch_id))
+    if transfer.pre_check_id or transfer.arrival_check_id or transfer.status != 'scheduled':
+        flash('Cannot delete — this transfer already has check activity.', 'warning')
+        return redirect(request.referrer or url_for('equipment.operations_dashboard'))
+    db.session.delete(transfer)
+    db.session.commit()
+    flash('Transfer deleted.', 'success')
+    return redirect(request.referrer or url_for('equipment.operations_dashboard'))
+
+
 @equipment_bp.route('/equipment/transfer/<int:transfer_id>/pre-check', methods=['POST'])
-@require_role('admin', 'supervisor', 'site')
+@require_role('admin', 'supervisor')
 def transfer_pre_check(transfer_id):
     """Record pre-move check before transport."""
     transfer = MachineTransfer.query.get_or_404(transfer_id)
@@ -771,7 +894,7 @@ def transfer_pre_check(transfer_id):
 
 
 @equipment_bp.route('/equipment/transfer/<int:transfer_id>/arrive', methods=['POST'])
-@require_role('admin', 'supervisor', 'site')
+@require_role('admin', 'supervisor')
 def transfer_arrive(transfer_id):
     """Mark machine as arrived at destination and record arrival check."""
     transfer = MachineTransfer.query.get_or_404(transfer_id)
@@ -892,10 +1015,18 @@ def transfer_batch_detail(batch_id):
     # Check if arrival checks are available (in transit)
     arrival_window = batch.status == 'in_transit'
 
+    # Machines not already on this batch (for the "Add Machine" dropdown)
+    existing_ids = {item.machine_id for item in batch.items}
+    candidate_machines = Machine.query.filter(
+        Machine.active == True,
+        ~Machine.id.in_(existing_ids) if existing_ids else True,
+    ).order_by(Machine.name).all()
+
     return render_template('equipment/transfer_batch_detail.html',
                            batch=batch, users=users, transport_users=transport_users,
                            pre_check_window=pre_check_window, arrival_window=arrival_window,
-                           today=date.today())
+                           today=date.today(),
+                           candidate_machines=candidate_machines)
 
 
 # ---------------------------------------------------------------------------
