@@ -3609,57 +3609,48 @@ def my_todos():
     # Transfer todos
     # Rules:
     # • Anyone explicitly assigned as pre_check_user / arrival_user always sees
-    #   the transfer in their todos (any role, any date, any status other than
-    #   completed/cancelled) — they need to know they've been assigned.
-    # • Supervisors on the source project see outgoing transfers near departure.
-    # • Supervisors on the destination project see incoming transfers.
-    # • Admins additionally see every active transfer for visibility.
+    #   the transfer in their todos.
+    # • Anyone with access to the destination project sees incoming transfers
+    #   once at least one item is moving.
+    # • Anyone with access to the source project sees outgoing transfers
+    #   within a day of departure.
+    # • Admins have access to all active projects so they see everything.
     from models import TransferBatch
     accessible_pids = _accessible_ids(user)
     is_admin = accessible_pids is None
-    site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
-                      if (not is_admin and accessible_pids) else db.false())
-    site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
-                        if (not is_admin and accessible_pids) else db.false())
+    # For admins, include all active projects in the site filter
+    if is_admin:
+        all_project_ids = {p.id for p in Project.query.filter_by(active=True).all()}
+        site_filter_to = TransferBatch.to_project_id.in_(all_project_ids) if all_project_ids else db.false()
+        site_filter_from = TransferBatch.from_project_id.in_(all_project_ids) if all_project_ids else db.false()
+    else:
+        site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
+                          if accessible_pids else db.false())
+        site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
+                            if accessible_pids else db.false())
 
     # ── Incoming transfers (destination side) ────────────────────────────
-    # Supervisors on the destination project see inbound transfers any time
-    # at least one item has been pre-checked (actually moving). Assigned
-    # arrival users see theirs regardless of progress.
-    incoming_conditions = [
-        TransferBatch.arrival_user_id == user.id,   # explicitly assigned
-    ]
-    if is_admin:
-        incoming_conditions.append(db.true())
-    else:
-        incoming_conditions.append(site_filter_to)
     incoming_all = TransferBatch.query.filter(
         TransferBatch.status.in_(('scheduled', 'in_transit')),
-        db.or_(*incoming_conditions),
+        db.or_(TransferBatch.arrival_user_id == user.id, site_filter_to),
     ).all()
-    # Filter: destination-side supervisors only see it once at least one item
+    # Filter: site-based users only see it once at least one item
     # is pre-checked (things are physically moving). Assigned users see always.
     incoming = []
     for b in incoming_all:
         any_moving = any(i.pre_check_id and not i.arrival_check_id for i in b.items)
-        if b.arrival_user_id == user.id or is_admin:
+        if b.arrival_user_id == user.id:
             incoming.append(b)
         elif any_moving:
             incoming.append(b)
 
     # ── Outgoing transfers (source side) ─────────────────────────────────
-    outgoing_conditions = [
-        TransferBatch.pre_check_user_id == user.id,  # explicitly assigned
-    ]
-    if is_admin:
-        outgoing_conditions.append(db.true())
-    else:
-        outgoing_conditions.append(db.and_(
-            site_filter_from, TransferBatch.scheduled_date <= today_date + timedelta(days=1)
-        ))
     outgoing = TransferBatch.query.filter(
         TransferBatch.status == 'scheduled',
-        db.or_(*outgoing_conditions),
+        db.or_(
+            TransferBatch.pre_check_user_id == user.id,
+            db.and_(site_filter_from, TransferBatch.scheduled_date <= today_date + timedelta(days=1)),
+        ),
     ).all()
 
     # Deduplicate — same batch may match both queries for the same user
