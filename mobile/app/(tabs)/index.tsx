@@ -76,6 +76,11 @@ function MyTodosSection() {
             if (todo.task_type === 'daily_entry') router.push('/entry/new')
             else if (todo.task_type === 'machine_startup') router.push('/(tabs)/equipment')
             else if (todo.task_type === 'scheduled_check' && todo.check_id) router.push({ pathname: '/scheduled-check/[id]', params: { id: todo.check_id } })
+            else if ((todo.task_type === 'incoming_transfer' || todo.task_type === 'pre_check_transfer') && todo.batch_id) {
+              // For now, the transfer batch detail page lives only on the web.
+              // Mobile users see the todo + counts; tapping it is a no-op until
+              // we build a mobile transfer batch screen.
+            }
           }}
           activeOpacity={todo.completed ? 1 : 0.7}
           style={{
@@ -101,6 +106,11 @@ function MyTodosSection() {
           {todo.progress && !todo.completed && (
             <Text style={{ ...Typography.caption, color: Colors.warning, fontWeight: '700' }}>
               {todo.progress.done}/{todo.progress.total}
+            </Text>
+          )}
+          {(todo.task_type === 'incoming_transfer' || todo.task_type === 'pre_check_transfer') && todo.total && !todo.completed && (
+            <Text style={{ ...Typography.caption, color: Colors.warning, fontWeight: '700' }}>
+              {todo.done || 0}/{todo.total}
             </Text>
           )}
           {!todo.completed && <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />}

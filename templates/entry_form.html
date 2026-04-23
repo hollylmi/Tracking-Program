@@ -641,18 +641,24 @@
 
           <div class="checkbox-scroll-list" id="machineList">
             {% for machine in machines %}
-            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2"
+            {% set lockout = transfer_lockout.get(machine.id) if transfer_lockout is defined else None %}
+            <label class="checkbox-item d-flex align-items-center gap-2 px-3 py-2 {% if lockout %}bg-warning-subtle{% endif %}"
                    data-machine-id="{{ machine.id }}"
                    data-machine-name="{{ machine.name|lower }}{% if machine.plant_id %} {{ machine.plant_id|lower }}{% endif %}{% if machine.machine_type %} {{ machine.machine_type|lower }}{% endif %}{% if machine.group %} {{ machine.group.name|lower }}{% endif %}"
-                   data-project-ids="{{ machine_project_map.get(machine.id, [])|tojson if machine_project_map is defined else '[]' }}">
+                   data-project-ids="{{ machine_project_map.get(machine.id, [])|tojson if machine_project_map is defined else '[]' }}"
+                   {% if lockout %}title="In transit to {{ lockout.to_project }} — not available for daily entries"{% endif %}>
               <input type="checkbox" name="machine_ids" value="{{ machine.id }}"
                      class="form-check-input machine-check mt-0"
-                     {% if selected_machine_ids is defined and machine.id in selected_machine_ids %}checked{% endif %}>
-              <span>
+                     {% if selected_machine_ids is defined and machine.id in selected_machine_ids %}checked{% endif %}
+                     {% if lockout %}disabled{% endif %}>
+              <span {% if lockout %}class="text-muted"{% endif %}>
                 {{ machine.name }}{% if machine.plant_id %} <small class="text-muted">({{ machine.plant_id }})</small>{% endif %}
                 {% if machine.group %}<span class="badge bg-info-subtle text-info border border-info-subtle ms-1" style="font-size:.6rem;">{{ machine.group.name }}</span>{% endif %}
                 {% if machine.machine_type %}
                   <small class="text-muted ms-1">— {{ machine.machine_type }}</small>
+                {% endif %}
+                {% if lockout %}
+                  <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;"><i class="bi bi-truck me-1"></i>In transit → {{ lockout.to_project }}</span>
                 {% endif %}
               </span>
             </label>

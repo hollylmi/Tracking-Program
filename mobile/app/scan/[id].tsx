@@ -238,11 +238,60 @@ export default function ScanLandingScreen() {
           </View>
         )}
 
+        {/* Pending transfer banner */}
+        {machine.pending_transfer && (
+          <View style={[
+            styles.alertDanger,
+            {
+              backgroundColor: machine.pending_transfer.status === 'in_transit' ? '#fff3cd' : '#cff4fc',
+              borderColor: machine.pending_transfer.status === 'in_transit' ? '#ffe69c' : '#b6effb',
+            },
+          ]}>
+            <Ionicons
+              name={machine.pending_transfer.status === 'in_transit' ? 'truck' as any : 'calendar-outline'}
+              size={18}
+              color={machine.pending_transfer.status === 'in_transit' ? '#664d03' : '#055160'}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={{
+                ...Typography.bodySmall, fontWeight: '700',
+                color: machine.pending_transfer.status === 'in_transit' ? '#664d03' : '#055160',
+              }}>
+                {machine.pending_transfer.status === 'in_transit'
+                  ? 'In Transit'
+                  : 'Transfer Scheduled'}
+              </Text>
+              <Text style={{
+                ...Typography.caption,
+                color: machine.pending_transfer.status === 'in_transit' ? '#664d03' : '#055160',
+              }} numberOfLines={3}>
+                {machine.pending_transfer.status === 'in_transit'
+                  ? `Arriving at ${machine.pending_transfer.to_project} — daily checks locked until arrival scan.`
+                  : `Moving to ${machine.pending_transfer.to_project} on ${machine.pending_transfer.scheduled_date}.`}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Action grid */}
         <View style={styles.grid}>
           <TouchableOpacity
-            style={[styles.actionBtn, { borderColor: '#28a745', backgroundColor: panel === 'check' ? 'rgba(40,167,69,0.12)' : '#fff' }]}
-            onPress={() => setPanel(panel === 'check' ? null : 'check')}
+            style={[
+              styles.actionBtn,
+              { borderColor: '#28a745', backgroundColor: panel === 'check' ? 'rgba(40,167,69,0.12)' : '#fff' },
+              machine.pending_transfer?.status === 'in_transit' && { opacity: 0.4 },
+            ]}
+            disabled={machine.pending_transfer?.status === 'in_transit'}
+            onPress={() => {
+              if (machine.pending_transfer?.status === 'in_transit') {
+                Alert.alert(
+                  'Locked — In Transit',
+                  `This machine is being transferred to ${machine.pending_transfer.to_project}. Complete the arrival scan first.`,
+                )
+                return
+              }
+              setPanel(panel === 'check' ? null : 'check')
+            }}
           >
             <Ionicons name="checkmark-circle-outline" size={28} color="#28a745" />
             <Text style={[styles.actionText, { color: '#28a745' }]}>Pre-Start Check</Text>

@@ -17,3 +17,33 @@ def get_active_project_id():
     if current_user.role == 'admin':
         return None
     return session.get('active_project_id')
+
+
+def in_transit_machine_ids():
+    """Return a set of own-fleet Machine IDs that are currently in transit
+    (pre-check done, arrival check not done) and therefore locked from daily
+    entries + pre-start checks until they arrive at their destination site."""
+    from models import MachineTransfer
+    rows = MachineTransfer.query.filter(
+        MachineTransfer.status == 'in_transit',
+    ).with_entities(MachineTransfer.machine_id).all()
+    return {mid for (mid,) in rows if mid}
+
+
+def in_transit_info():
+    """Return dict mapping machine_id → {to_project_name, scheduled_date} for
+    all in-transit machines, so the UI can show helpful lockout messages."""
+    from models import MachineTransfer, Project
+    info = {}
+    rows = MachineTransfer.query.filter(
+        MachineTransfer.status == 'in_transit',
+    ).all()
+    for t in rows:
+        if t.machine_id:
+            info[t.machine_id] = {
+                'to_project': t.to_project.name if t.to_project else '—',
+                'scheduled_date': t.scheduled_date,
+                'transfer_id': t.id,
+                'batch_id': t.batch_id,
+            }
+    return info

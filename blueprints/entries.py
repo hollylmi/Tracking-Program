@@ -77,6 +77,9 @@ def new_entry():
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
     hired_machines = HiredMachine.query.filter_by(active=True).order_by(HiredMachine.machine_name).all()
+    # Locked-from-use machines (currently in transit between sites)
+    from utils.helpers import in_transit_info
+    transfer_lockout = in_transit_info()
     machine_groups = MachineGroup.query.filter_by(active=True).order_by(MachineGroup.name).all()
 
     if request.method == 'POST':
@@ -157,6 +160,11 @@ def new_entry():
         )
         employee_ids = request.form.getlist('employee_ids')
         machine_ids = request.form.getlist('machine_ids')
+        # Server-side defence: drop in-transit machines from the list so they can't
+        # be snuck in via crafted requests or stale pages.
+        from utils.helpers import in_transit_machine_ids as _in_transit_ids
+        _locked = _in_transit_ids()
+        machine_ids = [m for m in machine_ids if int(m) not in _locked]
         if employee_ids:
             entry.employees = Employee.query.filter(Employee.id.in_(employee_ids)).all()
         if machine_ids:
@@ -294,6 +302,7 @@ def new_entry():
                            machine_groups=machine_groups,
                            machine_project_map=machine_project_map,
                            site_rate_items=site_rate_items,
+                           transfer_lockout=transfer_lockout,
                            standdown_machine_ids=[], today=date.today())
 
 
@@ -308,6 +317,9 @@ def edit_entry(entry_id):
     employees = Employee.query.filter_by(active=True).order_by(Employee.name).all()
     machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
     hired_machines = HiredMachine.query.filter_by(active=True).order_by(HiredMachine.machine_name).all()
+    # Locked-from-use machines (currently in transit between sites)
+    from utils.helpers import in_transit_info
+    transfer_lockout = in_transit_info()
     machine_groups = MachineGroup.query.filter_by(active=True).order_by(MachineGroup.name).all()
 
     if request.method == 'POST':
@@ -450,6 +462,14 @@ def edit_entry(entry_id):
 
         employee_ids = request.form.getlist('employee_ids')
         machine_ids = request.form.getlist('machine_ids')
+        # Drop in-transit machines — locked out until arrival check
+        from utils.helpers import in_transit_machine_ids as _in_transit_ids
+        _locked = _in_transit_ids()
+        # Preserve existing selections that are already locked (can happen if
+        # machine goes in-transit AFTER being added to an entry); only refuse
+        # NEW in-transit selections.
+        _existing_ids = {m.id for m in entry.machines}
+        machine_ids = [m for m in machine_ids if int(m) in _existing_ids or int(m) not in _locked]
         entry.employees = Employee.query.filter(Employee.id.in_(employee_ids)).all() if employee_ids else []
         entry.machines = Machine.query.filter(Machine.id.in_(machine_ids)).all() if machine_ids else []
         entry.updated_at = datetime.utcnow()
@@ -504,12 +524,15 @@ def edit_entry(entry_id):
         machine_project_map[pm.machine_id].append(pm.project_id)
 
     site_rate_items = load_settings().get('site_rate_items', []) if current_user.role == 'admin' else []
+    from utils.helpers import in_transit_info
+    transfer_lockout = in_transit_info()
     return render_template('entry_form.html', entry=entry, projects=projects,
                            employees=employees, machines=machines,
                            hired_machines=hired_machines,
                            machine_groups=machine_groups,
                            machine_project_map=machine_project_map,
                            site_rate_items=site_rate_items,
+                           transfer_lockout=transfer_lockout,
                            standdown_machine_ids=existing_sd_ids,
                            selected_employee_ids=[e.id for e in entry.employees],
                            selected_machine_ids=[m.id for m in entry.machines],

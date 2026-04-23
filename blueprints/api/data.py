@@ -3132,6 +3132,11 @@ def equipment_daily_check_submit_api():
     if not _has_project_access(user, project_id, allowed):
         return {'error': 'Access denied'}, 403
 
+    # Block pre-start checks on in-transit equipment
+    from utils.helpers import in_transit_machine_ids
+    if machine_id and machine_id in in_transit_machine_ids():
+        return {'error': 'Machine is in transit — complete arrival check first'}, 409
+
     today_date = date.today()
 
     # Check if a check already exists for this machine/project/date — update instead of insert
@@ -3570,6 +3575,62 @@ def my_todos():
             'completed': already_done,
             'check_id': sc.id,
             'machine_count': len(sc.machines),
+        })
+
+    # Transfer todos — pre-check (outgoing from user's project) + arrival (incoming)
+    from models import TransferBatch
+    accessible_pids = _accessible_ids(user)
+    is_admin = accessible_pids is None
+    site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
+                      if (not is_admin and accessible_pids) else db.false())
+    site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
+                        if (not is_admin and accessible_pids) else db.false())
+
+    if is_admin:
+        # Admins see all transfers
+        incoming = TransferBatch.query.filter(TransferBatch.status == 'in_transit').all()
+    else:
+        incoming = TransferBatch.query.filter(
+            TransferBatch.status == 'in_transit',
+            db.or_(TransferBatch.arrival_user_id == user.id, site_filter_to),
+        ).all()
+    for batch in incoming:
+        arrived = sum(1 for t in batch.items if t.arrival_check_id)
+        total = len(batch.items)
+        todos.append({
+            'project_id': batch.to_project_id,
+            'project_name': batch.to_project.name if batch.to_project else None,
+            'task_type': 'incoming_transfer',
+            'label': f'Incoming transfer — {total} machine{"s" if total != 1 else ""}',
+            'completed': arrived >= total,
+            'done': arrived,
+            'total': total,
+            'batch_id': batch.id,
+        })
+
+    if is_admin:
+        outgoing = TransferBatch.query.filter(
+            TransferBatch.status == 'scheduled',
+            TransferBatch.scheduled_date <= today_date + timedelta(days=1),
+        ).all()
+    else:
+        outgoing = TransferBatch.query.filter(
+            TransferBatch.status == 'scheduled',
+            TransferBatch.scheduled_date <= today_date + timedelta(days=1),
+            db.or_(TransferBatch.pre_check_user_id == user.id, site_filter_from),
+        ).all()
+    for batch in outgoing:
+        checked = sum(1 for t in batch.items if t.pre_check_id)
+        total = len(batch.items)
+        todos.append({
+            'project_id': batch.from_project_id,
+            'project_name': batch.from_project.name if batch.from_project else None,
+            'task_type': 'pre_check_transfer',
+            'label': f'Pre-move check — {total} machine{"s" if total != 1 else ""} leaving',
+            'completed': checked >= total,
+            'done': checked,
+            'total': total,
+            'batch_id': batch.id,
         })
 
     return {'date': today_date.isoformat(), 'todos': todos}, 200

@@ -68,15 +68,31 @@
   {% endif %}
 
   {% if pending_transfers %}
-  <div class="info-card border-info">
-    <div class="fw-bold text-info small mb-1"><i class="bi bi-arrow-left-right me-1"></i>Pending Transfer</div>
-    {% for t in pending_transfers %}
-    <div class="alert-item">
-      <span class="badge bg-info">{{ t.status|title }}</span>
-      <span class="small">To {{ t.to_project.name if t.to_project else '?' }}{% if t.scheduled_date %} — {{ t.scheduled_date.strftime('%d/%m/%Y') }}{% endif %}</span>
+  {% for t in pending_transfers %}
+  <div class="info-card border-{{ 'warning' if t.status == 'in_transit' else 'info' }}">
+    <div class="fw-bold text-{{ 'warning' if t.status == 'in_transit' else 'info' }} small mb-1">
+      <i class="bi bi-{{ 'truck' if t.status == 'in_transit' else 'calendar-event' }} me-1"></i>
+      {% if t.status == 'in_transit' %}In Transit — Arrival Pending{% else %}Transfer Scheduled{% endif %}
     </div>
-    {% endfor %}
+    <div class="small mb-2">
+      {% if t.status == 'in_transit' %}
+        Arriving at <strong>{{ t.to_project.name if t.to_project else '?' }}</strong> —
+        daily checks and entries are locked until the arrival scan is done.
+      {% else %}
+        Moving from <strong>{{ t.from_project.name if t.from_project else '?' }}</strong>
+        to <strong>{{ t.to_project.name if t.to_project else '?' }}</strong>
+        {% if t.scheduled_date %}on {{ t.scheduled_date.strftime('%d/%m/%Y') }}{% endif %}.
+      {% endif %}
+    </div>
+    {% if current_user.role in ('admin', 'supervisor') %}
+    <a href="{{ url_for('equipment.transfer_batch_detail', batch_id=t.batch_id) if t.batch_id else url_for('equipment.transfer_detail', transfer_id=t.id) }}"
+       class="btn btn-sm btn-outline-{{ 'warning' if t.status == 'in_transit' else 'info' }} w-100">
+      <i class="bi bi-arrow-right-circle me-1"></i>
+      {% if t.status == 'in_transit' %}Open Arrival Check{% else %}Open Pre-Check{% endif %}
+    </a>
+    {% endif %}
   </div>
+  {% endfor %}
   {% endif %}
 
   {% if machine.next_inspection_date %}
@@ -94,9 +110,12 @@
   {% endif %}
   {% endif %}
 
+  {% set _in_transit = pending_transfers | selectattr('status', 'equalto', 'in_transit') | list | length > 0 %}
+
   <!-- Quick Actions -->
   <div class="action-grid">
-    <button class="action-btn action-prestart" onclick="togglePanel('checkSection', this)">
+    <button class="action-btn action-prestart" onclick="togglePanel('checkSection', this)"
+      {% if _in_transit %}disabled style="opacity:0.45; cursor:not-allowed;" title="Locked — arrival scan pending"{% endif %}>
       <i class="bi bi-check-circle text-success"></i>
       Pre-Start Check
     </button>

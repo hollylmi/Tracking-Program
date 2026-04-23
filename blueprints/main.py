@@ -151,10 +151,14 @@ def index():
                 'machine_count': len(sc.machines),
             })
 
-        # Incoming transfers (assigned as arrival check person)
+        # Incoming transfers — show to assigned arrival user AND any supervisor
+        # on the destination project
+        accessible_pids = {p.id for p in (current_user.accessible_projects() or [])}
+        site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
+                          if accessible_pids else db.false())
         incoming_transfers = TransferBatch.query.filter(
-            TransferBatch.arrival_user_id == current_user.id,
             TransferBatch.status == 'in_transit',
+            db.or_(TransferBatch.arrival_user_id == current_user.id, site_filter_to),
         ).all()
         for batch in incoming_transfers:
             arrived_count = sum(1 for t in batch.items if t.arrival_check_id)
@@ -169,11 +173,14 @@ def index():
                 'batch_id': batch.id,
             })
 
-        # Pre-move checks (assigned as pre-check person)
+        # Pre-move checks — show to assigned pre-check user AND any supervisor
+        # on the source project
+        site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
+                            if accessible_pids else db.false())
         outgoing_transfers = TransferBatch.query.filter(
-            TransferBatch.pre_check_user_id == current_user.id,
             TransferBatch.status == 'scheduled',
             TransferBatch.scheduled_date <= today + timedelta(days=1),
+            db.or_(TransferBatch.pre_check_user_id == current_user.id, site_filter_from),
         ).all()
         for batch in outgoing_transfers:
             checked_count = sum(1 for t in batch.items if t.pre_check_id)

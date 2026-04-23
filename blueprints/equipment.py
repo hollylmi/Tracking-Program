@@ -1045,6 +1045,13 @@ def daily_check_submit():
     hours_str = request.form.get('hours_reading', '').strip()
     hours_reading = float(hours_str) if hours_str else None
 
+    # Block pre-start checks on in-transit equipment — they must complete the
+    # transfer arrival check first at the destination site.
+    from utils.helpers import in_transit_machine_ids
+    if machine_id and machine_id in in_transit_machine_ids():
+        flash('This machine is in transit. Complete the arrival check first before running a daily check.', 'warning')
+        return redirect(request.referrer or url_for('equipment.equipment_overview'))
+
     # Auto-detect project from machine assignment if not provided
     if not project_id and machine_id:
         pm = ProjectMachine.query.filter_by(machine_id=machine_id).first()
