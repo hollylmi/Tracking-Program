@@ -301,8 +301,9 @@
             {% endfor %}
             {% set projs = own_machine_projects.get(m.id, []) %}
             {% set proj_ids = [] %}
-            {% for p_tuple in projs %}{% if p_tuple[0] %}{% set _ = proj_ids.append(p_tuple[0].id) %}{% endif %}{% endfor %}
+            {% for p_tuple in projs %}{% if p_tuple[0] %}{% set _ = proj_ids.append(p_tuple[0].id | string) %}{% endif %}{% endfor %}
             {% set row_proj = machine_assigned_project.get(m.id) %}
+            {% if row_proj %}{% set _ = proj_ids.append(row_proj.id | string) %}{% endif %}
             {% set row_colours = project_colour_map.get(row_proj.id) if row_proj else None %}
             <tr class="fleet-row {{ 'table-danger' if bd else ('table-secondary opacity-75' if not m.active else '') }}"
                 {% if row_colours and not bd and m.active %}style="border-left: 4px solid {{ row_colours[1] }};"{% endif %}
