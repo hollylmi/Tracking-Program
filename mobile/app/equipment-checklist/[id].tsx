@@ -33,10 +33,10 @@ const CONDITION_OPTIONS: { value: string; label: string; color: string; bg: stri
   { value: 'broken_down', label: 'Broken Down', color: Colors.error, bg: 'rgba(198,40,40,0.15)' },
 ]
 
+import { formatDate as fmtDateAU } from '../../lib/dates'
+
 function formatDate(d: string | null) {
-  if (!d) return '—'
-  const dt = new Date(d + 'T00:00:00')
-  return dt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+  return fmtDateAU(d, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function ChecklistItemCard({

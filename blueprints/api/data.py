@@ -19,7 +19,7 @@ from models import (
     MachineDocument, MachineHoursLog, ProjectDailyTaskAssignment,
     ScheduledEquipmentCheck, ScheduledCheckCompletion,
     FlightBooking, AccommodationBooking, AccommodationProperty, AccommodationDocument,
-    NFCTag,
+    NFCTag, MachineDailyCheckPhoto, MachineScanEvent,
 )
 from utils.files import allowed_photo
 import storage
@@ -973,6 +973,45 @@ def get_equipment():
             for m in machines
         ]
     }, 200
+
+
+@api_data_bp.route('/equipment', methods=['POST'])
+@jwt_required()
+def create_equipment():
+    """Create a new machine from the mobile app. Admin + supervisor only."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role not in ('admin', 'supervisor'):
+        return {'error': 'Forbidden'}, 403
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return {'error': 'Name is required'}, 400
+
+    machine = Machine(
+        name=name,
+        plant_id=(data.get('plant_id') or '').strip() or None,
+        machine_type=(data.get('machine_type') or '').strip() or None,
+        manufacturer=(data.get('manufacturer') or '').strip() or None,
+        model_number=(data.get('model_number') or '').strip() or None,
+        serial_number=(data.get('serial_number') or '').strip() or None,
+        description=(data.get('description') or '').strip() or None,
+        active=True,
+    )
+    db.session.add(machine)
+    db.session.commit()
+
+    return {
+        'id': machine.id,
+        'name': machine.name,
+        'plant_id': machine.plant_id,
+        'machine_type': machine.machine_type,
+        'manufacturer': machine.manufacturer,
+        'model_number': machine.model_number,
+        'serial_number': machine.serial_number,
+    }, 201
 
 
 @api_data_bp.route('/equipment/breakdowns', methods=['GET'])
@@ -3023,6 +3062,7 @@ def equipment_project_daily_checks(project_id):
                 'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
                 'checked_at': (getattr(dc, 'checked_at', None).isoformat() + 'Z') if getattr(dc, 'checked_at', None) else (dc.created_at.isoformat() + 'Z') if dc.created_at else None,
                 'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
+                'extra_photo_urls': [f'/api/equipment/daily-check-photo/{p.filename}' for p in (dc.extra_photos or [])],
             } if dc else None,
         })
 
@@ -3045,6 +3085,7 @@ def equipment_project_daily_checks(project_id):
                 'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
                 'checked_at': (getattr(dc, 'checked_at', None).isoformat() + 'Z') if getattr(dc, 'checked_at', None) else (dc.created_at.isoformat() + 'Z') if dc.created_at else None,
                 'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
+                'extra_photo_urls': [f'/api/equipment/daily-check-photo/{p.filename}' for p in (dc.extra_photos or [])],
             } if dc else None,
         })
 
@@ -3129,14 +3170,39 @@ def equipment_daily_check_submit_api():
         except Exception:
             pass
 
-    photo = request.files.get('photo')
-    if photo and photo.filename:
-        ext = os.path.splitext(photo.filename)[1].lower()
+    # Photos: support both legacy single "photo" field and new multi "photos" field.
+    # First photo (legacy or first of the multi batch) stays on MachineDailyCheck for
+    # backward compatibility; any extras become MachineDailyCheckPhoto rows. Capped at 10.
+    pending_photos = []
+    legacy_photo = request.files.get('photo')
+    if legacy_photo and legacy_photo.filename:
+        pending_photos.append(legacy_photo)
+    pending_photos.extend([f for f in request.files.getlist('photos') if f and f.filename])
+    pending_photos = pending_photos[:10]
+
+    if pending_photos:
+        first = pending_photos[0]
+        ext = os.path.splitext(first.filename)[1].lower()
         stored = f"{uuid.uuid4()}{ext}"
         local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
-        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        storage.upload_file(first, f'daily_checks/{stored}', local_path)
         check.photo_filename = stored
-        check.photo_original_name = photo.filename
+        check.photo_original_name = first.filename
+
+        # Flush to get check.id for linking the extras
+        if not existing:
+            db.session.add(check)
+        db.session.flush()
+        for extra in pending_photos[1:]:
+            ext = os.path.splitext(extra.filename)[1].lower()
+            stored_e = f"{uuid.uuid4()}{ext}"
+            local_path_e = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored_e)
+            storage.upload_file(extra, f'daily_checks/{stored_e}', local_path_e)
+            db.session.add(MachineDailyCheckPhoto(
+                daily_check_id=check.id,
+                filename=stored_e,
+                original_name=extra.filename,
+            ))
 
     breakdown_id = None
     if condition == 'broken_down':
@@ -3821,6 +3887,7 @@ def scheduled_check_detail(check_id):
                 'checked_by': (dc.checked_by_user.display_name or dc.checked_by_user.username) if dc.checked_by_user else None,
                 'checked_at': (getattr(dc, 'checked_at', None).isoformat() + 'Z') if getattr(dc, 'checked_at', None) else (dc.created_at.isoformat() + 'Z') if dc.created_at else None,
                 'photo_url': f'/api/equipment/daily-check-photo/{dc.photo_filename}' if dc.photo_filename else None,
+                'extra_photo_urls': [f'/api/equipment/daily-check-photo/{p.filename}' for p in (dc.extra_photos or [])],
             } if dc else None,
         })
 
@@ -4145,7 +4212,8 @@ def get_travel_overview():
 @api_data_bp.route('/equipment/<int:machine_id>/scan-location', methods=['POST'])
 @jwt_required()
 def record_scan_location(machine_id):
-    """Record GPS location when an NFC tag is scanned (mobile app)."""
+    """Record GPS location when an NFC tag is scanned (mobile app).
+    Also logs a MachineScanEvent for the full scan history."""
     m = Machine.query.get(machine_id)
     if not m:
         return {'error': 'Machine not found'}, 404
@@ -4154,15 +4222,30 @@ def record_scan_location(machine_id):
     lat = data.get('lat')
     lng = data.get('lng')
     address = data.get('address')
+    tag_uid = (data.get('tag_uid') or '').strip() or None
 
-    user_id = get_jwt_identity()
-    m.last_scanned_at = datetime.utcnow()
-    m.last_scanned_by_user_id = int(user_id)
+    user_id = int(get_jwt_identity())
+    now = datetime.utcnow()
+    m.last_scanned_at = now
+    m.last_scanned_by_user_id = user_id
     if lat is not None and lng is not None:
         m.last_scanned_lat = float(lat)
         m.last_scanned_lng = float(lng)
     if address:
         m.last_scanned_address = str(address)[:500]
+
+    db.session.add(MachineScanEvent(
+        machine_id=machine_id,
+        scanned_at=now,
+        user_id=user_id,
+        source='app',
+        lat=float(lat) if lat is not None else None,
+        lng=float(lng) if lng is not None else None,
+        address=str(address)[:500] if address else None,
+        tag_uid=tag_uid,
+        ip_address=request.remote_addr,
+        user_agent=str(request.user_agent)[:500] if request.user_agent else None,
+    ))
 
     db.session.commit()
     return {'ok': True}, 200

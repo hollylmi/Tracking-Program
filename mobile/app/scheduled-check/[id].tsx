@@ -13,6 +13,7 @@ import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { useToastStore } from '../../store/toast'
 import { api } from '../../lib/api'
+import { formatDate as fmtDateAU } from '../../lib/dates'
 import { compressImage } from '../../lib/compressImage'
 import { ScheduledCheckMachine } from '../../types'
 
@@ -78,7 +79,7 @@ function MachineCheckCard({ machine, onCheck }: { machine: ScheduledCheckMachine
         <View style={s.transferBanner}>
           <Ionicons name="arrow-forward-circle" size={12} color="#1565C0" />
           <Text style={s.transferText}>
-            Moving to {machine.pending_transfer!.to_project} — {new Date(machine.pending_transfer!.scheduled_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+            Moving to {machine.pending_transfer!.to_project} — {fmtDateAU(machine.pending_transfer!.scheduled_date, { day: 'numeric', month: 'short' })}
           </Text>
         </View>
       )}

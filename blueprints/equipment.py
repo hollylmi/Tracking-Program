@@ -16,7 +16,7 @@ from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBre
                     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem,
                     MachineDailyCheck, MachineDocument, MachineHoursLog,
                     ProjectDailyTaskAssignment, ScheduledEquipmentCheck,
-                    ScheduledCheckCompletion, TransferBatch, NFCTag)
+                    ScheduledCheckCompletion, TransferBatch, NFCTag, MachineScanEvent)
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -960,14 +960,37 @@ def daily_check_submit():
         except Exception:
             pass
 
-    photo = request.files.get('photo')
-    if photo and photo.filename:
-        ext = os.path.splitext(photo.filename)[1].lower()
+    # Photos: support both legacy single "photo" and multi "photos" file inputs (up to 10)
+    pending_photos = []
+    legacy_photo = request.files.get('photo')
+    if legacy_photo and legacy_photo.filename:
+        pending_photos.append(legacy_photo)
+    pending_photos.extend([f for f in request.files.getlist('photos') if f and f.filename])
+    pending_photos = pending_photos[:10]
+
+    if pending_photos:
+        first = pending_photos[0]
+        ext = os.path.splitext(first.filename)[1].lower()
         stored = f"{uuid.uuid4()}{ext}"
         local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
-        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        storage.upload_file(first, f'daily_checks/{stored}', local_path)
         check.photo_filename = stored
-        check.photo_original_name = photo.filename
+        check.photo_original_name = first.filename
+
+        if not existing:
+            db.session.add(check)
+        db.session.flush()
+        from models import MachineDailyCheckPhoto as _MDCP  # local import to avoid circular issues
+        for extra in pending_photos[1:]:
+            ext = os.path.splitext(extra.filename)[1].lower()
+            stored_e = f"{uuid.uuid4()}{ext}"
+            local_path_e = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored_e)
+            storage.upload_file(extra, f'daily_checks/{stored_e}', local_path_e)
+            db.session.add(_MDCP(
+                daily_check_id=check.id,
+                filename=stored_e,
+                original_name=extra.filename,
+            ))
 
     # If broken_down, auto-create a breakdown
     if condition == 'broken_down':
@@ -1189,11 +1212,27 @@ def record_scan_location_web(machine_id):
 def equipment_public(machine_id):
     """Public landing page for NFC tag scans.
     Logged-in staff are redirected straight to the full scan page;
-    anonymous users (contractors, etc.) see a read-only info card."""
+    anonymous users (contractors, etc.) see a read-only info card.
+    Every visit is logged as a MachineScanEvent so we have full history."""
+    m = Machine.query.get_or_404(machine_id)
+    scanned_uid = request.args.get('uid')
+
+    # Log the scan event for every public hit (logged-in staff logs via mobile endpoint instead)
+    if not current_user.is_authenticated:
+        db.session.add(MachineScanEvent(
+            machine_id=machine_id,
+            scanned_at=datetime.utcnow(),
+            user_id=None,  # external / non-user
+            source='public_web',
+            tag_uid=scanned_uid,
+            ip_address=request.remote_addr,
+            user_agent=str(request.user_agent)[:500] if request.user_agent else None,
+        ))
+        db.session.commit()
+
     if current_user.is_authenticated:
         return redirect(url_for('equipment.machine_scan', machine_id=machine_id))
 
-    m = Machine.query.get_or_404(machine_id)
     assignment = ProjectMachine.query.filter_by(machine_id=machine_id).first()
     latest_check = MachineDailyCheck.query.filter_by(machine_id=machine_id).order_by(
         MachineDailyCheck.check_date.desc()).first()
@@ -1209,7 +1248,6 @@ def equipment_public(machine_id):
         MachineDocument.uploaded_at.desc()).all()
 
     active_tag = NFCTag.query.filter_by(machine_id=machine_id, status='active').first()
-    scanned_uid = request.args.get('uid')
     retired_warning = False
     if scanned_uid:
         scanned_tag = NFCTag.query.filter_by(uid=scanned_uid).first()
@@ -1403,6 +1441,72 @@ def serve_machine_doc(filename):
         f'machine_docs/{filename}',
         os.path.join(UPLOAD_FOLDER, 'machine_docs', filename)
     )
+
+
+@equipment_bp.route('/e/<int:machine_id>/location', methods=['POST'])
+def equipment_public_record_location(machine_id):
+    """Records lat/lng against the most recent public scan event for this machine
+    (created by the page load). Also updates Machine.last_scanned_* if this was
+    a more recent scan than the last one. No login required."""
+    m = Machine.query.get_or_404(machine_id)
+    data = request.get_json(silent=True) or {}
+    lat = data.get('lat')
+    lng = data.get('lng')
+    address = data.get('address')
+    if lat is None or lng is None:
+        return jsonify({'ok': False, 'error': 'lat/lng required'}), 400
+
+    # Find the most recent public scan event for this machine (within last 5 minutes)
+    cutoff = datetime.utcnow() - timedelta(minutes=5)
+    evt = (MachineScanEvent.query
+           .filter(MachineScanEvent.machine_id == machine_id,
+                   MachineScanEvent.source == 'public_web',
+                   MachineScanEvent.scanned_at >= cutoff,
+                   MachineScanEvent.ip_address == request.remote_addr)
+           .order_by(MachineScanEvent.scanned_at.desc())
+           .first())
+    if evt is None:
+        # No recent event — create a fresh one
+        evt = MachineScanEvent(
+            machine_id=machine_id,
+            scanned_at=datetime.utcnow(),
+            user_id=None,
+            source='public_web',
+            ip_address=request.remote_addr,
+            user_agent=str(request.user_agent)[:500] if request.user_agent else None,
+        )
+        db.session.add(evt)
+
+    try:
+        evt.lat = float(lat)
+        evt.lng = float(lng)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid lat/lng'}), 400
+    if address:
+        evt.address = str(address)[:500]
+
+    # Also refresh Machine.last_scanned_* if newer
+    if not m.last_scanned_at or evt.scanned_at >= m.last_scanned_at:
+        m.last_scanned_at = evt.scanned_at
+        m.last_scanned_lat = evt.lat
+        m.last_scanned_lng = evt.lng
+        if address:
+            m.last_scanned_address = str(address)[:500]
+        m.last_scanned_by_user_id = None  # external scan
+
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@equipment_bp.route('/equipment/machine/<int:machine_id>/scan-history')
+@require_role('admin', 'supervisor', 'site')
+def machine_scan_history(machine_id):
+    """Full scan-event history for a machine (staff only)."""
+    m = Machine.query.get_or_404(machine_id)
+    events = (MachineScanEvent.query.filter_by(machine_id=machine_id)
+              .order_by(MachineScanEvent.scanned_at.desc())
+              .limit(200).all())
+    return render_template('equipment/scan_history.html', machine=m, events=events)
 
 
 @equipment_bp.route('/e/<int:machine_id>/cert/<int:doc_id>')

@@ -60,9 +60,10 @@ type Accommodation = {
   documents: AccomDoc[]
 }
 
+import { formatDate as fmtDateAU } from '../../lib/dates'
+
 function formatDate(iso: string): string {
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+  return fmtDateAU(iso, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 function FlightCard({ flight }: { flight: Flight }) {

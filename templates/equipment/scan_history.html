@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Scan History — {{ machine.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <a href="{{ url_for('equipment.machine_detail', machine_id=machine.id) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Back to {{ machine.name }}
+    </a>
+  </div>
+</div>
+
+<h3 class="fw-bold mb-3"><i class="bi bi-geo-alt me-2"></i>Scan History — {{ machine.name }}</h3>
+<div class="text-muted small mb-3">Last {{ events | length }} scans (most recent first).</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    {% if events %}
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>When</th>
+          <th>Source</th>
+          <th>Scanned by</th>
+          <th>Location</th>
+          <th>Tag UID</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in events %}
+        <tr>
+          <td class="small">
+            {% if e.scanned_at %}{{ e.scanned_at.strftime('%d/%m/%Y %H:%M') }}{% else %}—{% endif %}
+          </td>
+          <td class="small">
+            {% if e.source == 'app' %}
+              <span class="badge bg-primary">Mobile App</span>
+            {% elif e.source == 'public_web' %}
+              <span class="badge bg-secondary">Public (Web)</span>
+            {% else %}
+              <span class="badge bg-light text-dark">{{ e.source }}</span>
+            {% endif %}
+          </td>
+          <td class="small">
+            {% if e.user %}
+              {{ e.user.display_name or e.user.username }}
+            {% else %}
+              <span class="text-muted fst-italic">Non-user (external)</span>
+            {% endif %}
+          </td>
+          <td class="small">
+            {% if e.lat and e.lng %}
+              {% if e.address %}
+                <div>{{ e.address }}</div>
+              {% endif %}
+              <a href="https://www.google.com/maps?q={{ e.lat }},{{ e.lng }}" target="_blank" rel="noopener" class="text-decoration-none">
+                <i class="bi bi-geo-alt-fill"></i> {{ '%.5f'|format(e.lat) }}, {{ '%.5f'|format(e.lng) }}
+              </a>
+            {% else %}
+              <span class="text-muted">No location</span>
+            {% endif %}
+          </td>
+          <td class="small"><code>{{ e.tag_uid or '—' }}</code></td>
+          <td class="small text-muted">
+            {% if e.ip_address %}{{ e.ip_address }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-muted text-center py-5">
+      <i class="bi bi-geo fs-1 d-block mb-2"></i>
+      No scan events recorded yet.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

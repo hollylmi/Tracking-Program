@@ -135,6 +135,19 @@ export const api = {
   equipment: {
     list: (projectId?: number) =>
       apiClient.get<{ machines: Machine[] }>('/equipment', projectId ? { params: { project_id: projectId } } : undefined),
+    create: (data: {
+      name: string
+      plant_id?: string
+      machine_type?: string
+      manufacturer?: string
+      model_number?: string
+      serial_number?: string
+      description?: string
+    }) =>
+      apiClient.post<{
+        id: number; name: string; plant_id?: string | null; machine_type?: string | null
+        manufacturer?: string | null; model_number?: string | null; serial_number?: string | null
+      }>('/equipment', data),
     detail: (id: number) => apiClient.get<MachineDetail>(`/equipment/${id}`),
     update: (id: number, data: Partial<MachineDetail>) =>
       apiClient.patch<MachineDetail>(`/equipment/${id}`, data),
@@ -191,6 +204,7 @@ export const api = {
       hours_reading?: string
       photo_uri?: string
       photo_filename?: string
+      photos?: { uri: string; filename: string }[]
     }) => {
       const token = useAuthStore.getState().accessToken
       const formData = new FormData()
@@ -202,6 +216,9 @@ export const api = {
       if (data.hours_reading) formData.append('hours_reading', data.hours_reading)
       if (data.photo_uri && data.photo_filename) {
         formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
+      }
+      for (const p of data.photos || []) {
+        formData.append('photos', { uri: p.uri, name: p.filename, type: 'image/jpeg' } as any)
       }
       const res = await fetch(`${API_BASE_URL}/api/equipment/daily-check`, {
         method: 'POST',
@@ -275,7 +292,7 @@ export const api = {
       apiClient.get<{ hours_logs: MachineHoursLogEntry[] }>(`/equipment/machine/${machineId}/hours`),
 
     // NFC scan location
-    recordScanLocation: (machineId: number, data: { lat?: number; lng?: number; address?: string }) =>
+    recordScanLocation: (machineId: number, data: { lat?: number; lng?: number; address?: string; tag_uid?: string }) =>
       apiClient.post(`/equipment/${machineId}/scan-location`, data),
 
     // NFC tags

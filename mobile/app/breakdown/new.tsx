@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import ScreenHeader from '../../components/layout/ScreenHeader'
+import { formatDate as fmtDateAU } from '../../lib/dates'
 import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
@@ -177,13 +178,10 @@ export default function NewBreakdownScreen() {
     ])
   }
 
-  const displayDate = (() => {
-    const d = new Date(date + 'T00:00:00')
-    return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
-  })()
+  const displayDate = fmtDateAU(date, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
 
   const displayReturn = anticipatedReturn
-    ? new Date(anticipatedReturn + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
+    ? fmtDateAU(anticipatedReturn, { day: 'numeric', month: 'long', year: 'numeric' })
     : null
 
   return (

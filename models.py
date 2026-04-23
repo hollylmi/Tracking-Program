@@ -206,6 +206,28 @@ class Machine(db.Model):
         return f'<Machine {self.name}>'
 
 
+class MachineScanEvent(db.Model):
+    """History of every scan of a machine — mobile app, public web, or otherwise.
+    Complements the latest-scan columns on Machine with a full timeline."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False, index=True)
+    scanned_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # null = external scanner
+    source = db.Column(db.String(20), default='app')  # 'app' or 'public_web'
+    lat = db.Column(db.Float, nullable=True)
+    lng = db.Column(db.Float, nullable=True)
+    address = db.Column(db.String(500), nullable=True)
+    tag_uid = db.Column(db.String(100), nullable=True)  # if scanned via a known NFC tag
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(500), nullable=True)
+
+    machine = db.relationship('Machine', backref=db.backref('scan_events', lazy=True, order_by='MachineScanEvent.scanned_at.desc()'))
+    user = db.relationship('User', foreign_keys=[user_id], lazy=True)
+
+    def __repr__(self):
+        return f'<MachineScanEvent machine={self.machine_id} at={self.scanned_at}>'
+
+
 class NFCTag(db.Model):
     """Physical NFC tag assigned to a machine. Many tags may exist per machine over time
     (replacements, retired tags), but typically only one is active at once."""
@@ -1042,6 +1064,22 @@ class MachineDailyCheck(db.Model):
 
     def __repr__(self):
         return f'<MachineDailyCheck project={self.project_id} date={self.check_date}>'
+
+
+class MachineDailyCheckPhoto(db.Model):
+    """Additional photos attached to a daily check (besides the legacy single-photo
+    column on MachineDailyCheck itself)."""
+    id = db.Column(db.Integer, primary_key=True)
+    daily_check_id = db.Column(db.Integer, db.ForeignKey('machine_daily_check.id'), nullable=False)
+    filename = db.Column(db.String(500), nullable=False)
+    original_name = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    daily_check = db.relationship('MachineDailyCheck',
+                                  backref=db.backref('extra_photos', lazy=True, cascade='all, delete-orphan'))
+
+    def __repr__(self):
+        return f'<MachineDailyCheckPhoto {self.filename}>'
 
 
 class MachineDocument(db.Model):

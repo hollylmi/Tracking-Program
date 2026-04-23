@@ -16,9 +16,10 @@ import { useEntries } from '../hooks/useEntries'
 import { Entry } from '../types'
 import { useState } from 'react'
 
+import { formatDate as fmtDateAU } from '../lib/dates'
+
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+  return fmtDateAU(dateStr, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 function EntryCard({ entry, onPress }: { entry: Entry; onPress: () => void }) {

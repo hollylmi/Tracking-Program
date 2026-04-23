@@ -40,6 +40,7 @@ import { api } from '../../lib/api'
 import { API_BASE_URL } from '../../constants/api'
 import { cachedQuery } from '../../lib/cachedQuery'
 import { compressImage } from '../../lib/compressImage'
+import { formatDate as fmtDateAU } from '../../lib/dates'
 import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
@@ -277,7 +278,7 @@ function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyChe
         <View style={checkStyles.transferBanner}>
           <Ionicons name="arrow-forward-circle" size={12} color="#1565C0" />
           <Text style={checkStyles.transferText}>
-            Scheduled move to {machine.pending_transfer!.to_project} — {new Date(machine.pending_transfer!.scheduled_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+            Scheduled move to {machine.pending_transfer!.to_project} — {fmtDateAU(machine.pending_transfer!.scheduled_date, { day: 'numeric', month: 'short' })}
           </Text>
         </View>
       )}
@@ -295,31 +296,58 @@ function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyChe
 
 function CheckModal({ visible, machineName, isFleetMachine, onClose, onSubmit }: {
   visible: boolean; machineName: string; isFleetMachine: boolean; onClose: () => void
-  onSubmit: (condition: string, notes: string, hoursReading?: string, photoUri?: string, photoFilename?: string) => Promise<void>
+  onSubmit: (condition: string, notes: string, hoursReading: string | undefined, photos: { uri: string; filename: string }[]) => Promise<void>
 }) {
   const [condition, setCondition] = useState('good')
   const [notes, setNotes] = useState('')
   const [hoursReading, setHoursReading] = useState('')
-  const [photo, setPhoto] = useState<{ uri: string; filename: string } | null>(null)
+  const [photos, setPhotos] = useState<{ uri: string; filename: string }[]>([])
   const [submitting, setSubmitting] = useState(false)
+
+  const MAX_PHOTOS = 10
 
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
-      await onSubmit(condition, notes, hoursReading || undefined, photo?.uri, photo?.filename)
-      setCondition('good'); setNotes(''); setHoursReading(''); setPhoto(null)
+      await onSubmit(condition, notes, hoursReading || undefined, photos)
+      setCondition('good'); setNotes(''); setHoursReading(''); setPhotos([])
     } finally { setSubmitting(false) }
   }
 
+  const addCompressed = async (uri: string) => {
+    const compressed = await compressImage(uri)
+    setPhotos(prev => [...prev, { uri: compressed, filename: `dc_${Date.now()}_${prev.length + 1}.jpg` }].slice(0, MAX_PHOTOS))
+  }
+
   const takePhoto = async () => {
+    if (photos.length >= MAX_PHOTOS) { Alert.alert('Limit reached', `Maximum ${MAX_PHOTOS} photos.`); return }
     const { status } = await ImagePicker.requestCameraPermissionsAsync()
     if (status !== 'granted') { Alert.alert('Permission required', 'Camera access is needed.'); return }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
     if (!result.canceled && result.assets.length > 0) {
-      const compressed = await compressImage(result.assets[0].uri)
-      setPhoto({ uri: compressed, filename: `dc_${Date.now()}.jpg` })
+      await addCompressed(result.assets[0].uri)
     }
   }
+
+  const pickFromGallery = async () => {
+    if (photos.length >= MAX_PHOTOS) { Alert.alert('Limit reached', `Maximum ${MAX_PHOTOS} photos.`); return }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') { Alert.alert('Permission required', 'Photo library access is needed.'); return }
+    const remaining = MAX_PHOTOS - photos.length
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
+    })
+    if (!result.canceled && result.assets.length > 0) {
+      for (const asset of result.assets.slice(0, remaining)) {
+        await addCompressed(asset.uri)
+      }
+    }
+  }
+
+  const removePhoto = (i: number) => setPhotos(prev => prev.filter((_, idx) => idx !== i))
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -353,17 +381,33 @@ function CheckModal({ visible, machineName, isFleetMachine, onClose, onSubmit }:
           <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Notes</Text>
           <TextInput style={modalStyles.input} value={notes} onChangeText={setNotes} placeholder="Optional notes"
             placeholderTextColor={Colors.textLight} multiline numberOfLines={3} textAlignVertical="top" />
-          <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Photo</Text>
-          {photo ? (
-            <View style={modalStyles.photoRow}>
-              <Image source={{ uri: photo.uri }} style={modalStyles.photoThumb} />
-              <TouchableOpacity onPress={() => setPhoto(null)}><Ionicons name="close-circle" size={24} color={Colors.error} /></TouchableOpacity>
+          <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Photos ({photos.length}/{MAX_PHOTOS})</Text>
+          {photos.length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: Spacing.sm }}>
+              {photos.map((p, i) => (
+                <View key={i} style={{ position: 'relative' }}>
+                  <Image source={{ uri: p.uri }} style={modalStyles.photoThumb} />
+                  <TouchableOpacity
+                    onPress={() => removePhoto(i)}
+                    style={{ position: 'absolute', top: -6, right: -6, backgroundColor: '#fff', borderRadius: 12 }}
+                  >
+                    <Ionicons name="close-circle" size={22} color={Colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
-          ) : (
-            <TouchableOpacity style={modalStyles.photoBtn} onPress={takePhoto} activeOpacity={0.8}>
-              <Ionicons name="camera-outline" size={20} color={Colors.primary} />
-              <Text style={modalStyles.photoBtnText}>Take Photo</Text>
-            </TouchableOpacity>
+          )}
+          {photos.length < MAX_PHOTOS && (
+            <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+              <TouchableOpacity style={[modalStyles.photoBtn, { flex: 1 }]} onPress={takePhoto} activeOpacity={0.8}>
+                <Ionicons name="camera-outline" size={20} color={Colors.primary} />
+                <Text style={modalStyles.photoBtnText}>Camera</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[modalStyles.photoBtn, { flex: 1 }]} onPress={pickFromGallery} activeOpacity={0.8}>
+                <Ionicons name="images-outline" size={20} color={Colors.primary} />
+                <Text style={modalStyles.photoBtnText}>Gallery</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </SafeAreaView>
@@ -515,6 +559,7 @@ export default function EquipmentScreen() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const user = useAuthStore((s) => s.user)
+  const canCreateEquipment = user?.role === 'admin' || user?.role === 'supervisor'
   const { show } = useToastStore()
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>('fleet')
@@ -569,7 +614,7 @@ export default function EquipmentScreen() {
             }
           }
 
-          // Grab GPS and record scan location in background
+          // Grab GPS and record scan location in background (always logs a scan event)
           ;(async () => {
             try {
               const { status } = await Location.requestForegroundPermissionsAsync()
@@ -580,12 +625,13 @@ export default function EquipmentScreen() {
                 await api.equipment.recordScanLocation(machineId, {
                   lat: loc.coords.latitude,
                   lng: loc.coords.longitude,
+                  tag_uid: tagUid,
                 })
               } else {
-                await api.equipment.recordScanLocation(machineId, {})
+                await api.equipment.recordScanLocation(machineId, { tag_uid: tagUid })
               }
             } catch {
-              api.equipment.recordScanLocation(machineId, {}).catch(() => {})
+              api.equipment.recordScanLocation(machineId, { tag_uid: tagUid }).catch(() => {})
             }
           })()
 
@@ -716,7 +762,7 @@ export default function EquipmentScreen() {
   }
 
   const handleSubmitCheck = useCallback(
-    async (condition: string, notes: string, hoursReading?: string, photoUri?: string, photoFilename?: string) => {
+    async (condition: string, notes: string, hoursReading: string | undefined, photos: { uri: string; filename: string }[]) => {
       if (!checkingMachine || !projectId) return
       try {
         await api.equipment.submitDailyCheck({
@@ -726,8 +772,7 @@ export default function EquipmentScreen() {
           condition,
           notes: notes || undefined,
           hours_reading: hoursReading,
-          photo_uri: photoUri,
-          photo_filename: photoFilename,
+          photos,
         })
         show('Check recorded', 'success')
         setCheckingMachine(null)
@@ -872,7 +917,7 @@ export default function EquipmentScreen() {
                             </Text>
                             {item.next_due_date && (
                               <Text style={{ fontSize: 10, color: Colors.textLight }}>
-                                Due {new Date(item.next_due_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                                Due {fmtDateAU(item.next_due_date, { day: 'numeric', month: 'short' })}
                               </Text>
                             )}
                           </>
@@ -909,7 +954,7 @@ export default function EquipmentScreen() {
                     <View style={{ alignItems: 'flex-end' }}>
                       <Text style={{ ...Typography.caption, color: Colors.success, fontWeight: '600' }}>Completed</Text>
                       <Text style={{ fontSize: 10, color: Colors.textLight }}>
-                        {new Date(c.completed_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {fmtDateAU(c.completed_date, { day: 'numeric', month: 'short', year: 'numeric' })}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
@@ -943,6 +988,17 @@ export default function EquipmentScreen() {
           onClose={() => setViewingCheck(null)}
           onSaved={() => { setViewingCheck(null); queryClient.invalidateQueries({ queryKey: ['daily-checks'] }) }}
           onDeleted={() => { setViewingCheck(null); queryClient.invalidateQueries({ queryKey: ['daily-checks'] }) }} />
+      )}
+
+      {/* Add Equipment FAB (admin/supervisor only) */}
+      {canCreateEquipment && (
+        <TouchableOpacity
+          style={styles.addFab}
+          onPress={() => router.push('/equipment-new')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
       )}
 
       {/* NFC Floating Action Button */}
@@ -1080,6 +1136,22 @@ const styles = StyleSheet.create({
     bottom: Spacing.lg,
     right: Spacing.lg,
     backgroundColor: Colors.primary,
+    borderRadius: 28,
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  addFab: {
+    position: 'absolute',
+    bottom: Spacing.lg + 72,
+    right: Spacing.lg,
+    backgroundColor: Colors.success,
     borderRadius: 28,
     width: 56,
     height: 56,

@@ -54,9 +54,10 @@ function getExt(filename: string) {
   return filename.split('.').pop()?.toLowerCase() ?? ''
 }
 
+import { formatDate as fmtDateAU } from '../../lib/dates'
+
 function formatDate(dateStr: string) {
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+  return fmtDateAU(dateStr, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 // ─── PDF Viewer Modal ─────────────────────────────────────────────────────────

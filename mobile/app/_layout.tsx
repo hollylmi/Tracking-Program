@@ -33,18 +33,17 @@ function useUniversalLinkHandler() {
 
   useEffect(() => {
     function handleUrl(event: { url: string }) {
-      const match = event.url.match(/\/equipment\/scan\/(\d+)/)
+      // Supports both new public URL (/e/<id>) and legacy (/equipment/scan/<id>)
+      const match = event.url.match(/\/e\/(\d+)/) || event.url.match(/\/equipment\/scan\/(\d+)/)
       if (match) {
         router.push({ pathname: '/machine/[id]', params: { id: match[1] } })
       }
     }
 
-    // Handle URL that opened the app
     Linking.getInitialURL().then(url => {
       if (url) handleUrl({ url })
     })
 
-    // Handle URL while app is already running
     const sub = Linking.addEventListener('url', handleUrl)
     return () => sub.remove()
   }, [router])

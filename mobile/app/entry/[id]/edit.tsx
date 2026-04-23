@@ -23,6 +23,7 @@ import { useHire } from '../../../hooks/useHire'
 import { useToastStore } from '../../../store/toast'
 import { useProjectStore } from '../../../store/project'
 import { api } from '../../../lib/api'
+import { formatDate as fmtDateAU } from '../../../lib/dates'
 import { cachedQuery } from '../../../lib/cachedQuery'
 import { LotMaterialProgress, DelayLine, OtherActivityLine } from '../../../types'
 
@@ -815,7 +816,7 @@ export default function EntryEditScreen() {
           {step === 1 && (
             <View>
               <FieldInput label="Project" value={entry.project_name || activeProject?.name || ''} onChangeText={() => {}} readOnly optional />
-              <FieldInput label="Date" value={new Date(entry.date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} onChangeText={() => {}} readOnly optional />
+              <FieldInput label="Date" value={fmtDateAU(entry.date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} onChangeText={() => {}} readOnly optional />
               <FieldInput ref={locationRef} label="Location" value={location}
                 onChangeText={setLocation} placeholder="e.g. Cell 3 North" optional returnKeyType="done" />
               <SelectField label="Weather" value={weather} options={WEATHER_OPTIONS}

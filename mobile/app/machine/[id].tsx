@@ -30,6 +30,7 @@ import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
 import { BreakdownDetail, MachineDetail, DailyCheckRecord, NFCTagInfo } from '../../types'
+import { formatDate as fmtDateAU, formatDateTime as fmtDateTimeAU } from '../../lib/dates'
 
 // NFC — optional, only works in native builds (not Expo Go)
 let NfcManager: any = null
@@ -57,9 +58,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 }
 
 function formatDate(d: string | null) {
-  if (!d) return '—'
-  const dt = new Date(d + 'T00:00:00')
-  return dt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+  return fmtDateAU(d, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function toDateStr(d: Date) {
@@ -526,7 +525,7 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
   const [hrs, setHrs] = useState('')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [checkPhoto, setCheckPhoto] = useState<string | null>(null)
+  const [checkPhotos, setCheckPhotos] = useState<{ uri: string; name: string }[]>([])
   const [bdDesc, setBdDesc] = useState('')
   const [bdBy, setBdBy] = useState('')
   const [bdSub, setBdSub] = useState(false)
@@ -571,10 +570,10 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
       await api.equipment.submitDailyCheck({
         machine_id: machineId, project_id: activeProject.id,
         condition: cond, notes: notes || undefined, hours_reading: hrs || undefined,
-        photo_uri: checkPhoto || undefined, photo_filename: checkPhoto ? `check_${Date.now()}.jpg` : undefined,
+        photos: checkPhotos.map(p => ({ uri: p.uri, filename: p.name })),
       })
       show('Check recorded', 'success')
-      setCond('good'); setHrs(''); setNotes(''); setCheckPhoto(null); setPanel(null)
+      setCond('good'); setHrs(''); setNotes(''); setCheckPhotos([]); setPanel(null)
       queryClient.invalidateQueries({ queryKey: ['machine'] })
       queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
     } catch { show('Failed to submit', 'error') }
@@ -642,11 +641,22 @@ function QuickActions({ machineId, display, breakdowns: bds }: {
           </View>
           <TextInput style={qa.input} value={hrs} onChangeText={setHrs} placeholder="Hours reading" keyboardType="decimal-pad" placeholderTextColor={Colors.textLight} />
           <TextInput style={[qa.input, { marginTop: 8 }]} value={notes} onChangeText={setNotes} placeholder="Notes..." placeholderTextColor={Colors.textLight} />
-          <TouchableOpacity style={qa.photoBtn} onPress={async () => { const p = await takeOrPickPhoto(); if (p.length) setCheckPhoto(p[0].uri) }} activeOpacity={0.7}>
+          <TouchableOpacity style={qa.photoBtn} onPress={async () => { const p = await takeOrPickPhoto(true); if (p.length) setCheckPhotos(prev => [...prev, ...p].slice(0, 10)) }} activeOpacity={0.7}>
             <Ionicons name="camera-outline" size={16} color={Colors.primary} />
-            <Text style={qa.photoBtnText}>{checkPhoto ? 'Photo added' : 'Add Photo'}</Text>
+            <Text style={qa.photoBtnText}>{checkPhotos.length > 0 ? `${checkPhotos.length} photo${checkPhotos.length > 1 ? 's' : ''}` : 'Add Photos'}</Text>
           </TouchableOpacity>
-          {checkPhoto && <Image source={{ uri: checkPhoto }} style={{ width: 60, height: 60, borderRadius: 6, marginTop: 4 }} />}
+          {checkPhotos.length > 0 && (
+            <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+              {checkPhotos.map((p, i) => (
+                <TouchableOpacity key={i} onPress={() => setCheckPhotos(prev => prev.filter((_, j) => j !== i))}>
+                  <Image source={{ uri: p.uri }} style={{ width: 50, height: 50, borderRadius: 6 }} />
+                  <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#dc3545', borderRadius: 8, width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="close" size={10} color="#fff" />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           <TouchableOpacity style={[qa.submit, { backgroundColor: '#28a745' }]} onPress={submitCheck} disabled={submitting} activeOpacity={0.85}>
             {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={qa.submitText}>Submit Check</Text>}
           </TouchableOpacity>
@@ -1011,7 +1021,10 @@ export default function MachineDetailScreen() {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => {
+            if (router.canGoBack()) router.back()
+            else router.replace('/equipment' as any)
+          }} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={Colors.white} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Equipment</Text>
@@ -1028,7 +1041,10 @@ export default function MachineDetailScreen() {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => {
+            if (router.canGoBack()) router.back()
+            else router.replace('/equipment' as any)
+          }} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={Colors.white} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Equipment</Text>
@@ -1217,7 +1233,7 @@ export default function MachineDetailScreen() {
               Last Known Location
             </Text>
             <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 4 }}>
-              Scanned {new Date(display.last_scanned_at).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              Scanned {fmtDateTimeAU(display.last_scanned_at)}
               {display.last_scanned_by ? ` by ${display.last_scanned_by}` : ''}
             </Text>
             {display.last_scanned_address && (
@@ -1314,7 +1330,7 @@ export default function MachineDetailScreen() {
                       <Text style={{ ...Typography.caption, color: Colors.textSecondary }}>
                         {t.status === 'active' ? 'Active' : 'Retired'}
                         {t.label ? ` · ${t.label}` : ''}
-                        {t.assigned_at ? ` · since ${new Date(t.assigned_at).toLocaleDateString()}` : ''}
+                        {t.assigned_at ? ` · since ${fmtDateAU(t.assigned_at)}` : ''}
                       </Text>
                     </View>
                     {canEdit && t.status === 'active' && (
