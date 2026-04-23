@@ -204,6 +204,7 @@ export const api = {
       condition: string
       notes?: string
       hours_reading?: string
+      tag_uid?: string
       photo_uri?: string
       photo_filename?: string
       photos?: { uri: string; filename: string }[]
@@ -216,6 +217,7 @@ export const api = {
       formData.append('condition', data.condition)
       if (data.notes) formData.append('notes', data.notes)
       if (data.hours_reading) formData.append('hours_reading', data.hours_reading)
+      if (data.tag_uid) formData.append('tag_uid', data.tag_uid)
       if (data.photo_uri && data.photo_filename) {
         formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
       }
@@ -227,8 +229,9 @@ export const api = {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
-      if (!res.ok) throw new Error(`Daily check failed: ${res.status}`)
-      return res.json()
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw Object.assign(new Error('Daily check failed'), { status: res.status, body })
+      return body
     },
 
     // Checklists
@@ -328,8 +331,7 @@ export const api = {
       hours_reading?: string
       notes?: string
       tag_uid?: string
-      photo_uri?: string
-      photo_filename?: string
+      photos?: { uri: string; filename: string }[]
     }) => {
       const token = useAuthStore.getState().accessToken
       const formData = new FormData()
@@ -337,8 +339,8 @@ export const api = {
       if (data.hours_reading) formData.append('hours_reading', data.hours_reading)
       if (data.notes) formData.append('notes', data.notes)
       if (data.tag_uid) formData.append('tag_uid', data.tag_uid)
-      if (data.photo_uri && data.photo_filename) {
-        formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
+      for (const p of data.photos || []) {
+        formData.append('photos', { uri: p.uri, name: p.filename, type: 'image/jpeg' } as any)
       }
       const res = await fetch(`${API_BASE_URL}/api/transfer/${transferId}/pre-check`, {
         method: 'POST',
@@ -355,8 +357,7 @@ export const api = {
       hours_reading?: string
       notes?: string
       tag_uid?: string
-      photo_uri?: string
-      photo_filename?: string
+      photos?: { uri: string; filename: string }[]
     }) => {
       const token = useAuthStore.getState().accessToken
       const formData = new FormData()
@@ -364,8 +365,8 @@ export const api = {
       if (data.hours_reading) formData.append('hours_reading', data.hours_reading)
       if (data.notes) formData.append('notes', data.notes)
       if (data.tag_uid) formData.append('tag_uid', data.tag_uid)
-      if (data.photo_uri && data.photo_filename) {
-        formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
+      for (const p of data.photos || []) {
+        formData.append('photos', { uri: p.uri, name: p.filename, type: 'image/jpeg' } as any)
       }
       const res = await fetch(`${API_BASE_URL}/api/transfer/${transferId}/arrive`, {
         method: 'POST',

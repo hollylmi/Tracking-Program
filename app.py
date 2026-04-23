@@ -326,6 +326,7 @@ with app.app_context():
         "ALTER TABLE machine ADD COLUMN warranty_expiry DATE",
         "ALTER TABLE machine_group ADD COLUMN project_id INTEGER REFERENCES project(id)",
         "ALTER TABLE machine_group ADD COLUMN colour VARCHAR(20)",
+        "ALTER TABLE transfer_batch ADD COLUMN anticipated_arrival_date DATE",
         # ── 2026-03-31: Employee retirement + office scheduling + accommodation properties ──
         "ALTER TABLE employee ADD COLUMN termination_date DATE",
         "ALTER TABLE employee ADD COLUMN home_base VARCHAR(50)",

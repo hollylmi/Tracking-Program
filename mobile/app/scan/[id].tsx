@@ -28,6 +28,14 @@ import { useAuthStore } from '../../store/auth'
 import { useProjectStore } from '../../store/project'
 import { useToastStore } from '../../store/toast'
 
+let NfcManager: any = null
+let NfcTech: any = null
+try {
+  const nfc = require('react-native-nfc-manager')
+  NfcManager = nfc.default
+  NfcTech = nfc.NfcTech
+} catch {}
+
 const CONDITIONS = [
   { v: 'good', l: 'Good', c: '#28a745' },
   { v: 'fair', l: 'Fair', c: '#fd7e14' },
@@ -49,6 +57,8 @@ export default function ScanLandingScreen() {
   const [hrs, setHrs] = useState('')
   const [photos, setPhotos] = useState<{ uri: string; filename: string }[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [verifiedTagUid, setVerifiedTagUid] = useState<string | null>(null)
+  const [scanningForCheck, setScanningForCheck] = useState(false)
 
   const { data: machine, isLoading, isError } = useQuery({
     queryKey: ['machine', id],
@@ -124,12 +134,51 @@ export default function ScanLandingScreen() {
     })
   }
 
+  const scanTagForCheck = async () => {
+    if (!NfcManager) {
+      Alert.alert('NFC Not Available', 'This device does not support NFC.')
+      return
+    }
+    if (!machine) return
+    setScanningForCheck(true)
+    try {
+      await NfcManager.requestTechnology(NfcTech.Ndef)
+      const tag = await NfcManager.getTag()
+      const uid: string | undefined = tag?.id
+      NfcManager.cancelTechnologyRequest().catch(() => {})
+      setScanningForCheck(false)
+      if (!uid) {
+        Alert.alert('Scan Failed', 'Could not read the NFC tag.')
+        return
+      }
+      // If machine has a registered tag, require exact match
+      if ((machine as any).active_tag_uid && uid !== (machine as any).active_tag_uid) {
+        Alert.alert('Wrong Tag', `That tag does not match ${machine.name}.`)
+        return
+      }
+      setVerifiedTagUid(uid)
+      show('Tag verified — fill in the check details.', 'success')
+    } catch (e: any) {
+      NfcManager.cancelTechnologyRequest().catch(() => {})
+      setScanningForCheck(false)
+      if (e?.message !== 'cancelled') {
+        Alert.alert('Scan Failed', 'Could not read the NFC tag.')
+      }
+    }
+  }
+
   const submitCheck = async () => {
     if (!activeProject?.id) {
       show('Select a project first', 'error')
       return
     }
     if (!machine) return
+    // If the machine has a registered tag, we must have verified it first
+    const requiresTag = !!(machine as any).active_tag_uid
+    if (requiresTag && !verifiedTagUid) {
+      Alert.alert('Scan Required', 'Scan the NFC tag on this machine before submitting the check.')
+      return
+    }
     setSubmitting(true)
     try {
       await api.equipment.submitDailyCheck({
@@ -138,6 +187,7 @@ export default function ScanLandingScreen() {
         condition: cond,
         notes: notes || undefined,
         hours_reading: hrs || undefined,
+        tag_uid: verifiedTagUid || undefined,
         photos,
       })
       show('Check recorded', 'success')
@@ -238,40 +288,65 @@ export default function ScanLandingScreen() {
           </View>
         )}
 
-        {/* Pending transfer banner */}
-        {machine.pending_transfer && (
-          <View style={[
-            styles.alertDanger,
-            {
-              backgroundColor: machine.pending_transfer.status === 'in_transit' ? '#fff3cd' : '#cff4fc',
-              borderColor: machine.pending_transfer.status === 'in_transit' ? '#ffe69c' : '#b6effb',
-            },
-          ]}>
-            <Ionicons
-              name={machine.pending_transfer.status === 'in_transit' ? 'truck' as any : 'calendar-outline'}
-              size={18}
-              color={machine.pending_transfer.status === 'in_transit' ? '#664d03' : '#055160'}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={{
-                ...Typography.bodySmall, fontWeight: '700',
-                color: machine.pending_transfer.status === 'in_transit' ? '#664d03' : '#055160',
-              }}>
-                {machine.pending_transfer.status === 'in_transit'
-                  ? 'In Transit'
-                  : 'Transfer Scheduled'}
-              </Text>
-              <Text style={{
-                ...Typography.caption,
-                color: machine.pending_transfer.status === 'in_transit' ? '#664d03' : '#055160',
-              }} numberOfLines={3}>
-                {machine.pending_transfer.status === 'in_transit'
-                  ? `Arriving at ${machine.pending_transfer.to_project} — daily checks locked until arrival scan.`
-                  : `Moving to ${machine.pending_transfer.to_project} on ${machine.pending_transfer.scheduled_date}.`}
-              </Text>
+        {/* Pending transfer banner with action */}
+        {machine.pending_transfer && (() => {
+          const pt: any = machine.pending_transfer
+          const isTransit = pt.status === 'in_transit'
+          const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor'
+          const needsPreCheck = !isTransit && !pt.pre_checked && isAdminOrSup
+          const needsArrival = isTransit && !pt.arrived && isAdminOrSup
+          return (
+            <View style={[
+              styles.alertDanger,
+              {
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                backgroundColor: isTransit ? '#fff3cd' : '#cff4fc',
+                borderColor: isTransit ? '#ffe69c' : '#b6effb',
+              },
+            ]}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                <Ionicons
+                  name={isTransit ? ('car-outline' as any) : ('calendar-outline' as any)}
+                  size={18}
+                  color={isTransit ? '#664d03' : '#055160'}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={{
+                    ...Typography.bodySmall, fontWeight: '700',
+                    color: isTransit ? '#664d03' : '#055160',
+                  }}>
+                    {isTransit ? 'In Transit — Arrival Pending' : 'Transfer Scheduled'}
+                  </Text>
+                  <Text style={{
+                    ...Typography.caption,
+                    color: isTransit ? '#664d03' : '#055160',
+                  }}>
+                    {isTransit
+                      ? `Arriving at ${pt.to_project}${pt.anticipated_arrival_date ? ` around ${formatDate(pt.anticipated_arrival_date)}` : ''}`
+                      : `Moving to ${pt.to_project} on ${formatDate(pt.scheduled_date)}${pt.anticipated_arrival_date ? ` (arrive ~${formatDate(pt.anticipated_arrival_date)})` : ''}`}
+                  </Text>
+                </View>
+              </View>
+              {(needsPreCheck || needsArrival) && pt.batch_id && (
+                <TouchableOpacity
+                  onPress={() => router.push({ pathname: '/transfer-batch/[id]', params: { id: String(pt.batch_id) } })}
+                  style={{
+                    marginTop: Spacing.sm, padding: Spacing.sm,
+                    borderRadius: BorderRadius.sm,
+                    backgroundColor: isTransit ? '#664d03' : '#055160',
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  <Ionicons name="scan-outline" size={16} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                    {needsArrival ? 'Confirm Arrival' : 'Complete Pre-Check'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
-          </View>
-        )}
+          )
+        })()}
 
         {/* Action grid */}
         <View style={styles.grid}>
@@ -326,6 +401,24 @@ export default function ScanLandingScreen() {
         {panel === 'check' && (
           <Card style={{ borderLeftWidth: 3, borderLeftColor: '#28a745', marginTop: Spacing.md }}>
             <Text style={{ ...Typography.bodySmall, fontWeight: '700', color: '#28a745', marginBottom: 8 }}>Pre-Start Check</Text>
+
+            {(machine as any).active_tag_uid && (
+              verifiedTagUid ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8, borderWidth: 2, borderColor: Colors.success, borderRadius: 8, marginBottom: 10 }}>
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+                  <Text style={{ color: Colors.success, fontWeight: '700', fontSize: 13 }}>Tag verified</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={scanTagForCheck}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, padding: 10, borderWidth: 2, borderColor: Colors.warning, borderRadius: 8, marginBottom: 10 }}
+                >
+                  <Ionicons name="scan-outline" size={18} color={Colors.warning} />
+                  <Text style={{ color: Colors.warning, fontWeight: '700', fontSize: 13 }}>Scan tag to begin</Text>
+                </TouchableOpacity>
+              )
+            )}
+
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
               {CONDITIONS.map(o => (
                 <TouchableOpacity key={o.v} onPress={() => setCond(o.v)}
@@ -366,18 +459,54 @@ export default function ScanLandingScreen() {
               </View>
             )}
 
-            <TouchableOpacity
-              style={[styles.submitBtn, { backgroundColor: '#28a745' }]}
-              onPress={submitCheck}
-              disabled={submitting}
-            >
-              {submitting
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.submitBtnText}>Submit Check</Text>}
-            </TouchableOpacity>
+            {(() => {
+              const tagRequired = !!(machine as any).active_tag_uid
+              const disabled = submitting || (tagRequired && !verifiedTagUid)
+              return (
+                <TouchableOpacity
+                  style={[styles.submitBtn, { backgroundColor: '#28a745', opacity: disabled ? 0.5 : 1 }]}
+                  onPress={submitCheck}
+                  disabled={disabled}
+                >
+                  {submitting
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={styles.submitBtnText}>
+                        {tagRequired && !verifiedTagUid ? 'Scan tag to enable' : 'Submit Check'}
+                      </Text>}
+                </TouchableOpacity>
+              )
+            })()}
           </Card>
         )}
       </ScrollView>
+
+      {/* NFC scanning modal */}
+      <Modal visible={scanningForCheck} transparent animationType="fade"
+        onRequestClose={() => {
+          NfcManager?.cancelTechnologyRequest().catch(() => {})
+          setScanningForCheck(false)
+        }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg }}>
+          <View style={{ backgroundColor: '#fff', padding: Spacing.lg, borderRadius: BorderRadius.lg, maxWidth: 400, width: '100%' }}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginTop: Spacing.md, textAlign: 'center' }}>
+              Hold NFC tag near device
+            </Text>
+            <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 }}>
+              Scan the tag on {machine?.name || 'this machine'} to verify.
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                NfcManager?.cancelTechnologyRequest().catch(() => {})
+                setScanningForCheck(false)
+              }}
+              style={{ marginTop: Spacing.md, alignSelf: 'center', padding: Spacing.sm }}
+            >
+              <Text style={{ color: Colors.textSecondary }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }

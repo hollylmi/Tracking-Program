@@ -265,11 +265,15 @@
                 </div>
                 <div class="modal-body">
                   <div class="row g-3">
-                    <div class="col-md-6">
-                      <label class="form-label small fw-semibold">Scheduled Date</label>
+                    <div class="col-md-4">
+                      <label class="form-label small fw-semibold">Scheduled Departure</label>
                       <input type="date" name="scheduled_date" class="form-control form-control-sm" value="{{ b.scheduled_date.isoformat() if b.scheduled_date else '' }}" required>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
+                      <label class="form-label small fw-semibold">Anticipated Arrival</label>
+                      <input type="date" name="anticipated_arrival_date" class="form-control form-control-sm" value="{{ b.anticipated_arrival_date.isoformat() if b.anticipated_arrival_date else '' }}">
+                    </div>
+                    <div class="col-md-4">
                       <label class="form-label small fw-semibold">Transport Contact</label>
                       <input type="text" name="transport_contact" class="form-control form-control-sm" value="{{ b.transport_contact or '' }}" placeholder="Driver name / number">
                     </div>
@@ -391,8 +395,13 @@
             </div>
             <!-- Date -->
             <div class="col-sm-4">
-              <label class="form-label fw-semibold">Scheduled Date *</label>
+              <label class="form-label fw-semibold">Scheduled Departure *</label>
               <input type="date" name="scheduled_date" class="form-control" required>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label fw-semibold">Anticipated Arrival</label>
+              <input type="date" name="anticipated_arrival_date" class="form-control">
+              <div class="form-text small">Shows in the destination supervisor's to-do list.</div>
             </div>
             <!-- Locations -->
             <div class="col-sm-4">

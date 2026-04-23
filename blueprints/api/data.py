@@ -2807,13 +2807,21 @@ def equipment_machine_detail(machine_id):
         } for item in open_checklist_items],
         'pending_transfer': {
             'id': pending_transfer.id,
+            'batch_id': pending_transfer.batch_id,
             'from_project': pending_transfer.from_project.name if pending_transfer.from_project else None,
             'to_project': pending_transfer.to_project.name if pending_transfer.to_project else None,
             'scheduled_date': pending_transfer.scheduled_date.isoformat(),
+            'anticipated_arrival_date': pending_transfer.batch.anticipated_arrival_date.isoformat() if pending_transfer.batch and pending_transfer.batch.anticipated_arrival_date else None,
             'status': pending_transfer.status,
             'travel_notes': pending_transfer.travel_notes,
             'transport_contact': pending_transfer.transport_contact,
+            'pre_checked': bool(pending_transfer.pre_check_id),
+            'arrived': bool(pending_transfer.arrival_check_id),
         } if pending_transfer else None,
+        'active_tag_uid': next(
+            (t.uid for t in (m.nfc_tags or []) if t.status == 'active'),
+            None,
+        ),
         'last_scanned_at': (m.last_scanned_at.isoformat() + 'Z') if m.last_scanned_at else None,
         'last_scanned_lat': m.last_scanned_lat,
         'last_scanned_lng': m.last_scanned_lng,
@@ -3136,6 +3144,18 @@ def equipment_daily_check_submit_api():
     from utils.helpers import in_transit_machine_ids
     if machine_id and machine_id in in_transit_machine_ids():
         return {'error': 'Machine is in transit — complete arrival check first'}, 409
+
+    # If this machine has a registered active NFC tag, require a matching tag_uid
+    # in the payload — prevents the caller from submitting a check for the wrong
+    # equipment by accident.
+    if machine_id:
+        active_tag = NFCTag.query.filter_by(machine_id=machine_id, status='active').first()
+        if active_tag:
+            supplied_uid = (request.form.get('tag_uid') or '').strip()
+            if not supplied_uid:
+                return {'error': 'NFC tag scan required', 'requires_tag_scan': True}, 409
+            if supplied_uid != active_tag.uid:
+                return {'error': 'Scanned tag does not match this machine', 'wrong_tag': True}, 409
 
     today_date = date.today()
 
@@ -3577,7 +3597,14 @@ def my_todos():
             'machine_count': len(sc.machines),
         })
 
-    # Transfer todos — pre-check (outgoing from user's project) + arrival (incoming)
+    # Transfer todos
+    # Rules:
+    # • Anyone explicitly assigned as pre_check_user / arrival_user always sees
+    #   the transfer in their todos (any role, any date, any status other than
+    #   completed/cancelled) — they need to know they've been assigned.
+    # • Supervisors on the source project see outgoing transfers near departure.
+    # • Supervisors on the destination project see incoming transfers.
+    # • Admins additionally see every active transfer for visibility.
     from models import TransferBatch
     accessible_pids = _accessible_ids(user)
     is_admin = accessible_pids is None
@@ -3586,40 +3613,63 @@ def my_todos():
     site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
                         if (not is_admin and accessible_pids) else db.false())
 
+    # ── Incoming transfers (destination side) ────────────────────────────
+    incoming_conditions = [
+        TransferBatch.arrival_user_id == user.id,   # explicitly assigned
+    ]
     if is_admin:
-        # Admins see all transfers
-        incoming = TransferBatch.query.filter(TransferBatch.status == 'in_transit').all()
+        incoming_conditions.append(db.true())
     else:
-        incoming = TransferBatch.query.filter(
-            TransferBatch.status == 'in_transit',
-            db.or_(TransferBatch.arrival_user_id == user.id, site_filter_to),
-        ).all()
+        # Supervisors on the destination project see inbound transfers once in_transit
+        incoming_conditions.append(db.and_(site_filter_to, TransferBatch.status == 'in_transit'))
+    incoming = TransferBatch.query.filter(
+        TransferBatch.status.in_(('scheduled', 'in_transit')),
+        db.or_(*incoming_conditions),
+    ).all()
+
+    # ── Outgoing transfers (source side) ─────────────────────────────────
+    outgoing_conditions = [
+        TransferBatch.pre_check_user_id == user.id,  # explicitly assigned
+    ]
+    if is_admin:
+        outgoing_conditions.append(db.true())
+    else:
+        outgoing_conditions.append(db.and_(
+            site_filter_from, TransferBatch.scheduled_date <= today_date + timedelta(days=1)
+        ))
+    outgoing = TransferBatch.query.filter(
+        TransferBatch.status == 'scheduled',
+        db.or_(*outgoing_conditions),
+    ).all()
+
+    # Deduplicate — same batch may match both queries for the same user
+    seen_ids = set()
     for batch in incoming:
+        if batch.id in seen_ids:
+            continue
+        seen_ids.add(batch.id)
         arrived = sum(1 for t in batch.items if t.arrival_check_id)
         total = len(batch.items)
+        label_parts = [f'Incoming transfer — {total} machine{"s" if total != 1 else ""}']
+        if batch.status == 'scheduled':
+            label_parts[0] = 'Inbound transfer scheduled — ' + label_parts[0].split('— ')[1]
         todos.append({
             'project_id': batch.to_project_id,
             'project_name': batch.to_project.name if batch.to_project else None,
             'task_type': 'incoming_transfer',
-            'label': f'Incoming transfer — {total} machine{"s" if total != 1 else ""}',
-            'completed': arrived >= total,
+            'label': label_parts[0],
+            'completed': arrived >= total and batch.status == 'in_transit',
             'done': arrived,
             'total': total,
             'batch_id': batch.id,
+            'scheduled_date': batch.scheduled_date.isoformat() if batch.scheduled_date else None,
+            'anticipated_arrival_date': batch.anticipated_arrival_date.isoformat() if batch.anticipated_arrival_date else None,
+            'batch_status': batch.status,
         })
-
-    if is_admin:
-        outgoing = TransferBatch.query.filter(
-            TransferBatch.status == 'scheduled',
-            TransferBatch.scheduled_date <= today_date + timedelta(days=1),
-        ).all()
-    else:
-        outgoing = TransferBatch.query.filter(
-            TransferBatch.status == 'scheduled',
-            TransferBatch.scheduled_date <= today_date + timedelta(days=1),
-            db.or_(TransferBatch.pre_check_user_id == user.id, site_filter_from),
-        ).all()
     for batch in outgoing:
+        if batch.id in seen_ids:
+            continue
+        seen_ids.add(batch.id)
         checked = sum(1 for t in batch.items if t.pre_check_id)
         total = len(batch.items)
         todos.append({
@@ -3631,6 +3681,9 @@ def my_todos():
             'done': checked,
             'total': total,
             'batch_id': batch.id,
+            'scheduled_date': batch.scheduled_date.isoformat() if batch.scheduled_date else None,
+            'anticipated_arrival_date': batch.anticipated_arrival_date.isoformat() if batch.anticipated_arrival_date else None,
+            'batch_status': batch.status,
         })
 
     return {'date': today_date.isoformat(), 'todos': todos}, 200
@@ -4538,18 +4591,33 @@ def api_transfer_pre_check(transfer_id):
         notes=(notes or '') + (f' [Pre-move check for transfer #{transfer.id}]' if notes else f'Pre-move check for transfer #{transfer.id}'),
     )
 
-    photo = request.files.get('photo')
-    if photo and photo.filename:
-        ext = os.path.splitext(photo.filename)[1].lower()
+    pending_photos = []
+    legacy_photo = request.files.get('photo')
+    if legacy_photo and legacy_photo.filename:
+        pending_photos.append(legacy_photo)
+    pending_photos.extend([f for f in request.files.getlist('photos') if f and f.filename])
+    pending_photos = pending_photos[:10]
+    if pending_photos:
+        first = pending_photos[0]
+        ext = os.path.splitext(first.filename)[1].lower()
         stored = f"{uuid.uuid4()}{ext}"
         local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
-        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        storage.upload_file(first, f'daily_checks/{stored}', local_path)
         check.photo_filename = stored
-        check.photo_original_name = photo.filename
+        check.photo_original_name = first.filename
 
     db.session.add(check)
     db.session.flush()
+    if len(pending_photos) > 1:
+        for extra in pending_photos[1:]:
+            ext = os.path.splitext(extra.filename)[1].lower()
+            stored_e = f"{uuid.uuid4()}{ext}"
+            local_path_e = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored_e)
+            storage.upload_file(extra, f'daily_checks/{stored_e}', local_path_e)
+            db.session.add(MachineDailyCheckPhoto(daily_check_id=check.id, filename=stored_e, original_name=extra.filename))
+
     transfer.pre_check_id = check.id
+    transfer.status = 'in_transit'  # lock this machine immediately
 
     # Log hours
     if hours_reading is not None:
@@ -4620,17 +4688,31 @@ def api_transfer_arrive(transfer_id):
         hours_reading=hours_reading,
         notes=(notes or '') + (f' [Arrival check for transfer #{transfer.id}]' if notes else f'Arrival check for transfer #{transfer.id}'),
     )
-    photo = request.files.get('photo')
-    if photo and photo.filename:
-        ext = os.path.splitext(photo.filename)[1].lower()
+    pending_photos = []
+    legacy_photo = request.files.get('photo')
+    if legacy_photo and legacy_photo.filename:
+        pending_photos.append(legacy_photo)
+    pending_photos.extend([f for f in request.files.getlist('photos') if f and f.filename])
+    pending_photos = pending_photos[:10]
+    if pending_photos:
+        first = pending_photos[0]
+        ext = os.path.splitext(first.filename)[1].lower()
         stored = f"{uuid.uuid4()}{ext}"
         local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
-        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        storage.upload_file(first, f'daily_checks/{stored}', local_path)
         check.photo_filename = stored
-        check.photo_original_name = photo.filename
+        check.photo_original_name = first.filename
 
     db.session.add(check)
     db.session.flush()
+    if len(pending_photos) > 1:
+        for extra in pending_photos[1:]:
+            ext = os.path.splitext(extra.filename)[1].lower()
+            stored_e = f"{uuid.uuid4()}{ext}"
+            local_path_e = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored_e)
+            storage.upload_file(extra, f'daily_checks/{stored_e}', local_path_e)
+            db.session.add(MachineDailyCheckPhoto(daily_check_id=check.id, filename=stored_e, original_name=extra.filename))
+
     transfer.arrival_check_id = check.id
     transfer.arrived_by_user_id = user.id
     transfer.arrived_at = datetime.utcnow()

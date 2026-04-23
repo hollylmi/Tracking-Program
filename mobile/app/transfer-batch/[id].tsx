@@ -67,14 +67,14 @@ export default function TransferBatchScreen() {
   const [cond, setCond] = useState('good')
   const [hrs, setHrs] = useState('')
   const [notes, setNotes] = useState('')
-  const [photo, setPhoto] = useState<{ uri: string; filename: string } | null>(null)
+  const [photos, setPhotos] = useState<{ uri: string; filename: string }[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   const resetForm = useCallback(() => {
     setCond('good')
     setHrs('')
     setNotes('')
-    setPhoto(null)
+    setPhotos([])
     setVerifiedUid(null)
   }, [])
 
@@ -134,7 +134,13 @@ export default function TransferBatchScreen() {
     }
   }
 
+  const MAX_PHOTOS = 10
+
   const takeOrPickPhoto = async () => {
+    if (photos.length >= MAX_PHOTOS) {
+      Alert.alert('Limit reached', `Maximum ${MAX_PHOTOS} photos.`)
+      return
+    }
     Alert.alert('Add Photo', '', [
       {
         text: 'Camera',
@@ -144,7 +150,7 @@ export default function TransferBatchScreen() {
           const r = await ImagePicker.launchCameraAsync({ quality: 0.8 })
           if (!r.canceled && r.assets.length > 0) {
             const uri = await compressImage(r.assets[0].uri)
-            setPhoto({ uri, filename: `transfer_${Date.now()}.jpg` })
+            setPhotos(prev => [...prev, { uri, filename: `transfer_${Date.now()}.jpg` }])
           }
         },
       },
@@ -153,10 +159,16 @@ export default function TransferBatchScreen() {
         onPress: async () => {
           const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
           if (perm.status !== 'granted') return
-          const r = await ImagePicker.launchImageLibraryAsync({ quality: 0.8 })
+          const remaining = MAX_PHOTOS - photos.length
+          const r = await ImagePicker.launchImageLibraryAsync({
+            quality: 0.8, allowsMultipleSelection: true, selectionLimit: remaining,
+          })
           if (!r.canceled && r.assets.length > 0) {
-            const uri = await compressImage(r.assets[0].uri)
-            setPhoto({ uri, filename: `transfer_${Date.now()}.jpg` })
+            const picked = await Promise.all(r.assets.slice(0, remaining).map(async (a, i) => ({
+              uri: await compressImage(a.uri),
+              filename: `transfer_${Date.now()}_${i}.jpg`,
+            })))
+            setPhotos(prev => [...prev, ...picked])
           }
         },
       },
@@ -177,8 +189,7 @@ export default function TransferBatchScreen() {
         hours_reading: hrs || undefined,
         notes: notes || undefined,
         tag_uid: verifiedUid || undefined,
-        photo_uri: photo?.uri,
-        photo_filename: photo?.filename,
+        photos,
       }
       if (stage === 'pre_check') {
         await api.equipment.submitTransferPreCheck(activeItem.id, payload)
@@ -449,10 +460,21 @@ export default function TransferBatchScreen() {
             <TouchableOpacity style={[styles.itemAction, { marginTop: 6 }]} onPress={takeOrPickPhoto}>
               <Ionicons name="camera-outline" size={16} color={Colors.primary} />
               <Text style={{ color: Colors.primary, fontWeight: '600' }}>
-                {photo ? 'Photo attached' : 'Add Photo (optional)'}
+                {photos.length > 0 ? `${photos.length} photo${photos.length > 1 ? 's' : ''} attached` : 'Add Photos (optional)'}
               </Text>
             </TouchableOpacity>
-            {photo && <Image source={{ uri: photo.uri }} style={{ width: 70, height: 70, borderRadius: 6, marginTop: 4 }} />}
+            {photos.length > 0 && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                {photos.map((p, i) => (
+                  <TouchableOpacity key={i} onPress={() => setPhotos(prev => prev.filter((_, j) => j !== i))}>
+                    <Image source={{ uri: p.uri }} style={{ width: 50, height: 50, borderRadius: 6 }} />
+                    <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#dc3545', borderRadius: 8, width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="close" size={10} color="#fff" />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md }}>
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: Colors.border }]} onPress={closeForm}>

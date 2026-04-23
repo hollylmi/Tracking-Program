@@ -592,6 +592,7 @@ def transfer_schedule():
     from_project_id = request.form.get('from_project_id', type=int)
     to_project_id = request.form.get('to_project_id', type=int)
     scheduled_date_str = request.form.get('scheduled_date', '').strip()
+    anticipated_arrival_str = request.form.get('anticipated_arrival_date', '').strip()
     travel_notes = request.form.get('travel_notes', '').strip() or None
     transport_contact = request.form.get('transport_contact', '').strip() or None
     pre_check_user_id = request.form.get('pre_check_user_id', type=int)
@@ -616,6 +617,13 @@ def transfer_schedule():
         flash('Invalid date.', 'danger')
         return redirect(request.referrer or url_for('equipment.operations_dashboard'))
 
+    anticipated_arrival = None
+    if anticipated_arrival_str:
+        try:
+            anticipated_arrival = datetime.strptime(anticipated_arrival_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
     # Auto-fill locations from project addresses if not provided
     if not pickup_location and from_project_id:
         src = Project.query.get(from_project_id)
@@ -630,6 +638,7 @@ def transfer_schedule():
         from_project_id=from_project_id or None,
         to_project_id=to_project_id or None,
         scheduled_date=scheduled_date,
+        anticipated_arrival_date=anticipated_arrival,
         pickup_location=pickup_location,
         dropoff_location=dropoff_location,
         travel_notes=travel_notes,
@@ -714,6 +723,16 @@ def transfer_batch_edit(batch_id):
             batch.scheduled_date = datetime.strptime(scheduled_date_str, '%Y-%m-%d').date()
         except ValueError:
             pass
+
+    # Anticipated arrival date
+    arrival_date_str = request.form.get('anticipated_arrival_date', '').strip()
+    if arrival_date_str:
+        try:
+            batch.anticipated_arrival_date = datetime.strptime(arrival_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    else:
+        batch.anticipated_arrival_date = None
 
     batch.pickup_location = (request.form.get('pickup_location') or '').strip() or None
     batch.dropoff_location = (request.form.get('dropoff_location') or '').strip() or None
@@ -871,14 +890,32 @@ def transfer_pre_check(transfer_id):
         )
         db.session.add(check)
 
-    photo = request.files.get('photo')
-    if photo and photo.filename:
-        ext = os.path.splitext(photo.filename)[1].lower()
+    # Accept multiple photos; first becomes the check's primary photo, rest
+    # go into MachineDailyCheckPhoto. Legacy single 'photo' field also honoured.
+    pending_photos = []
+    legacy_photo = request.files.get('photo')
+    if legacy_photo and legacy_photo.filename:
+        pending_photos.append(legacy_photo)
+    pending_photos.extend([f for f in request.files.getlist('photos') if f and f.filename])
+    pending_photos = pending_photos[:10]
+
+    if pending_photos:
+        first = pending_photos[0]
+        ext = os.path.splitext(first.filename)[1].lower()
         stored = f"{uuid.uuid4()}{ext}"
         local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
-        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        storage.upload_file(first, f'daily_checks/{stored}', local_path)
         check.photo_filename = stored
-        check.photo_original_name = photo.filename
+        check.photo_original_name = first.filename
+
+        db.session.flush()
+        from models import MachineDailyCheckPhoto as _MDCP
+        for extra in pending_photos[1:]:
+            ext = os.path.splitext(extra.filename)[1].lower()
+            stored_e = f"{uuid.uuid4()}{ext}"
+            local_path_e = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored_e)
+            storage.upload_file(extra, f'daily_checks/{stored_e}', local_path_e)
+            db.session.add(_MDCP(daily_check_id=check.id, filename=stored_e, original_name=extra.filename))
 
     db.session.flush()
     transfer.pre_check_id = check.id
@@ -895,15 +932,13 @@ def transfer_pre_check(transfer_id):
             daily_check_id=check.id,
         ))
 
-    # If all machines in the batch are pre-checked, mark batch as in_transit
+    # Flip THIS item's status immediately — it's now locked out of daily use
+    transfer.status = 'in_transit'
+    # Flip batch status once every item has been pre-checked
     if transfer.batch_id:
         batch = TransferBatch.query.get(transfer.batch_id)
         if batch and all(t.pre_check_id for t in batch.items):
             batch.status = 'in_transit'
-            for t in batch.items:
-                t.status = 'in_transit'
-    else:
-        transfer.status = 'in_transit'
 
     db.session.commit()
     machine_name = transfer.machine.name if transfer.machine else 'Machine'
@@ -944,17 +979,32 @@ def transfer_arrive(transfer_id):
         )
         db.session.add(check)
 
-    photo = request.files.get('photo')
-    if photo and photo.filename:
-        ext = os.path.splitext(photo.filename)[1].lower()
+    pending_photos = []
+    legacy_photo = request.files.get('photo')
+    if legacy_photo and legacy_photo.filename:
+        pending_photos.append(legacy_photo)
+    pending_photos.extend([f for f in request.files.getlist('photos') if f and f.filename])
+    pending_photos = pending_photos[:10]
+    if pending_photos:
+        first = pending_photos[0]
+        ext = os.path.splitext(first.filename)[1].lower()
         stored = f"{uuid.uuid4()}{ext}"
         local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
-        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        storage.upload_file(first, f'daily_checks/{stored}', local_path)
         check.photo_filename = stored
-        check.photo_original_name = photo.filename
+        check.photo_original_name = first.filename
 
     db.session.add(check)
     db.session.flush()
+
+    if pending_photos and len(pending_photos) > 1:
+        from models import MachineDailyCheckPhoto as _MDCP
+        for extra in pending_photos[1:]:
+            ext = os.path.splitext(extra.filename)[1].lower()
+            stored_e = f"{uuid.uuid4()}{ext}"
+            local_path_e = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored_e)
+            storage.upload_file(extra, f'daily_checks/{stored_e}', local_path_e)
+            db.session.add(_MDCP(daily_check_id=check.id, filename=stored_e, original_name=extra.filename))
 
     transfer.arrival_check_id = check.id
     transfer.arrival_check_notes = notes

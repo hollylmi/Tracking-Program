@@ -930,6 +930,7 @@ class TransferBatch(db.Model):
     from_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
     to_project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
     scheduled_date = db.Column(db.Date, nullable=False)
+    anticipated_arrival_date = db.Column(db.Date, nullable=True)   # expected arrival at destination
     pickup_location = db.Column(db.String(500))      # auto-filled from source project site_address
     dropoff_location = db.Column(db.String(500))      # auto-filled from dest project site_address
     travel_notes = db.Column(db.Text)

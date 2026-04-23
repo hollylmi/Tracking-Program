@@ -151,14 +151,18 @@ def index():
                 'machine_count': len(sc.machines),
             })
 
-        # Incoming transfers — show to assigned arrival user AND any supervisor
-        # on the destination project
+        # Transfer todos — always include transfers where this user is the
+        # explicitly-assigned pre_check or arrival user (regardless of status
+        # or date), plus supervisors see active transfers on their projects.
         accessible_pids = {p.id for p in (current_user.accessible_projects() or [])}
         site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
                           if accessible_pids else db.false())
         incoming_transfers = TransferBatch.query.filter(
-            TransferBatch.status == 'in_transit',
-            db.or_(TransferBatch.arrival_user_id == current_user.id, site_filter_to),
+            TransferBatch.status.in_(('scheduled', 'in_transit')),
+            db.or_(
+                TransferBatch.arrival_user_id == current_user.id,
+                db.and_(site_filter_to, TransferBatch.status == 'in_transit'),
+            ),
         ).all()
         for batch in incoming_transfers:
             arrived_count = sum(1 for t in batch.items if t.arrival_check_id)
@@ -173,14 +177,16 @@ def index():
                 'batch_id': batch.id,
             })
 
-        # Pre-move checks — show to assigned pre-check user AND any supervisor
-        # on the source project
+        # Pre-move checks — assigned user (anytime) OR supervisor on source project
+        # (only when departure is within 1 day)
         site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
                             if accessible_pids else db.false())
         outgoing_transfers = TransferBatch.query.filter(
             TransferBatch.status == 'scheduled',
-            TransferBatch.scheduled_date <= today + timedelta(days=1),
-            db.or_(TransferBatch.pre_check_user_id == current_user.id, site_filter_from),
+            db.or_(
+                TransferBatch.pre_check_user_id == current_user.id,
+                db.and_(site_filter_from, TransferBatch.scheduled_date <= today + timedelta(days=1)),
+            ),
         ).all()
         for batch in outgoing_transfers:
             checked_count = sum(1 for t in batch.items if t.pre_check_id)

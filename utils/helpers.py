@@ -22,10 +22,14 @@ def get_active_project_id():
 def in_transit_machine_ids():
     """Return a set of own-fleet Machine IDs that are currently in transit
     (pre-check done, arrival check not done) and therefore locked from daily
-    entries + pre-start checks until they arrive at their destination site."""
+    entries + pre-start checks until they arrive at their destination site.
+    Matches on check-state rather than item.status so we're robust to the
+    batch-level 'in_transit' flip happening only after all items are done."""
     from models import MachineTransfer
     rows = MachineTransfer.query.filter(
-        MachineTransfer.status == 'in_transit',
+        MachineTransfer.pre_check_id.isnot(None),
+        MachineTransfer.arrival_check_id.is_(None),
+        MachineTransfer.status != 'cancelled',
     ).with_entities(MachineTransfer.machine_id).all()
     return {mid for (mid,) in rows if mid}
 
@@ -33,10 +37,12 @@ def in_transit_machine_ids():
 def in_transit_info():
     """Return dict mapping machine_id → {to_project_name, scheduled_date} for
     all in-transit machines, so the UI can show helpful lockout messages."""
-    from models import MachineTransfer, Project
+    from models import MachineTransfer
     info = {}
     rows = MachineTransfer.query.filter(
-        MachineTransfer.status == 'in_transit',
+        MachineTransfer.pre_check_id.isnot(None),
+        MachineTransfer.arrival_check_id.is_(None),
+        MachineTransfer.status != 'cancelled',
     ).all()
     for t in rows:
         if t.machine_id:
