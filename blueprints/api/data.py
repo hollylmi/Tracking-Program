@@ -3607,18 +3607,12 @@ def my_todos():
         })
 
     # Transfer todos
-    # Rules:
-    # • Anyone explicitly assigned as pre_check_user / arrival_user always sees
-    #   the transfer in their todos.
-    # • Anyone with access to the destination project sees incoming transfers
-    #   once at least one item is moving.
-    # • Anyone with access to the source project sees outgoing transfers
-    #   within a day of departure.
-    # • Admins have access to all active projects so they see everything.
+    # Rule: show every active transfer (scheduled or in_transit) where the user
+    # is either explicitly assigned OR has access to the source or destination
+    # project. Admins have access to all projects so they see every active one.
     from models import TransferBatch
     accessible_pids = _accessible_ids(user)
     is_admin = accessible_pids is None
-    # For admins, include all active projects in the site filter
     if is_admin:
         all_project_ids = {p.id for p in Project.query.filter_by(active=True).all()}
         site_filter_to = TransferBatch.to_project_id.in_(all_project_ids) if all_project_ids else db.false()
@@ -3630,27 +3624,15 @@ def my_todos():
                             if accessible_pids else db.false())
 
     # ── Incoming transfers (destination side) ────────────────────────────
-    incoming_all = TransferBatch.query.filter(
+    incoming = TransferBatch.query.filter(
         TransferBatch.status.in_(('scheduled', 'in_transit')),
         db.or_(TransferBatch.arrival_user_id == user.id, site_filter_to),
     ).all()
-    # Filter: site-based users only see it once at least one item
-    # is pre-checked (things are physically moving). Assigned users see always.
-    incoming = []
-    for b in incoming_all:
-        any_moving = any(i.pre_check_id and not i.arrival_check_id for i in b.items)
-        if b.arrival_user_id == user.id:
-            incoming.append(b)
-        elif any_moving:
-            incoming.append(b)
 
     # ── Outgoing transfers (source side) ─────────────────────────────────
     outgoing = TransferBatch.query.filter(
         TransferBatch.status == 'scheduled',
-        db.or_(
-            TransferBatch.pre_check_user_id == user.id,
-            db.and_(site_filter_from, TransferBatch.scheduled_date <= today_date + timedelta(days=1)),
-        ),
+        db.or_(TransferBatch.pre_check_user_id == user.id, site_filter_from),
     ).all()
 
     # Deduplicate — same batch may match both queries for the same user

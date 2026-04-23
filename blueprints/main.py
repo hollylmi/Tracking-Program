@@ -154,23 +154,15 @@ def index():
                 'machine_count': len(sc.machines),
             })
 
-        # Transfer todos — explicit assignment always shows; supervisors/site/admin
-        # users on the destination project also see once items are moving.
-        # (For admin, accessible_projects() returns every active project so they
-        # naturally see everything — matches their oversight role.)
+        # Transfer todos — show any active transfer (scheduled or in_transit) where
+        # the user is assigned OR has access to the source/destination project.
         accessible_pids = {p.id for p in (current_user.accessible_projects() or [])}
         site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
                           if accessible_pids else db.false())
-        candidate_incoming = TransferBatch.query.filter(
+        incoming_transfers = TransferBatch.query.filter(
             TransferBatch.status.in_(('scheduled', 'in_transit')),
             db.or_(TransferBatch.arrival_user_id == current_user.id, site_filter_to),
         ).all()
-        # Non-assigned users only see it once at least one item is pre-checked
-        incoming_transfers = []
-        for b in candidate_incoming:
-            any_moving = any(i.pre_check_id and not i.arrival_check_id for i in b.items)
-            if b.arrival_user_id == current_user.id or any_moving:
-                incoming_transfers.append(b)
         for batch in incoming_transfers:
             arrived_count = sum(1 for t in batch.items if t.arrival_check_id)
             total_count = len(batch.items)
@@ -184,17 +176,13 @@ def index():
                 'batch_id': batch.id,
             })
 
-        # Pre-move checks — assigned user (anytime) OR user on source project
-        # (only when departure is within 1 day for supervisors/site; always for
-        # the assigned user or if user has project access)
+        # Pre-move checks — any scheduled transfer where the user is assigned
+        # or has access to the source project.
         site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
                             if accessible_pids else db.false())
         outgoing_transfers = TransferBatch.query.filter(
             TransferBatch.status == 'scheduled',
-            db.or_(
-                TransferBatch.pre_check_user_id == current_user.id,
-                db.and_(site_filter_from, TransferBatch.scheduled_date <= today + timedelta(days=1)),
-            ),
+            db.or_(TransferBatch.pre_check_user_id == current_user.id, site_filter_from),
         ).all()
         for batch in outgoing_transfers:
             checked_count = sum(1 for t in batch.items if t.pre_check_id)
