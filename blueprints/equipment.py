@@ -1175,6 +1175,18 @@ def machine_scan(machine_id):
 
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
+    # Log this scan event for the history timeline
+    db.session.add(MachineScanEvent(
+        machine_id=machine_id,
+        scanned_at=datetime.utcnow(),
+        user_id=current_user.id,
+        source='app',
+        tag_uid=request.args.get('uid'),
+        ip_address=request.remote_addr,
+        user_agent=str(request.user_agent)[:500] if request.user_agent else None,
+    ))
+    db.session.commit()
+
     resp = make_response(render_template('equipment/scan.html',
                            machine=m, assignment=assignment,
                            recent_checks=recent_checks,

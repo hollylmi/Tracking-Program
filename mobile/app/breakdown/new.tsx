@@ -194,12 +194,21 @@ export default function NewBreakdownScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Machine selection */}
+        {/* Machine selection — if arriving from a scan, lock to that machine */}
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>Machine *</Text>
           {errors.machine && <Text style={styles.fieldError}>{errors.machine}</Text>}
 
-          {machinesLoading ? (
+          {preselectedId && params.machine_name ? (
+            <View style={[styles.machineList, { paddingVertical: Spacing.sm }]}>
+              <Text style={{ ...Typography.body, color: Colors.textPrimary, fontWeight: '600' }}>
+                {params.machine_name}
+              </Text>
+              <Text style={{ ...Typography.caption, color: Colors.textSecondary, marginTop: 4 }}>
+                Breakdown will be reported for this equipment.
+              </Text>
+            </View>
+          ) : machinesLoading ? (
             <ActivityIndicator color={Colors.primary} style={{ marginTop: Spacing.sm }} />
           ) : activeMachines.length === 0 ? (
             <Text style={styles.emptyText}>No active machines found</Text>

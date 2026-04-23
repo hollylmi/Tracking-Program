@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import * as ImagePicker from 'expo-image-picker'
+import * as Location from 'expo-location'
 import Card from '../../components/ui/Card'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
@@ -55,6 +56,33 @@ export default function ScanLandingScreen() {
       api.equipment.detail(Number(id)).then(r => r.data)),
     staleTime: 2 * 60 * 1000,
   })
+
+  // On arrival, record a scan event + grab GPS. This runs whether you got here
+  // via universal link (iOS opening the app from an NFC tap) or via the
+  // in-app Scan button.
+  useEffect(() => {
+    if (!id) return
+    const machineId = Number(id)
+    if (!machineId) return
+    ;(async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync()
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          })
+          await api.equipment.recordScanLocation(machineId, {
+            lat: loc.coords.latitude,
+            lng: loc.coords.longitude,
+          })
+        } else {
+          await api.equipment.recordScanLocation(machineId, {})
+        }
+      } catch {
+        api.equipment.recordScanLocation(machineId, {}).catch(() => {})
+      }
+    })()
+  }, [id])
 
   const goBack = () => {
     if (router.canGoBack()) router.back()
