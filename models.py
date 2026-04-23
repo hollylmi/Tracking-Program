@@ -155,15 +155,20 @@ class Employee(db.Model):
 
 
 class MachineGroup(db.Model):
-    """Optional grouping for machines (e.g. 'Welding Setup', 'Deployment')."""
+    """Optional grouping for machines (e.g. 'Welding Setup', 'Deployment').
+    Can be scoped to a specific site so the same name ('Welding Kit') can
+    exist per-site without confusion, with colour inherited from the project."""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     delay_rate = db.Column(db.Float)              # shared rate for the whole group
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True)
+    colour = db.Column(db.String(20), nullable=True)  # optional explicit override
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     machines = db.relationship('Machine', backref='group', lazy=True)
+    project = db.relationship('Project', foreign_keys=[project_id])
 
     def __repr__(self):
         return f'<MachineGroup {self.name}>'
@@ -189,8 +194,11 @@ class Machine(db.Model):
     spare_parts_notes = db.Column(db.Text, nullable=True)
     disposal_procedure = db.Column(db.Text, nullable=True)
     serial_number = db.Column(db.String(200), nullable=True)
+    engine_number = db.Column(db.String(200), nullable=True)
     manufacturer = db.Column(db.String(200), nullable=True)
     model_number = db.Column(db.String(200), nullable=True)
+    build_date = db.Column(db.Date, nullable=True)
+    warranty_expiry = db.Column(db.Date, nullable=True)
     photo_filename = db.Column(db.String(500), nullable=True)       # UUID-based stored name
     photo_original_name = db.Column(db.String(500), nullable=True)
     # NFC scan location tracking

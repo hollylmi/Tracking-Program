@@ -76,9 +76,12 @@
               <hr>
               <div class="row g-3">
                 <div class="col-sm-6"><label class="form-label small fw-semibold">Serial Number</label><input type="text" name="serial_number" class="form-control form-control-sm" value="{{ machine.serial_number or '' }}"></div>
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Engine Number</label><input type="text" name="engine_number" class="form-control form-control-sm" value="{{ machine.engine_number or '' }}"></div>
                 <div class="col-sm-6"><label class="form-label small fw-semibold">Manufacturer</label><input type="text" name="manufacturer" class="form-control form-control-sm" value="{{ machine.manufacturer or '' }}"></div>
                 <div class="col-sm-6"><label class="form-label small fw-semibold">Model Number</label><input type="text" name="model_number" class="form-control form-control-sm" value="{{ machine.model_number or '' }}"></div>
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Build Date</label><input type="date" name="build_date" class="form-control form-control-sm" value="{{ machine.build_date.isoformat() if machine.build_date else '' }}"></div>
                 <div class="col-sm-6"><label class="form-label small fw-semibold">Acquired Date</label><input type="date" name="acquired_date" class="form-control form-control-sm" value="{{ machine.acquired_date.isoformat() if machine.acquired_date else '' }}"></div>
+                <div class="col-sm-6"><label class="form-label small fw-semibold">Warranty Expiry</label><input type="date" name="warranty_expiry" class="form-control form-control-sm" value="{{ machine.warranty_expiry.isoformat() if machine.warranty_expiry else '' }}"></div>
               </div>
               <hr>
               <h6 class="fw-semibold small text-muted">Lifecycle</h6>
@@ -91,6 +94,15 @@
               {% set days_left = (machine.dispose_by_date - today).days %}
               <div class="alert {% if days_left <= 7 %}alert-danger{% elif days_left <= 30 %}alert-warning{% else %}alert-info{% endif %} mt-3 mb-0 py-2 small">
                 <i class="bi bi-exclamation-triangle me-1"></i>Disposal in {{ days_left }} days ({{ machine.dispose_by_date.strftime('%d/%m/%Y') }})
+              </div>
+              {% endif %}
+              {% if machine.warranty_expiry %}
+              {% set w_days = (machine.warranty_expiry - today).days %}
+              <div class="alert {% if w_days <= 0 %}alert-danger{% elif w_days <= 30 %}alert-warning{% else %}alert-info{% endif %} mt-2 mb-0 py-2 small">
+                <i class="bi bi-shield-check me-1"></i>
+                {% if w_days < 0 %}Warranty expired {{ -w_days }} days ago ({{ machine.warranty_expiry.strftime('%d/%m/%Y') }})
+                {% elif w_days == 0 %}Warranty expires today ({{ machine.warranty_expiry.strftime('%d/%m/%Y') }})
+                {% else %}Warranty expires in {{ w_days }} days ({{ machine.warranty_expiry.strftime('%d/%m/%Y') }}){% endif %}
               </div>
               {% endif %}
               {% if machine.next_inspection_date %}

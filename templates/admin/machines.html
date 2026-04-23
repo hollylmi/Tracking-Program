@@ -25,30 +25,43 @@
         <input type="hidden" name="action" id="groupFormAction" value="add_group">
         <input type="hidden" name="group_id" id="groupEditId" value="">
         <div class="row g-3">
-          <div class="col-md-4">
+          <div class="col-md-3">
             <label class="form-label fw-semibold small">Group Name <span class="text-danger">*</span></label>
             <input type="text" name="group_name" id="groupName" class="form-control form-control-sm" required
                    placeholder="e.g. Welding Setup, Deployment">
           </div>
-          <div class="col-md-4">
-            <label class="form-label fw-semibold small">Description</label>
-            <input type="text" name="group_description" id="groupDescription" class="form-control form-control-sm"
-                   placeholder="What this group includes...">
+          <div class="col-md-3">
+            <label class="form-label fw-semibold small">Site</label>
+            <select name="group_project_id" id="groupProjectId" class="form-select form-select-sm">
+              <option value="">— Not site-specific —</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
           </div>
           <div class="col-md-2">
-            <label class="form-label fw-semibold small">Delay Rate ($/hr)</label>
+            <label class="form-label fw-semibold small">Description</label>
+            <input type="text" name="group_description" id="groupDescription" class="form-control form-control-sm"
+                   placeholder="Optional">
+          </div>
+          <div class="col-md-1">
+            <label class="form-label fw-semibold small">Rate ($/hr)</label>
             <div class="input-group input-group-sm">
-              <span class="input-group-text">$</span>
+              <span class="input-group-text px-1">$</span>
               <input type="number" name="group_delay_rate" id="groupDelayRate" class="form-control"
-                     min="0" step="0.01" placeholder="0.00">
+                     min="0" step="0.01" placeholder="0">
             </div>
+          </div>
+          <div class="col-md-1">
+            <label class="form-label fw-semibold small">Colour</label>
+            <input type="color" name="group_colour" id="groupColour" class="form-control form-control-color form-control-sm" value="#6c757d" title="Override colour (defaults to site colour)">
           </div>
           <div class="col-md-2 d-flex align-items-end gap-2">
             <button type="submit" class="btn btn-info text-white btn-sm" id="groupSubmitBtn">Create</button>
             <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="cancelGroupBtn" onclick="cancelGroupEdit()">Cancel</button>
           </div>
         </div>
-        <div class="form-text mt-1">Items in this group inherit the delay rate unless they have their own.</div>
+        <div class="form-text mt-1">When tied to a site, the group will show in that site's colour on the equipment list (or the override above if set).</div>
       </form>
     </div>
   </div>
@@ -117,6 +130,7 @@
       <thead class="table-light">
         <tr>
           <th>Group</th>
+          <th>Site</th>
           <th>Description</th>
           <th>Rate/hr</th>
           <th>Items</th>
@@ -126,7 +140,16 @@
       <tbody>
         {% for grp in groups %}
         <tr>
-          <td class="fw-semibold">{{ grp.name }}</td>
+          <td class="fw-semibold">
+            {% set site_colour = project_colour_map.get(grp.project_id) if grp.project_id else None %}
+            {% set swatch = grp.colour or (site_colour[1] if site_colour else '#6c757d') %}
+            <span class="d-inline-block rounded-circle me-2" style="width:12px; height:12px; background:{{ swatch }};" title="Group colour"></span>
+            {{ grp.name }}
+          </td>
+          <td class="small">
+            {% if grp.project %}<span class="badge bg-light text-dark border">{{ grp.project.name }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
           <td class="text-muted small">{{ grp.description or '—' }}</td>
           <td>
             {% if grp.delay_rate %}
@@ -143,7 +166,7 @@
           <td class="text-end">
             <div class="d-flex gap-1 justify-content-end">
               <button class="btn btn-sm btn-outline-secondary py-0" type="button"
-                      onclick="openEditGroup({{ grp.id }}, '{{ grp.name|replace("'", "\\'") }}', '{{ (grp.description or '')|replace("'", "\\'") }}', '{{ grp.delay_rate or '' }}')"
+                      onclick="openEditGroup({{ grp.id }}, '{{ grp.name|replace("'", "\\'") }}', '{{ (grp.description or '')|replace("'", "\\'") }}', '{{ grp.delay_rate or '' }}', '{{ grp.project_id or '' }}', '{{ grp.colour or '' }}')"
                       title="Edit"><i class="bi bi-pencil"></i></button>
               <form method="POST" class="d-inline"
                     onsubmit="return confirm('Delete group? Machines will be moved to ungrouped.')">
@@ -318,7 +341,7 @@
     document.getElementById('cancelEditBtn').classList.add('d-none');
   }
 
-  function openEditGroup(id, name, description, delayRate) {
+  function openEditGroup(id, name, description, delayRate, projectId, colour) {
     const panel = document.getElementById('addGroupPanel');
     if (!panel.classList.contains('show')) {
       new bootstrap.Collapse(panel, { toggle: true });
@@ -329,6 +352,10 @@
     document.getElementById('groupName').value = name;
     document.getElementById('groupDescription').value = description;
     document.getElementById('groupDelayRate').value = delayRate;
+    const projSel = document.getElementById('groupProjectId');
+    if (projSel) projSel.value = projectId || '';
+    const colourInp = document.getElementById('groupColour');
+    if (colourInp) colourInp.value = colour || '#6c757d';
     document.getElementById('groupSubmitBtn').textContent = 'Save';
     document.getElementById('cancelGroupBtn').classList.remove('d-none');
     setTimeout(() => document.getElementById('groupName').focus(), 300);

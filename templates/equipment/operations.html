@@ -239,11 +239,16 @@
               <a href="{{ url_for('equipment.transfer_batch_detail', batch_id=b.id) }}" class="btn btn-sm btn-outline-primary py-0" title="View"><i class="bi bi-eye"></i></a>
               {% if b.status == 'scheduled' %}
               <button class="btn btn-sm btn-outline-secondary py-0" title="Edit" data-bs-toggle="modal" data-bs-target="#editBatchModal{{ b.id }}"><i class="bi bi-pencil"></i></button>
-              {% if not (b.items | selectattr('pre_check_id') | list | length) %}
+              {% endif %}
+              {% if b.status != 'completed' %}
+              <form method="POST" action="{{ url_for('equipment.transfer_batch_cancel', batch_id=b.id) }}" class="d-inline" onsubmit="return confirm('Cancel this transfer? All machines will be released.')">
+                <button type="submit" class="btn btn-sm btn-outline-warning py-0" title="Cancel"><i class="bi bi-x-circle"></i></button>
+              </form>
+              {% endif %}
+              {% if b.status == 'scheduled' and not (b.items | selectattr('pre_check_id') | list | length) %}
               <form method="POST" action="{{ url_for('equipment.transfer_batch_delete', batch_id=b.id) }}" class="d-inline" onsubmit="return confirm('Delete this transfer batch? This cannot be undone.')">
                 <button type="submit" class="btn btn-sm btn-outline-danger py-0" title="Delete"><i class="bi bi-trash"></i></button>
               </form>
-              {% endif %}
               {% endif %}
             </div>
           </td>

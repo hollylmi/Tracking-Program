@@ -738,6 +738,26 @@ def transfer_batch_edit(batch_id):
     return redirect(request.referrer or url_for('equipment.operations_dashboard'))
 
 
+@equipment_bp.route('/equipment/transfer-batch/<int:batch_id>/cancel', methods=['POST'])
+@require_role('admin')
+def transfer_batch_cancel(batch_id):
+    """Cancel an entire transfer batch — any status except completed.
+    Marks the batch AND every child item as cancelled. Unlike delete, this
+    leaves the record around for audit / history."""
+    batch = TransferBatch.query.get_or_404(batch_id)
+    if batch.status == 'completed':
+        flash('Cannot cancel — this transfer is already completed.', 'warning')
+        return redirect(request.referrer or url_for('equipment.operations_dashboard'))
+    batch.status = 'cancelled'
+    batch.completed_at = datetime.utcnow()
+    for item in batch.items:
+        if item.status != 'completed':
+            item.status = 'cancelled'
+    db.session.commit()
+    flash('Transfer cancelled.', 'info')
+    return redirect(request.referrer or url_for('equipment.operations_dashboard'))
+
+
 @equipment_bp.route('/equipment/transfer-batch/<int:batch_id>/delete', methods=['POST'])
 @require_role('admin')
 def transfer_batch_delete(batch_id):
@@ -1192,13 +1212,14 @@ def machine_edit_details(machine_id):
     """Edit the extended machine detail fields."""
     m = Machine.query.get_or_404(machine_id)
 
-    for field in ('serial_number', 'manufacturer', 'model_number',
+    for field in ('serial_number', 'engine_number', 'manufacturer', 'model_number',
                   'storage_instructions', 'service_instructions',
                   'spare_parts_notes', 'disposal_procedure'):
         val = request.form.get(field, '').strip()
         setattr(m, field, val if val else None)
 
-    for date_field in ('acquired_date', 'dispose_by_date', 'next_inspection_date'):
+    for date_field in ('acquired_date', 'dispose_by_date', 'next_inspection_date',
+                       'build_date', 'warranty_expiry'):
         val = request.form.get(date_field, '').strip()
         if val:
             try:

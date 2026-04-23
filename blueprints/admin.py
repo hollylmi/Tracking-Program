@@ -908,9 +908,16 @@ def admin_machines():
             gname = request.form.get('group_name', '').strip()
             gdesc = request.form.get('group_description', '').strip()
             grate = request.form.get('group_delay_rate', '').strip()
+            gproj = request.form.get('group_project_id', '').strip()
+            gcolour = request.form.get('group_colour', '').strip()
             if gname:
-                db.session.add(MachineGroup(name=gname, description=gdesc or None,
-                                             delay_rate=float(grate) if grate else None))
+                db.session.add(MachineGroup(
+                    name=gname,
+                    description=gdesc or None,
+                    delay_rate=float(grate) if grate else None,
+                    project_id=int(gproj) if gproj else None,
+                    colour=gcolour or None,
+                ))
                 db.session.commit()
                 flash(f'Group "{gname}" created.', 'success')
             else:
@@ -921,6 +928,10 @@ def admin_machines():
             grp.description = request.form.get('group_description', '').strip() or None
             grate = request.form.get('group_delay_rate', '').strip()
             grp.delay_rate = float(grate) if grate else None
+            gproj = request.form.get('group_project_id', '').strip()
+            grp.project_id = int(gproj) if gproj else None
+            gcolour = request.form.get('group_colour', '').strip()
+            grp.colour = gcolour or None
             db.session.commit()
             flash(f'Group "{grp.name}" updated.', 'success')
         elif action == 'delete_group':
@@ -967,8 +978,16 @@ def admin_machines():
     assignments_by_machine = {}
     for pm in all_assignments:
         assignments_by_machine.setdefault(pm.machine_id, []).append(pm)
+    # Project colour palette — matches the equipment operations page so a
+    # group's site colour lines up everywhere.
+    PALETTE = [('#cfe2ff','#084298'),('#d1e7dd','#0a3622'),('#f8d7da','#842029'),
+               ('#fff3cd','#664d03'),('#d2f4ea','#0b4c34'),('#fde8d8','#6c3a00'),
+               ('#e2d9f3','#3d1a78'),('#dee2e6','#343a40')]
+    all_proj = Project.query.order_by(Project.id).all()
+    project_colour_map = {p.id: PALETTE[i % len(PALETTE)] for i, p in enumerate(all_proj)}
     return render_template('admin/machines.html', machines=machines, groups=groups,
-                           projects=projects, assignments_by_machine=assignments_by_machine)
+                           projects=projects, assignments_by_machine=assignments_by_machine,
+                           project_colour_map=project_colour_map)
 
 
 @admin_bp.route('/admin/roles', methods=['GET', 'POST'])

@@ -321,6 +321,11 @@ with app.app_context():
         # ── 2026-04-04: Equipment display photo ──
         "ALTER TABLE machine ADD COLUMN photo_filename VARCHAR(500)",
         "ALTER TABLE machine ADD COLUMN photo_original_name VARCHAR(500)",
+        "ALTER TABLE machine ADD COLUMN engine_number VARCHAR(200)",
+        "ALTER TABLE machine ADD COLUMN build_date DATE",
+        "ALTER TABLE machine ADD COLUMN warranty_expiry DATE",
+        "ALTER TABLE machine_group ADD COLUMN project_id INTEGER REFERENCES project(id)",
+        "ALTER TABLE machine_group ADD COLUMN colour VARCHAR(20)",
         # ── 2026-03-31: Employee retirement + office scheduling + accommodation properties ──
         "ALTER TABLE employee ADD COLUMN termination_date DATE",
         "ALTER TABLE employee ADD COLUMN home_base VARCHAR(50)",

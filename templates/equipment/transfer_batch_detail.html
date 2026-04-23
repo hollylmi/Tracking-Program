@@ -173,9 +173,9 @@
     <div class="card border-0 shadow-sm mb-3">
       <div class="card-header bg-white py-2 fw-semibold small">Admin Actions</div>
       <div class="card-body">
-        <form method="POST" action="{{ url_for('equipment.transfer_update', transfer_id=batch.items[0].id) }}" class="mb-2">
-          <input type="hidden" name="status" value="cancelled">
-          <button class="btn btn-sm btn-outline-danger w-100" onclick="return confirm('Cancel this entire transfer?')"><i class="bi bi-x-lg me-1"></i>Cancel Transfer</button>
+        <form method="POST" action="{{ url_for('equipment.transfer_batch_cancel', batch_id=batch.id) }}" class="mb-2"
+              onsubmit="return confirm('Cancel this entire transfer? All machines in the batch will be released.')">
+          <button class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-x-lg me-1"></i>Cancel Transfer</button>
         </form>
       </div>
     </div>

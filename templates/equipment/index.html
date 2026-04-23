@@ -231,13 +231,19 @@
 
     <!-- Filters -->
     <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-search text-muted"></i>
+        <input type="search" class="form-control form-control-sm" id="fleetSearch"
+               style="width:240px;" placeholder="Search name or plant ID..."
+               oninput="applyFleetFilters()" autocomplete="off">
+      </div>
       {% if groups %}
       <div class="d-flex align-items-center gap-2">
         <label class="text-muted small fw-medium mb-0">Group:</label>
         <select class="form-select form-select-sm" style="width:auto;max-width:180px;" id="filterGroup" onchange="applyFleetFilters()">
           <option value="all">All groups</option>
           {% for g in groups %}
-          <option value="{{ g.id }}">{{ g.name }}</option>
+          <option value="{{ g.id }}">{{ g.name }}{% if g.project %} · {{ g.project.name }}{% endif %}</option>
           {% endfor %}
           <option value="none">Ungrouped</option>
         </select>
@@ -309,7 +315,8 @@
                 {% if row_colours and not bd and m.active %}style="border-left: 4px solid {{ row_colours[1] }};"{% endif %}
                 data-group-id="{{ m.group_id or '' }}"
                 data-machine-type="{{ m.machine_type or '' }}"
-                data-project-ids="{{ proj_ids | join(',') }}">
+                data-project-ids="{{ proj_ids | join(',') }}"
+                data-search-text="{{ (m.name ~ ' ' ~ (m.plant_id or '') ~ ' ' ~ (m.machine_type or '') ~ ' ' ~ (m.serial_number or '') ~ ' ' ~ (m.manufacturer or '') ~ ' ' ~ (m.model_number or '')) | lower }}">
               <td class="fw-semibold">
                 <div class="d-flex align-items-center gap-2">
                   {% if m.photo_filename %}
@@ -326,7 +333,14 @@
               <td class="text-muted">{{ m.machine_type or '—' }}</td>
               <td>
                 {% if m.group %}
-                  <span class="badge bg-info-subtle text-info border border-info-subtle">{{ m.group.name }}</span>
+                  {% set grp_site_colours = project_colour_map.get(m.group.project_id) if m.group.project_id else None %}
+                  {% if m.group.colour %}
+                    <span class="badge border" style="background:{{ m.group.colour }}22; color:{{ m.group.colour }}; border-color:{{ m.group.colour }}55 !important;">{{ m.group.name }}{% if m.group.project %} · {{ m.group.project.name }}{% endif %}</span>
+                  {% elif grp_site_colours %}
+                    <span class="badge border" style="background:{{ grp_site_colours[0] }}; color:{{ grp_site_colours[1] }}; border-color:{{ grp_site_colours[1] }}44 !important;">{{ m.group.name }} · {{ m.group.project.name }}</span>
+                  {% else %}
+                    <span class="badge bg-info-subtle text-info border border-info-subtle">{{ m.group.name }}</span>
+                  {% endif %}
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
@@ -851,14 +865,17 @@
     const groupSel = document.getElementById('filterGroup');
     const typeSel = document.getElementById('filterType');
     const siteSel = document.getElementById('filterSite');
+    const searchInp = document.getElementById('fleetSearch');
     const groupVal = groupSel ? groupSel.value : 'all';
     const typeVal = typeSel ? typeSel.value : 'all';
     const siteVal = siteSel ? siteSel.value : 'all';
+    const searchVal = (searchInp ? searchInp.value : '').trim().toLowerCase();
 
     document.querySelectorAll('.fleet-row').forEach(row => {
       const rowGroup = row.dataset.groupId || '';
       const rowType = row.dataset.machineType || '';
       const rowProjects = (row.dataset.projectIds || '').split(',').filter(Boolean);
+      const searchText = (row.dataset.searchText || row.textContent || '').toLowerCase();
 
       let showGroup = true;
       if (groupVal === 'none') showGroup = rowGroup === '';
@@ -872,7 +889,10 @@
       if (siteVal === 'none') showSite = rowProjects.length === 0;
       else if (siteVal !== 'all') showSite = rowProjects.includes(siteVal);
 
-      row.style.display = (showGroup && showType && showSite) ? '' : 'none';
+      let showSearch = true;
+      if (searchVal) showSearch = searchText.includes(searchVal);
+
+      row.style.display = (showGroup && showType && showSite && showSearch) ? '' : 'none';
     });
   }
 
