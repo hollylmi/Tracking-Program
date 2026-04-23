@@ -297,6 +297,86 @@ export const api = {
     recordScanLocation: (machineId: number, data: { lat?: number; lng?: number; address?: string; tag_uid?: string }) =>
       apiClient.post(`/equipment/${machineId}/scan-location`, data),
 
+    // Transfer batches (mobile)
+    getTransferBatch: (batchId: number) =>
+      apiClient.get<{
+        id: number
+        status: string
+        scheduled_date: string | null
+        from_project: { id: number; name: string | null }
+        to_project: { id: number; name: string | null }
+        pickup_location: string | null
+        dropoff_location: string | null
+        travel_notes: string | null
+        transport_contact: string | null
+        items: Array<{
+          id: number
+          machine_id: number
+          machine_name: string | null
+          plant_id: string | null
+          status: string
+          pre_checked: boolean
+          arrived: boolean
+          active_tag_uid: string | null
+          pre_check_condition: string | null
+          arrival_check_condition: string | null
+        }>
+      }>(`/transfer-batches/${batchId}`),
+
+    submitTransferPreCheck: async (transferId: number, data: {
+      condition: string
+      hours_reading?: string
+      notes?: string
+      tag_uid?: string
+      photo_uri?: string
+      photo_filename?: string
+    }) => {
+      const token = useAuthStore.getState().accessToken
+      const formData = new FormData()
+      formData.append('condition', data.condition)
+      if (data.hours_reading) formData.append('hours_reading', data.hours_reading)
+      if (data.notes) formData.append('notes', data.notes)
+      if (data.tag_uid) formData.append('tag_uid', data.tag_uid)
+      if (data.photo_uri && data.photo_filename) {
+        formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
+      }
+      const res = await fetch(`${API_BASE_URL}/api/transfer/${transferId}/pre-check`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw Object.assign(new Error('Pre-check failed'), { status: res.status, body })
+      return body
+    },
+
+    submitTransferArrival: async (transferId: number, data: {
+      condition: string
+      hours_reading?: string
+      notes?: string
+      tag_uid?: string
+      photo_uri?: string
+      photo_filename?: string
+    }) => {
+      const token = useAuthStore.getState().accessToken
+      const formData = new FormData()
+      formData.append('condition', data.condition)
+      if (data.hours_reading) formData.append('hours_reading', data.hours_reading)
+      if (data.notes) formData.append('notes', data.notes)
+      if (data.tag_uid) formData.append('tag_uid', data.tag_uid)
+      if (data.photo_uri && data.photo_filename) {
+        formData.append('photo', { uri: data.photo_uri, name: data.photo_filename, type: 'image/jpeg' } as any)
+      }
+      const res = await fetch(`${API_BASE_URL}/api/transfer/${transferId}/arrive`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw Object.assign(new Error('Arrival check failed'), { status: res.status, body })
+      return body
+    },
+
     // NFC tags
     listTags: (machineId: number) =>
       apiClient.get<{ tags: NFCTagInfo[] }>(`/equipment/${machineId}/nfc-tags`),

@@ -4438,3 +4438,243 @@ def lookup_nfc_tag():
         'tag': _nfc_tag_to_dict(tag),
         'machine': {'id': tag.machine.id, 'name': tag.machine.name, 'plant_id': tag.machine.plant_id},
     }, 200
+
+
+# ─── Transfer batch mobile endpoints ─────────────────────────────────────────
+
+def _transfer_item_to_dict(item):
+    """Serialise a MachineTransfer item with check + NFC tag info for mobile."""
+    active_tag = next((t for t in (item.machine.nfc_tags or []) if t.status == 'active'), None) if item.machine else None
+    return {
+        'id': item.id,
+        'machine_id': item.machine_id,
+        'machine_name': item.machine.name if item.machine else None,
+        'plant_id': item.machine.plant_id if item.machine else None,
+        'status': item.status,
+        'pre_checked': bool(item.pre_check_id),
+        'arrived': bool(item.arrival_check_id),
+        'active_tag_uid': active_tag.uid if active_tag else None,
+        'pre_check_condition': item.pre_check.condition if item.pre_check else None,
+        'arrival_check_condition': item.arrival_check.condition if item.arrival_check else None,
+    }
+
+
+@api_data_bp.route('/transfer-batches/<int:batch_id>', methods=['GET'])
+@jwt_required()
+def get_transfer_batch(batch_id):
+    """Full batch data for the mobile transfer screen."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role not in ('admin', 'supervisor'):
+        return {'error': 'Admin or supervisor only'}, 403
+
+    from models import TransferBatch
+    batch = TransferBatch.query.get(batch_id)
+    if not batch:
+        return {'error': 'Transfer not found'}, 404
+
+    return {
+        'id': batch.id,
+        'status': batch.status,
+        'scheduled_date': batch.scheduled_date.isoformat() if batch.scheduled_date else None,
+        'from_project': {'id': batch.from_project_id,
+                         'name': batch.from_project.name if batch.from_project else None},
+        'to_project': {'id': batch.to_project_id,
+                       'name': batch.to_project.name if batch.to_project else None},
+        'pickup_location': batch.pickup_location,
+        'dropoff_location': batch.dropoff_location,
+        'travel_notes': batch.travel_notes,
+        'transport_contact': batch.transport_contact,
+        'items': [_transfer_item_to_dict(i) for i in batch.items],
+    }, 200
+
+
+@api_data_bp.route('/transfer/<int:transfer_id>/pre-check', methods=['POST'])
+@jwt_required()
+def api_transfer_pre_check(transfer_id):
+    """Submit a pre-move check for one machine in a transfer batch.
+    Expects multipart form: condition, hours_reading (optional), notes (optional),
+    photo (optional), tag_uid (optional — if mobile verified via NFC scan)."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role not in ('admin', 'supervisor'):
+        return {'error': 'Admin or supervisor only'}, 403
+
+    transfer = MachineTransfer.query.get(transfer_id)
+    if not transfer:
+        return {'error': 'Transfer not found'}, 404
+    if transfer.status != 'scheduled':
+        return {'error': 'Transfer is not in scheduled status'}, 409
+    if transfer.pre_check_id:
+        return {'error': 'Already pre-checked'}, 409
+
+    condition = request.form.get('condition', 'good')
+    notes = (request.form.get('notes') or '').strip() or None
+    hours_str = (request.form.get('hours_reading') or '').strip()
+    hours_reading = float(hours_str) if hours_str else None
+    tag_uid = (request.form.get('tag_uid') or '').strip() or None
+
+    # If a tag UID was supplied, verify it matches the machine
+    if tag_uid:
+        matched_tag = NFCTag.query.filter_by(uid=tag_uid, status='active').first()
+        if not matched_tag or matched_tag.machine_id != transfer.machine_id:
+            return {
+                'error': 'NFC tag does not match this machine',
+                'scanned_machine_id': matched_tag.machine_id if matched_tag else None,
+                'expected_machine_id': transfer.machine_id,
+            }, 409
+
+    # Create the daily-check row that pre_check_id references
+    from models import MachineDailyCheck
+    check = MachineDailyCheck(
+        machine_id=transfer.machine_id,
+        project_id=transfer.from_project_id,
+        check_date=date.today(),
+        checked_by_user_id=user.id,
+        condition=condition,
+        hours_reading=hours_reading,
+        notes=(notes or '') + (f' [Pre-move check for transfer #{transfer.id}]' if notes else f'Pre-move check for transfer #{transfer.id}'),
+    )
+
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower()
+        stored = f"{uuid.uuid4()}{ext}"
+        local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
+        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        check.photo_filename = stored
+        check.photo_original_name = photo.filename
+
+    db.session.add(check)
+    db.session.flush()
+    transfer.pre_check_id = check.id
+
+    # Log hours
+    if hours_reading is not None:
+        from models import MachineHoursLog
+        db.session.add(MachineHoursLog(
+            machine_id=transfer.machine_id,
+            project_id=transfer.from_project_id,
+            log_date=date.today(),
+            hours_reading=hours_reading,
+            recorded_by_user_id=user.id,
+            daily_check_id=check.id,
+        ))
+
+    # If all items in the batch are now pre-checked, flip the batch to in_transit
+    batch = transfer.batch if hasattr(transfer, 'batch') else None
+    if transfer.batch_id:
+        from models import TransferBatch
+        batch = TransferBatch.query.get(transfer.batch_id)
+        if batch and all(i.pre_check_id for i in batch.items):
+            batch.status = 'in_transit'
+            for i in batch.items:
+                i.status = 'in_transit'
+
+    db.session.commit()
+    return {'ok': True, 'item': _transfer_item_to_dict(transfer)}, 200
+
+
+@api_data_bp.route('/transfer/<int:transfer_id>/arrive', methods=['POST'])
+@jwt_required()
+def api_transfer_arrive(transfer_id):
+    """Submit an arrival check for one machine — finalises the transfer."""
+    user, err = _get_user()
+    if err:
+        return err
+    if user.role not in ('admin', 'supervisor'):
+        return {'error': 'Admin or supervisor only'}, 403
+
+    transfer = MachineTransfer.query.get(transfer_id)
+    if not transfer:
+        return {'error': 'Transfer not found'}, 404
+    if transfer.status != 'in_transit':
+        return {'error': 'Transfer is not in transit'}, 409
+    if transfer.arrival_check_id:
+        return {'error': 'Already marked arrived'}, 409
+
+    condition = request.form.get('condition', 'good')
+    notes = (request.form.get('notes') or '').strip() or None
+    hours_str = (request.form.get('hours_reading') or '').strip()
+    hours_reading = float(hours_str) if hours_str else None
+    tag_uid = (request.form.get('tag_uid') or '').strip() or None
+
+    if tag_uid:
+        matched_tag = NFCTag.query.filter_by(uid=tag_uid, status='active').first()
+        if not matched_tag or matched_tag.machine_id != transfer.machine_id:
+            return {
+                'error': 'NFC tag does not match this machine',
+                'scanned_machine_id': matched_tag.machine_id if matched_tag else None,
+                'expected_machine_id': transfer.machine_id,
+            }, 409
+
+    from models import MachineDailyCheck
+    check = MachineDailyCheck(
+        machine_id=transfer.machine_id,
+        project_id=transfer.to_project_id,
+        check_date=date.today(),
+        checked_by_user_id=user.id,
+        condition=condition,
+        hours_reading=hours_reading,
+        notes=(notes or '') + (f' [Arrival check for transfer #{transfer.id}]' if notes else f'Arrival check for transfer #{transfer.id}'),
+    )
+    photo = request.files.get('photo')
+    if photo and photo.filename:
+        ext = os.path.splitext(photo.filename)[1].lower()
+        stored = f"{uuid.uuid4()}{ext}"
+        local_path = os.path.join(UPLOAD_FOLDER, 'daily_checks', stored)
+        storage.upload_file(photo, f'daily_checks/{stored}', local_path)
+        check.photo_filename = stored
+        check.photo_original_name = photo.filename
+
+    db.session.add(check)
+    db.session.flush()
+    transfer.arrival_check_id = check.id
+    transfer.arrived_by_user_id = user.id
+    transfer.arrived_at = datetime.utcnow()
+    transfer.status = 'completed'
+    transfer.completed_at = datetime.utcnow()
+
+    # Reassign the machine to the destination project
+    from models import ProjectMachine, EquipmentAssignmentHistory, MachineHoursLog
+    existing = ProjectMachine.query.filter_by(machine_id=transfer.machine_id).first()
+    if transfer.to_project_id:
+        if existing:
+            existing.project_id = transfer.to_project_id
+        else:
+            db.session.add(ProjectMachine(
+                project_id=transfer.to_project_id,
+                machine_id=transfer.machine_id,
+            ))
+    elif existing:
+        db.session.delete(existing)
+
+    db.session.add(EquipmentAssignmentHistory(
+        machine_id=transfer.machine_id,
+        from_project_id=transfer.from_project_id,
+        to_project_id=transfer.to_project_id,
+        moved_by=user.display_name or user.username,
+    ))
+
+    if hours_reading is not None:
+        db.session.add(MachineHoursLog(
+            machine_id=transfer.machine_id,
+            project_id=transfer.to_project_id,
+            log_date=date.today(),
+            hours_reading=hours_reading,
+            recorded_by_user_id=user.id,
+            daily_check_id=check.id,
+        ))
+
+    # If every item in the batch has arrived, complete the batch
+    if transfer.batch_id:
+        from models import TransferBatch
+        batch = TransferBatch.query.get(transfer.batch_id)
+        if batch and all(i.arrival_check_id for i in batch.items):
+            batch.status = 'completed'
+            batch.completed_at = datetime.utcnow()
+
+    db.session.commit()
+    return {'ok': True, 'item': _transfer_item_to_dict(transfer)}, 200

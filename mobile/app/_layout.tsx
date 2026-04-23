@@ -129,6 +129,10 @@ export default function RootLayout() {
           name="equipment-new"
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="transfer-batch/[id]"
+          options={{ headerShown: false }}
+        />
       </Stack>
     </QueryClientProvider>
   )

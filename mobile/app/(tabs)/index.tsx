@@ -77,9 +77,7 @@ function MyTodosSection() {
             else if (todo.task_type === 'machine_startup') router.push('/(tabs)/equipment')
             else if (todo.task_type === 'scheduled_check' && todo.check_id) router.push({ pathname: '/scheduled-check/[id]', params: { id: todo.check_id } })
             else if ((todo.task_type === 'incoming_transfer' || todo.task_type === 'pre_check_transfer') && todo.batch_id) {
-              // For now, the transfer batch detail page lives only on the web.
-              // Mobile users see the todo + counts; tapping it is a no-op until
-              // we build a mobile transfer batch screen.
+              router.push({ pathname: '/transfer-batch/[id]', params: { id: String(todo.batch_id) } })
             }
           }}
           activeOpacity={todo.completed ? 1 : 0.7}
