@@ -36,7 +36,7 @@ function useUniversalLinkHandler() {
       // Supports both new public URL (/e/<id>) and legacy (/equipment/scan/<id>)
       const match = event.url.match(/\/e\/(\d+)/) || event.url.match(/\/equipment\/scan\/(\d+)/)
       if (match) {
-        router.push({ pathname: '/machine/[id]', params: { id: match[1] } })
+        router.push({ pathname: '/scan/[id]', params: { id: match[1] } })
       }
     }
 

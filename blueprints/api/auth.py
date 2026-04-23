@@ -48,6 +48,26 @@ def login():
     }, 200
 
 
+@api_auth_bp.route('/auth/verify-admin', methods=['POST'])
+@jwt_required()
+def verify_admin():
+    """Verify an admin user's password for elevated actions (e.g. re-writing an
+    already-programmed NFC tag). The user performing the action must be an admin."""
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user or not user.active:
+        return {'error': 'Session invalid'}, 401
+    if user.role != 'admin':
+        return {'error': 'Admin role required'}, 403
+    if not password or not check_password_hash(user.password_hash, password):
+        return {'error': 'Incorrect password'}, 401
+
+    return {'ok': True}, 200
+
+
 @api_auth_bp.route('/auth/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh():

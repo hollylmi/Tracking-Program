@@ -112,6 +112,8 @@ export const api = {
     logout: () => apiClient.post('/auth/logout'),
     forgotPassword: (email: string) =>
       apiClient.post<{ message: string }>('/auth/forgot-password', { email }),
+    verifyAdmin: (password: string) =>
+      apiClient.post<{ ok: boolean }>('/auth/verify-admin', { password }),
   },
 
   projects: {

@@ -852,6 +852,9 @@ export default function MachineDetailScreen() {
   const [nfcWriting, setNfcWriting] = useState(false)
   const [tagLabelModalVisible, setTagLabelModalVisible] = useState(false)
   const [pendingTagLabel, setPendingTagLabel] = useState('')
+  const [adminPwModalVisible, setAdminPwModalVisible] = useState(false)
+  const [adminPw, setAdminPw] = useState('')
+  const [verifyingAdmin, setVerifyingAdmin] = useState(false)
 
   useEffect(() => {
     if (NfcManager) {
@@ -873,6 +876,32 @@ export default function MachineDetailScreen() {
     loadNfcTags()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  const handleAdminVerify = async () => {
+    if (!adminPw) {
+      Alert.alert('Password Required', 'Enter your admin password to continue.')
+      return
+    }
+    setVerifyingAdmin(true)
+    try {
+      await api.auth.verifyAdmin(adminPw)
+      setAdminPw('')
+      setAdminPwModalVisible(false)
+      // Proceed to label modal → write flow
+      setTagLabelModalVisible(true)
+    } catch (e: any) {
+      const status = e?.response?.status
+      if (status === 401) {
+        Alert.alert('Incorrect Password', 'The password you entered is not valid.')
+      } else if (status === 403) {
+        Alert.alert('Admin Only', 'Only admin users can re-write tags.')
+      } else {
+        Alert.alert('Verification Failed', 'Could not verify admin credentials. Try again.')
+      }
+    } finally {
+      setVerifyingAdmin(false)
+    }
+  }
 
   const handleWriteNfcTag = async () => {
     if (!nfcSupported) {
@@ -1023,7 +1052,7 @@ export default function MachineDetailScreen() {
         <View style={styles.header}>
           <TouchableOpacity onPress={() => {
             if (router.canGoBack()) router.back()
-            else router.replace('/equipment' as any)
+            else router.replace('/(tabs)/equipment')
           }} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={Colors.white} />
           </TouchableOpacity>
@@ -1043,7 +1072,7 @@ export default function MachineDetailScreen() {
         <View style={styles.header}>
           <TouchableOpacity onPress={() => {
             if (router.canGoBack()) router.back()
-            else router.replace('/equipment' as any)
+            else router.replace('/(tabs)/equipment')
           }} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={Colors.white} />
           </TouchableOpacity>
@@ -1297,7 +1326,22 @@ export default function MachineDetailScreen() {
             {canEdit && nfcSupported && (
               <TouchableOpacity
                 style={styles.reportBtn}
-                onPress={() => setTagLabelModalVisible(true)}
+                onPress={() => {
+                  const hasActiveTag = nfcTags.some(t => t.status === 'active')
+                  if (hasActiveTag) {
+                    // Tag already assigned — require admin password to re-write
+                    if (user?.role !== 'admin') {
+                      Alert.alert(
+                        'Admin Required',
+                        'This equipment already has an active NFC tag. Only an admin can program a new tag to replace it.',
+                      )
+                      return
+                    }
+                    setAdminPwModalVisible(true)
+                  } else {
+                    setTagLabelModalVisible(true)
+                  }
+                }}
                 activeOpacity={0.85}
               >
                 <Ionicons name="add" size={14} color={Colors.dark} />
@@ -1469,6 +1513,53 @@ export default function MachineDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Admin password modal (shown before re-writing an already-assigned tag) */}
+      <Modal
+        visible={adminPwModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setAdminPwModalVisible(false); setAdminPw('') }}
+      >
+        <View style={styles.nfcModalOverlay}>
+          <View style={styles.nfcModalCard}>
+            <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginBottom: Spacing.xs }}>
+              Admin password required
+            </Text>
+            <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, marginBottom: Spacing.md }}>
+              This equipment already has an NFC tag assigned. Enter your admin password to program a replacement.
+            </Text>
+            <TextInput
+              style={styles.nfcInput}
+              value={adminPw}
+              onChangeText={setAdminPw}
+              placeholder="Admin password"
+              placeholderTextColor={Colors.textLight}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md }}>
+              <TouchableOpacity
+                style={[styles.nfcBtn, { backgroundColor: Colors.border }]}
+                onPress={() => { setAdminPwModalVisible(false); setAdminPw('') }}
+                disabled={verifyingAdmin}
+              >
+                <Text style={{ ...Typography.body, color: Colors.textPrimary }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.nfcBtn, { backgroundColor: Colors.primary }]}
+                onPress={handleAdminVerify}
+                disabled={verifyingAdmin}
+              >
+                {verifyingAdmin
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={{ ...Typography.body, color: '#fff', fontWeight: '700' }}>Continue</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* NFC tag label modal (pre-write) */}
       <Modal

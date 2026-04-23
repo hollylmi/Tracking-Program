@@ -636,7 +636,7 @@ export default function EquipmentScreen() {
           })()
 
           setNfcScanning(false)
-          router.push({ pathname: '/machine/[id]', params: { id: match[1] } })
+          router.push({ pathname: '/scan/[id]', params: { id: match[1] } })
           return
         } else {
           Alert.alert('Unknown Tag', 'This NFC tag is not linked to any equipment.')

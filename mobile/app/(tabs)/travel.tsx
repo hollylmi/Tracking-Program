@@ -266,13 +266,13 @@ export default function TravelScreen() {
       <ScreenHeader title="Travel" subtitle="Your flights & accommodation" />
       {noEmployee ? (
         <EmptyState
-          icon="alert-circle-outline"
+          icon="⚠️"
           title="Not Linked"
           message="Your account is not linked to an employee record. Contact admin."
         />
       ) : sections.length === 0 && !isLoading ? (
         <EmptyState
-          icon="airplane-outline"
+          icon="✈️"
           title="No Upcoming Travel"
           message="When flights or accommodation are booked for you, they'll appear here."
         />

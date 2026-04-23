@@ -86,7 +86,7 @@ def apple_app_site_association():
             "apps": [],
             "details": [{
                 "appID": "M8NXJMFDNB.com.lmigroup.plytrack",
-                "paths": ["/equipment/scan/*"]
+                "paths": ["/equipment/scan/*", "/e/*"]
             }]
         }
     }), 200, {'Content-Type': 'application/json'}
