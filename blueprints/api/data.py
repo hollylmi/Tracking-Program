@@ -1261,6 +1261,22 @@ def get_machine(machine_id):
             }
             for bd in breakdowns
         ],
+        # Pending transfer banner (scheduled or in_transit)
+        'pending_transfer': {
+            'id': pending_transfer.id,
+            'batch_id': pending_transfer.batch_id,
+            'from_project': pending_transfer.from_project.name if pending_transfer.from_project else None,
+            'to_project': pending_transfer.to_project.name if pending_transfer.to_project else None,
+            'scheduled_date': pending_transfer.scheduled_date.isoformat() if pending_transfer.scheduled_date else None,
+            'anticipated_arrival_date': pending_transfer.batch.anticipated_arrival_date.isoformat()
+                if (pending_transfer.batch and pending_transfer.batch.anticipated_arrival_date) else None,
+            'status': pending_transfer.status,
+            'travel_notes': pending_transfer.travel_notes,
+            'transport_contact': pending_transfer.transport_contact,
+            'pre_checked': bool(pending_transfer.pre_check_id),
+            'arrived': bool(pending_transfer.arrival_check_id),
+        } if pending_transfer else None,
+        'active_tag_uid': active_tag.uid if active_tag else None,
         # NFC scan location
         'last_scanned_at': (machine.last_scanned_at.isoformat() + 'Z') if machine.last_scanned_at else None,
         'last_scanned_lat': machine.last_scanned_lat,
