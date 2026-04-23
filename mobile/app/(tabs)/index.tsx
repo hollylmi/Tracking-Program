@@ -47,7 +47,7 @@ function MyTodosSection() {
     queryKey: ['my-todos'],
     queryFn: () => api.tasks.myTodos().then((r) => r.data),
     staleTime: 60 * 1000,
-    enabled: !!user && user.role !== 'admin',
+    enabled: !!user,
   })
 
   if (!data?.todos?.length) return null
