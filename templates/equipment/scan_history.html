@@ -31,7 +31,7 @@
         {% for e in events %}
         <tr>
           <td class="small">
-            {% if e.scanned_at %}{{ e.scanned_at.strftime('%d/%m/%Y %H:%M') }}{% else %}—{% endif %}
+            {% if e.scanned_at %}{{ e.scanned_at|aest }}{% else %}—{% endif %}
           </td>
           <td class="small">
             {% if e.source == 'app' %}

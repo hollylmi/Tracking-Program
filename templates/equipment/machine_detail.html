@@ -207,7 +207,7 @@
             <hr class="my-2">
             <div class="fw-semibold small mb-1"><i class="bi bi-geo-alt-fill text-primary me-1"></i>Last Known Location</div>
             <div class="small text-muted">
-              Scanned {{ machine.last_scanned_at.strftime('%d/%m/%Y %H:%M') }}
+              Scanned {{ machine.last_scanned_at|aest }}
               {% if machine.last_scanned_by_user %}by {{ machine.last_scanned_by_user.display_name or machine.last_scanned_by_user.username }}{% endif %}
             </div>
             {% if machine.last_scanned_address %}
