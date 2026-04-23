@@ -67,6 +67,7 @@ class Project(db.Model):
     is_cfmeu = db.Column(db.Boolean, default=False)
     track_by_lot = db.Column(db.Boolean, default=True)  # False = track by material only (no lot field)
     site_address = db.Column(db.String(500))      # Physical site address
+    is_storage = db.Column(db.Boolean, default=False)  # True = storage/yard location, not a construction site
     city = db.Column(db.String(100))                 # City/town for travel planning (e.g. "Brisbane", "Sydney")
     nearest_airport = db.Column(db.String(10))       # Airport code for travel (e.g. "BNE", "SYD", "KTA")
     site_contact = db.Column(db.String(200))      # On-site contact name / phone
@@ -78,9 +79,11 @@ class Project(db.Model):
 
     @property
     def status(self):
-        """Planning / Active / Completed based on active flag and mobilisation date."""
+        """Planning / Active / Completed / Storage based on flags and mobilisation date."""
         if not self.active:
             return 'completed'
+        if self.is_storage:
+            return 'storage'
         if self.mobilisation_date:
             from datetime import date as d
             if d.today() >= self.mobilisation_date:
@@ -90,7 +93,10 @@ class Project(db.Model):
 
     @property
     def is_operational(self):
-        """True if project is active AND mobilised (ready for entries, equipment checks)."""
+        """True if project is active AND mobilised (ready for entries, equipment checks).
+        Storage locations are never operational — they can hold equipment but don't run production."""
+        if self.is_storage:
+            return False
         return self.status == 'active'
     entries = db.relationship('DailyEntry', backref='project', lazy=True)
     site_manager = db.relationship('User', foreign_keys=[site_manager_user_id], lazy=True)

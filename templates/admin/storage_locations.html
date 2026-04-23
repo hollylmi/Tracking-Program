@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}Storage Locations — Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2 class="fw-bold mb-0"><i class="bi bi-box-seam me-2 text-warning"></i>Storage Locations</h2>
+    <div class="text-muted small">Yards, depots and other holding locations where equipment goes between jobs.</div>
+  </div>
+  <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#addLocationModal">
+    <i class="bi bi-plus-lg me-1"></i>New Storage Location
+  </button>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    {% if locations %}
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Address</th>
+          <th>Contact</th>
+          <th>Equipment</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in locations %}
+        <tr {% if not p.active %}class="table-secondary"{% endif %}>
+          <td class="fw-semibold"><i class="bi bi-box-seam me-1 text-warning"></i>{{ p.name }}{% if p.description %}<br><small class="text-muted fw-normal">{{ p.description }}</small>{% endif %}</td>
+          <td class="small text-muted">{{ p.site_address or '—' }}</td>
+          <td class="small text-muted">{{ p.site_contact or '—' }}</td>
+          <td class="small">
+            {% set count = machine_counts.get(p.id, 0) %}
+            {% if count %}
+              <span class="badge bg-info text-dark">{{ count }} machine{{ 's' if count != 1 }}</span>
+            {% else %}
+              <span class="text-muted">Empty</span>
+            {% endif %}
+          </td>
+          <td>{% if p.active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Archived</span>{% endif %}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-secondary py-0" data-bs-toggle="modal" data-bs-target="#editLocationModal{{ p.id }}" title="Edit"><i class="bi bi-pencil"></i></button>
+            <form method="POST" class="d-inline">
+              <input type="hidden" name="action" value="toggle">
+              <input type="hidden" name="id" value="{{ p.id }}">
+              <button type="submit" class="btn btn-sm btn-outline-{{ 'warning' if p.active else 'success' }} py-0" title="{{ 'Archive' if p.active else 'Activate' }}">
+                <i class="bi bi-{{ 'archive' if p.active else 'arrow-up-circle' }}"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
+      No storage locations yet. Click <strong>New Storage Location</strong> above to add one.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Add modal -->
+<div class="modal fade" id="addLocationModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" class="modal-content">
+      <input type="hidden" name="action" value="add">
+      <div class="modal-header">
+        <h5 class="modal-title">New Storage Location</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Name *</label>
+          <input type="text" name="name" class="form-control" required placeholder="e.g. LMI Yard, Brisbane Depot">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Address</label>
+          <input type="text" name="site_address" class="form-control" placeholder="Street address (optional)">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Contact</label>
+          <input type="text" name="site_contact" class="form-control" placeholder="Yard manager name / phone (optional)">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Notes</label>
+          <input type="text" name="description" class="form-control" placeholder="What's at this location, access instructions, etc.">
+        </div>
+        <div class="alert alert-info small mb-0">
+          <i class="bi bi-info-circle me-1"></i>
+          Storage locations work like sites but don't run production. You can transfer equipment to them from any site or from another storage location.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-warning">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% for p in locations %}
+<div class="modal fade" id="editLocationModal{{ p.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" class="modal-content">
+      <input type="hidden" name="action" value="edit">
+      <input type="hidden" name="id" value="{{ p.id }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit — {{ p.name }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Name *</label>
+          <input type="text" name="name" class="form-control" required value="{{ p.name }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Address</label>
+          <input type="text" name="site_address" class="form-control" value="{{ p.site_address or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Contact</label>
+          <input type="text" name="site_contact" class="form-control" value="{{ p.site_contact or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Notes</label>
+          <input type="text" name="description" class="form-control" value="{{ p.description or '' }}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

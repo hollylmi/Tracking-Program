@@ -367,19 +367,29 @@
         <div class="modal-header"><h5 class="modal-title">Schedule Equipment Transfer</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
           <div class="row g-3">
-            <!-- Projects -->
+            <!-- Projects / storage -->
             <div class="col-sm-6">
-              <label class="form-label fw-semibold">From Project</label>
+              <label class="form-label fw-semibold">From</label>
               <select name="from_project_id" class="form-select" id="transferFromProject" onchange="autoFillPickup(this)">
                 <option value="">— Unassigned —</option>
-                {% for p in projects %}<option value="{{ p.id }}" data-address="{{ p.site_address or '' }}">{{ p.name }}</option>{% endfor %}
+                <optgroup label="Active Sites">
+                  {% for p in projects if not p.is_storage %}<option value="{{ p.id }}" data-address="{{ p.site_address or '' }}">{{ p.name }}</option>{% endfor %}
+                </optgroup>
+                <optgroup label="📦 Storage Locations">
+                  {% for p in projects if p.is_storage %}<option value="{{ p.id }}" data-address="{{ p.site_address or '' }}">{{ p.name }}</option>{% endfor %}
+                </optgroup>
               </select>
             </div>
             <div class="col-sm-6">
-              <label class="form-label fw-semibold">To Project *</label>
+              <label class="form-label fw-semibold">To *</label>
               <select name="to_project_id" class="form-select" required id="transferToProject" onchange="autoFillDropoff(this)">
                 <option value="">— Select Destination —</option>
-                {% for p in projects %}<option value="{{ p.id }}" data-address="{{ p.site_address or '' }}">{{ p.name }}</option>{% endfor %}
+                <optgroup label="Active Sites">
+                  {% for p in projects if not p.is_storage %}<option value="{{ p.id }}" data-address="{{ p.site_address or '' }}">{{ p.name }}</option>{% endfor %}
+                </optgroup>
+                <optgroup label="📦 Storage Locations">
+                  {% for p in projects if p.is_storage %}<option value="{{ p.id }}" data-address="{{ p.site_address or '' }}">{{ p.name }}</option>{% endfor %}
+                </optgroup>
               </select>
             </div>
             <!-- Machines (multi-select) -->

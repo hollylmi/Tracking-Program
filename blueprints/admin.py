@@ -710,6 +710,60 @@ def admin_projects():
                            show_inactive=show_inactive, inactive_count=inactive_count)
 
 
+@admin_bp.route('/admin/storage-locations', methods=['GET', 'POST'])
+@require_role('admin')
+def admin_storage_locations():
+    """Manage storage/yard locations. Stored as Project rows with is_storage=True
+    so they slot into the existing transfer flow without model changes."""
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            name = (request.form.get('name') or '').strip()
+            if not name:
+                flash('Name is required.', 'danger')
+            else:
+                p = Project(
+                    name=name,
+                    site_address=(request.form.get('site_address') or '').strip() or None,
+                    site_contact=(request.form.get('site_contact') or '').strip() or None,
+                    description=(request.form.get('description') or '').strip() or None,
+                    is_storage=True,
+                    active=True,
+                )
+                db.session.add(p)
+                db.session.commit()
+                flash(f'Storage location "{name}" added.', 'success')
+        elif action == 'edit':
+            p = Project.query.get_or_404(int(request.form.get('id')))
+            if not p.is_storage:
+                flash('That is not a storage location.', 'danger')
+            else:
+                p.name = (request.form.get('name') or p.name).strip() or p.name
+                p.site_address = (request.form.get('site_address') or '').strip() or None
+                p.site_contact = (request.form.get('site_contact') or '').strip() or None
+                p.description = (request.form.get('description') or '').strip() or None
+                db.session.commit()
+                flash('Storage location updated.', 'success')
+        elif action == 'toggle':
+            p = Project.query.get_or_404(int(request.form.get('id')))
+            if not p.is_storage:
+                flash('That is not a storage location.', 'danger')
+            else:
+                p.active = not p.active
+                db.session.commit()
+                flash(f'Storage location {"activated" if p.active else "archived"}.', 'info')
+        return redirect(url_for('admin.admin_storage_locations'))
+
+    locations = Project.query.filter_by(is_storage=True).order_by(Project.name).all()
+    # Count machines at each storage location
+    machine_counts = {}
+    for p in locations:
+        from models import ProjectMachine
+        machine_counts[p.id] = ProjectMachine.query.filter_by(project_id=p.id).count()
+    return render_template('admin/storage_locations.html',
+                           locations=locations, machine_counts=machine_counts)
+
+
 @admin_bp.route('/admin/users/<int:user_id>/projects', methods=['GET', 'POST'])
 @require_role('admin')
 def admin_user_projects(user_id):
