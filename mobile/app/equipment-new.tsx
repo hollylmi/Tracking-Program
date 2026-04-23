@@ -107,7 +107,7 @@ export default function NewEquipmentScreen() {
       const tagUid: string | undefined = tag?.id
       if (!tagUid) throw new Error('Could not read tag UID')
 
-      const url = `${API_BASE_URL}/e/${createdMachine.id}`
+      const url = `${API_BASE_URL}/equipment/scan/${createdMachine.id}`
       const bytes = Ndef.encodeMessage([Ndef.uriRecord(url)])
       if (!bytes) throw new Error('Could not encode tag payload')
       await NfcManager.ndefHandler.writeNdefMessage(bytes)

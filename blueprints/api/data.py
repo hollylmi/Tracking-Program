@@ -1253,7 +1253,7 @@ def get_machine(machine_id):
             for bd in breakdowns
         ],
         # NFC scan location
-        'last_scanned_at': machine.last_scanned_at.isoformat() if machine.last_scanned_at else None,
+        'last_scanned_at': (machine.last_scanned_at.isoformat() + 'Z') if machine.last_scanned_at else None,
         'last_scanned_lat': machine.last_scanned_lat,
         'last_scanned_lng': machine.last_scanned_lng,
         'last_scanned_address': machine.last_scanned_address,
@@ -2814,7 +2814,7 @@ def equipment_machine_detail(machine_id):
             'travel_notes': pending_transfer.travel_notes,
             'transport_contact': pending_transfer.transport_contact,
         } if pending_transfer else None,
-        'last_scanned_at': m.last_scanned_at.isoformat() if m.last_scanned_at else None,
+        'last_scanned_at': (m.last_scanned_at.isoformat() + 'Z') if m.last_scanned_at else None,
         'last_scanned_lat': m.last_scanned_lat,
         'last_scanned_lng': m.last_scanned_lng,
         'last_scanned_address': m.last_scanned_address,

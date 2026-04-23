@@ -1152,9 +1152,14 @@ def serve_machine_photo(filename):
 # ---------------------------------------------------------------------------
 
 @equipment_bp.route('/equipment/scan/<int:machine_id>')
-@require_role('admin', 'supervisor', 'site')
 def machine_scan(machine_id):
-    """NFC scan landing page — mobile-friendly action page for a specific machine."""
+    """NFC scan landing page — mobile-friendly action page for a specific machine.
+    Unauthenticated viewers (contractors) are redirected to the public /e/<id> page
+    instead of being forced through the login wall."""
+    if not current_user.is_authenticated:
+        return redirect(url_for('equipment.equipment_public', machine_id=machine_id))
+    if current_user.role not in ('admin', 'supervisor', 'site'):
+        return redirect(url_for('equipment.equipment_public', machine_id=machine_id))
     m = Machine.query.get_or_404(machine_id)
     assignment = ProjectMachine.query.filter_by(machine_id=machine_id).first()
     recent_checks = MachineDailyCheck.query.filter_by(machine_id=machine_id).order_by(

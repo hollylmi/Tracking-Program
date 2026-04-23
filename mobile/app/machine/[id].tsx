@@ -937,8 +937,11 @@ export default function MachineDetailScreen() {
         throw new Error('Could not read tag UID')
       }
 
-      // Write the public equipment URL to the tag
-      const url = `${API_BASE_URL}/e/${display.id}`
+      // Write the equipment scan URL to the tag — using /equipment/scan/ path
+      // because that's what our iOS universal link association was originally
+      // trained on (still works for /e/ too, but this maximises compatibility).
+      // The backend redirects unauthenticated viewers to /e/<id> automatically.
+      const url = `${API_BASE_URL}/equipment/scan/${display.id}`
       const bytes = Ndef.encodeMessage([Ndef.uriRecord(url)])
       if (!bytes) {
         throw new Error('Could not encode tag payload')
