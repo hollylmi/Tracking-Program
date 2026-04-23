@@ -154,16 +154,28 @@ def index():
                 'machine_count': len(sc.machines),
             })
 
-        # Transfer todos — one query, split into outbound/inbound per-user,
-        # only showing the ones where work remains on each side.
+        # Transfer todos — one query, split into outbound/inbound per-user.
+        # Dual-access users (admins with no explicit assignment) only see one
+        # todo at a time based on where the outstanding work is. Completed
+        # batches stay visible for the rest of the day so users can see their
+        # activity on the list.
+        from datetime import datetime as _dt
+        from models import MachineDailyCheck
         accessible_pids = {p.id for p in (current_user.accessible_projects() or [])}
         is_admin = current_user.role == 'admin'
         site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
                           if accessible_pids else db.false())
         site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
                             if accessible_pids else db.false())
+        today_start = _dt.combine(today, _dt.min.time())
         active_batches = TransferBatch.query.filter(
-            TransferBatch.status.in_(('scheduled', 'in_transit')),
+            db.or_(
+                TransferBatch.status.in_(('scheduled', 'in_transit')),
+                db.and_(
+                    TransferBatch.status == 'completed',
+                    TransferBatch.completed_at >= today_start,
+                ),
+            ),
             db.or_(
                 TransferBatch.pre_check_user_id == current_user.id,
                 TransferBatch.arrival_user_id == current_user.id,
@@ -176,6 +188,20 @@ def index():
             total = len(items)
             checked = sum(1 for t in items if t.pre_check_id)
             arrived = sum(1 for t in items if t.arrival_check_id)
+
+            def _user_acted_today(check_attr):
+                for it in items:
+                    cid = getattr(it, check_attr, None)
+                    if not cid:
+                        continue
+                    c = MachineDailyCheck.query.get(cid)
+                    if c and c.checked_by_user_id == current_user.id and c.check_date == today:
+                        return True
+                return False
+
+            user_did_source_today = _user_acted_today('pre_check_id')
+            user_did_dest_today = _user_acted_today('arrival_check_id')
+
             is_source_side = (
                 current_user.id == batch.pre_check_user_id or is_admin or
                 (accessible_pids and batch.from_project_id in accessible_pids)
@@ -184,24 +210,30 @@ def index():
                 current_user.id == batch.arrival_user_id or is_admin or
                 (accessible_pids and batch.to_project_id in accessible_pids)
             )
-            # Outbound pre-check: show while source work remains
-            if is_source_side and checked < total:
+            # Sequential rule for dual-access users: source todo while pre-check
+            # pending, then destination todo once pre-checks done.
+            if is_source_side and is_dest_side:
+                if checked < total:
+                    is_dest_side = False
+                else:
+                    is_source_side = False
+
+            if is_source_side and (checked < total or user_did_source_today):
                 todos.append({
                     'project': batch.from_project,
                     'task_type': 'pre_check_transfer',
                     'label': f'Outbound transfer — {total} machine{"s" if total != 1 else ""} to {batch.to_project.name if batch.to_project else "—"}',
-                    'completed': False,
+                    'completed': checked >= total,
                     'done': checked,
                     'total': total,
                     'batch_id': batch.id,
                 })
-            # Inbound arrival: show once items are physically moving + arrival work remains
-            if is_dest_side and checked > 0 and arrived < total:
+            if is_dest_side and checked > 0 and (arrived < total or user_did_dest_today):
                 todos.append({
                     'project': batch.to_project,
                     'task_type': 'incoming_transfer',
                     'label': f'Inbound transfer — {total} machine{"s" if total != 1 else ""} from {batch.from_project.name if batch.from_project else "—"}',
-                    'completed': False,
+                    'completed': arrived >= total,
                     'done': arrived,
                     'total': total,
                     'batch_id': batch.id,
