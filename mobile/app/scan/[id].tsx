@@ -11,6 +11,8 @@ import {
   TextInput,
   Modal,
   Platform,
+  Keyboard,
+  InputAccessoryView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -273,6 +275,31 @@ export default function ScanLandingScreen() {
           )}
         </Card>
 
+        {/* Inspection due banner */}
+        {machine.next_inspection_date && (() => {
+          const target = new Date(machine.next_inspection_date + 'T00:00:00')
+          const days = Math.ceil((target.getTime() - Date.now()) / 86400000)
+          if (days > 30) return null
+          const overdue = days < 0
+          const critical = days <= 3
+          const bg = overdue ? '#f8d7da' : critical ? '#fff3cd' : '#cff4fc'
+          const fg = overdue ? '#842029' : critical ? '#664d03' : '#055160'
+          const txt = overdue ? `Inspection overdue by ${-days} day${-days === 1 ? '' : 's'}`
+            : days === 0 ? 'Inspection due today'
+            : `Inspection due in ${days} day${days === 1 ? '' : 's'}`
+          return (
+            <View style={[styles.alertDanger, { backgroundColor: bg, borderColor: fg + '55' }]}>
+              <Ionicons name="search-outline" size={18} color={fg} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ ...Typography.bodySmall, fontWeight: '700', color: fg }}>{txt}</Text>
+                <Text style={{ ...Typography.caption, color: fg }}>
+                  Next inspection: {formatDate(machine.next_inspection_date)}
+                </Text>
+              </View>
+            </View>
+          )
+        })()}
+
         {/* Active breakdown warning */}
         {activeBreakdown && (
           <View style={styles.alertDanger}>
@@ -431,8 +458,13 @@ export default function ScanLandingScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <TextInput style={styles.input} value={hrs} onChangeText={setHrs} placeholder="Hours reading" keyboardType="decimal-pad" placeholderTextColor={Colors.textLight} />
-            <TextInput style={[styles.input, { marginTop: 8, height: 72, textAlignVertical: 'top' }]} value={notes} onChangeText={setNotes} placeholder="Notes..." multiline placeholderTextColor={Colors.textLight} />
+            <TextInput style={styles.input} value={hrs} onChangeText={setHrs} placeholder="Hours reading" keyboardType="decimal-pad"
+              returnKeyType="done" onSubmitEditing={Keyboard.dismiss} blurOnSubmit
+              inputAccessoryViewID={Platform.OS === 'ios' ? 'scanDoneBar' : undefined}
+              placeholderTextColor={Colors.textLight} />
+            <TextInput style={[styles.input, { marginTop: 8, height: 72, textAlignVertical: 'top' }]} value={notes} onChangeText={setNotes} placeholder="Notes..." multiline
+              inputAccessoryViewID={Platform.OS === 'ios' ? 'scanDoneBar' : undefined}
+              placeholderTextColor={Colors.textLight} />
 
             <TouchableOpacity
               style={styles.photoBtn}
@@ -507,6 +539,16 @@ export default function ScanLandingScreen() {
           </View>
         </View>
       </Modal>
+
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID="scanDoneBar">
+          <View style={{ backgroundColor: '#f1f3f5', padding: 8, flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <TouchableOpacity onPress={Keyboard.dismiss} style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
+              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 15 }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
     </SafeAreaView>
   )
 }

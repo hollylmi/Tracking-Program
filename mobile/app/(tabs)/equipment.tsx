@@ -13,6 +13,8 @@ import {
   Alert,
   Image,
   Platform,
+  Keyboard,
+  InputAccessoryView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -375,12 +377,15 @@ function CheckModal({ visible, machineName, isFleetMachine, onClose, onSubmit }:
               <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Machine Hours</Text>
               <TextInput style={[modalStyles.input, { minHeight: 0 }]} value={hoursReading} onChangeText={setHoursReading}
                 placeholder="Current hours reading" placeholderTextColor={Colors.textLight}
-                keyboardType="decimal-pad" />
+                keyboardType="decimal-pad"
+                returnKeyType="done" onSubmitEditing={Keyboard.dismiss} blurOnSubmit
+                inputAccessoryViewID={Platform.OS === 'ios' ? 'checkDoneBar' : undefined} />
             </>
           )}
           <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Notes</Text>
           <TextInput style={modalStyles.input} value={notes} onChangeText={setNotes} placeholder="Optional notes"
-            placeholderTextColor={Colors.textLight} multiline numberOfLines={3} textAlignVertical="top" />
+            placeholderTextColor={Colors.textLight} multiline numberOfLines={3} textAlignVertical="top"
+            inputAccessoryViewID={Platform.OS === 'ios' ? 'checkDoneBar' : undefined} />
           <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Photos ({photos.length}/{MAX_PHOTOS})</Text>
           {photos.length > 0 && (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: Spacing.sm }}>
@@ -411,6 +416,15 @@ function CheckModal({ visible, machineName, isFleetMachine, onClose, onSubmit }:
           )}
         </View>
       </SafeAreaView>
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID="checkDoneBar">
+          <View style={{ backgroundColor: '#f1f3f5', padding: 8, flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <TouchableOpacity onPress={Keyboard.dismiss} style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
+              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 15 }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
     </Modal>
   )
 }

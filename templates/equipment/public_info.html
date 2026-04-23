@@ -55,6 +55,21 @@
     </div>
     {% endif %}
 
+    {% if pending_transfer %}
+    <div class="alert-warn" style="background: {% if pending_transfer.status == 'in_transit' %}#fff3cd{% else %}#cff4fc{% endif %}; border-color: {% if pending_transfer.status == 'in_transit' %}#ffe69c{% else %}#b6effb{% endif %}; color: {% if pending_transfer.status == 'in_transit' %}#664d03{% else %}#055160{% endif %};">
+      <i class="bi bi-{% if pending_transfer.status == 'in_transit' %}truck{% else %}calendar-event{% endif %} me-2"></i>
+      {% if pending_transfer.status == 'in_transit' %}
+        <strong>In transit</strong> — arriving at {{ pending_transfer.to_project.name if pending_transfer.to_project else '—' }}
+        {% if pending_transfer.batch and pending_transfer.batch.anticipated_arrival_date %}
+          around {{ pending_transfer.batch.anticipated_arrival_date.strftime('%d/%m/%Y') }}
+        {% endif %}
+      {% else %}
+        <strong>Transfer scheduled</strong> for {{ pending_transfer.scheduled_date.strftime('%d/%m/%Y') }} —
+        moving to {{ pending_transfer.to_project.name if pending_transfer.to_project else '—' }}
+      {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Identity -->
     <div class="card-hero">
       {% if machine.photo_filename %}

@@ -4549,6 +4549,16 @@ def api_transfer_pre_check(transfer_id):
     """Submit a pre-move check for one machine in a transfer batch.
     Expects multipart form: condition, hours_reading (optional), notes (optional),
     photo (optional), tag_uid (optional — if mobile verified via NFC scan)."""
+    try:
+        return _do_transfer_pre_check(transfer_id)
+    except Exception as e:
+        import traceback
+        current_app.logger.error('transfer_pre_check failed: %s\n%s', e, traceback.format_exc())
+        db.session.rollback()
+        return {'error': f'Server error: {type(e).__name__}: {e}'}, 500
+
+
+def _do_transfer_pre_check(transfer_id):
     user, err = _get_user()
     if err:
         return err
@@ -4558,8 +4568,12 @@ def api_transfer_pre_check(transfer_id):
     transfer = MachineTransfer.query.get(transfer_id)
     if not transfer:
         return {'error': 'Transfer not found'}, 404
-    if transfer.status != 'scheduled':
-        return {'error': 'Transfer is not in scheduled status'}, 409
+    # Accept scheduled (first pre-check) OR already in_transit batches where this
+    # specific item hasn't been pre-checked yet. This happens when one machine
+    # has been pre-checked (flipping batch → in_transit) and a sibling is still
+    # awaiting its pre-check.
+    if transfer.status not in ('scheduled', 'in_transit'):
+        return {'error': f'Transfer is {transfer.status} — cannot pre-check'}, 409
     if transfer.pre_check_id:
         return {'error': 'Already pre-checked'}, 409
 
@@ -4649,6 +4663,16 @@ def api_transfer_pre_check(transfer_id):
 @jwt_required()
 def api_transfer_arrive(transfer_id):
     """Submit an arrival check for one machine — finalises the transfer."""
+    try:
+        return _do_transfer_arrive(transfer_id)
+    except Exception as e:
+        import traceback
+        current_app.logger.error('transfer_arrive failed: %s\n%s', e, traceback.format_exc())
+        db.session.rollback()
+        return {'error': f'Server error: {type(e).__name__}: {e}'}, 500
+
+
+def _do_transfer_arrive(transfer_id):
     user, err = _get_user()
     if err:
         return err
@@ -4658,8 +4682,8 @@ def api_transfer_arrive(transfer_id):
     transfer = MachineTransfer.query.get(transfer_id)
     if not transfer:
         return {'error': 'Transfer not found'}, 404
-    if transfer.status != 'in_transit':
-        return {'error': 'Transfer is not in transit'}, 409
+    if transfer.status != 'in_transit' and not transfer.pre_check_id:
+        return {'error': 'Pre-move check must be done before arrival'}, 409
     if transfer.arrival_check_id:
         return {'error': 'Already marked arrived'}, 409
 

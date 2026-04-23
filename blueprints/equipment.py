@@ -1480,6 +1480,12 @@ def equipment_public(machine_id):
         if scanned_tag and scanned_tag.status == 'retired':
             retired_warning = True
 
+    # Pending transfer for this machine (scheduled or in transit)
+    pending_transfer = MachineTransfer.query.filter(
+        MachineTransfer.machine_id == machine_id,
+        MachineTransfer.status.in_(['scheduled', 'in_transit']),
+    ).order_by(MachineTransfer.scheduled_date).first()
+
     resp = make_response(render_template('equipment/public_info.html',
                            machine=m, assignment=assignment,
                            latest_check=latest_check,
@@ -1489,6 +1495,7 @@ def equipment_public(machine_id):
                            certificates=certificates,
                            active_tag=active_tag,
                            retired_warning=retired_warning,
+                           pending_transfer=pending_transfer,
                            today=date.today()))
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp

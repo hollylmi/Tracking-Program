@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, TextInput, Modal, Image, Platform,
+  KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback, InputAccessoryView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -411,7 +412,15 @@ export default function TransferBatchScreen() {
       {/* Form modal (shown after tag scan) */}
       <Modal visible={!!activeItem && !scanning} transparent animationType="slide"
         onRequestClose={closeForm}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.modalOverlay}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={[styles.modalCard, { maxWidth: 480 }]}>
             <Text style={{ ...Typography.h4, color: Colors.textPrimary }}>
               {stage === 'pre_check' ? 'Pre-Move Check' : 'Arrival Check'}
@@ -452,9 +461,14 @@ export default function TransferBatchScreen() {
 
             <TextInput style={styles.input} value={hrs} onChangeText={setHrs}
               placeholder="Hours reading" keyboardType="decimal-pad"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit
+              inputAccessoryViewID={Platform.OS === 'ios' ? 'doneBar' : undefined}
               placeholderTextColor={Colors.textLight} />
             <TextInput style={[styles.input, { marginTop: 6, height: 60, textAlignVertical: 'top' }]}
               value={notes} onChangeText={setNotes} placeholder="Notes..." multiline
+              inputAccessoryViewID={Platform.OS === 'ios' ? 'doneBar' : undefined}
               placeholderTextColor={Colors.textLight} />
 
             <TouchableOpacity style={[styles.itemAction, { marginTop: 6 }]} onPress={takeOrPickPhoto}>
@@ -496,8 +510,20 @@ export default function TransferBatchScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </ScrollView>
+        </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
+
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID="doneBar">
+          <View style={{ backgroundColor: '#f1f3f5', padding: 8, flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <TouchableOpacity onPress={Keyboard.dismiss} style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
+              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 15 }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
     </SafeAreaView>
   )
 }
