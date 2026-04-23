@@ -887,14 +887,31 @@ export default function MachineDetailScreen() {
       await api.auth.verifyAdmin(adminPw)
       setAdminPw('')
       setAdminPwModalVisible(false)
-      // Proceed to label modal → write flow
-      setTagLabelModalVisible(true)
+
+      // Now execute whatever action was queued
+      if (pendingRetireAction) {
+        const { kind, tag, reason } = pendingRetireAction
+        setPendingRetireAction(null)
+        try {
+          await api.equipment.retireTag(tag.id, reason)
+          show(kind === 'replace' ? 'Old tag retired. Now write a new tag.' : 'Tag retired.', 'success')
+          await loadNfcTags()
+          if (kind === 'replace') {
+            setTagLabelModalVisible(true)
+          }
+        } catch {
+          show('Could not retire tag.', 'error')
+        }
+      } else {
+        // Fallback (no queued action) — just open label modal for fresh write
+        setTagLabelModalVisible(true)
+      }
     } catch (e: any) {
       const status = e?.response?.status
       if (status === 401) {
         Alert.alert('Incorrect Password', 'The password you entered is not valid.')
       } else if (status === 403) {
-        Alert.alert('Admin Only', 'Only admin users can re-write tags.')
+        Alert.alert('Admin Only', 'Only admin users can perform this action.')
       } else {
         Alert.alert('Verification Failed', 'Could not verify admin credentials. Try again.')
       }
@@ -928,6 +945,17 @@ export default function MachineDetailScreen() {
       }
       await NfcManager.ndefHandler.writeNdefMessage(bytes)
 
+      // Permanently lock the tag so no one else can overwrite the NDEF data
+      let locked = false
+      try {
+        await NfcManager.ndefHandler.makeReadOnly()
+        locked = true
+      } catch (lockErr) {
+        // Some tags (or hardware) don't support hardware lock — not fatal,
+        // the tag is still registered and works for scanning.
+        console.warn('Tag lock failed:', lockErr)
+      }
+
       // Register the UID on the server
       const resp = await api.equipment.registerTag(display.id, {
         uid: tagUid,
@@ -939,8 +967,10 @@ export default function MachineDetailScreen() {
 
       if (resp.data.already_assigned) {
         show('Tag was already assigned — no change.', 'info')
+      } else if (locked) {
+        show('NFC tag written and locked against tampering.', 'success')
       } else {
-        show('NFC tag written and registered.', 'success')
+        show('NFC tag written (hardware lock not supported — writable).', 'info')
       }
       setPendingTagLabel('')
       await loadNfcTags()
@@ -961,25 +991,38 @@ export default function MachineDetailScreen() {
     }
   }
 
+  // Tag actions that need admin password — "retire" (keep tag but decouple)
+  // and "report lost + replace" (retire then immediately write a new tag).
+  const [pendingRetireAction, setPendingRetireAction] =
+    useState<null | { kind: 'retire' | 'replace'; tag: NFCTagInfo; reason: string }>(null)
+
+  const requestRetire = (tag: NFCTagInfo, reason: string) => {
+    if (user?.role !== 'admin') {
+      Alert.alert('Admin Required', 'Only admins can retire or replace NFC tags.')
+      return
+    }
+    setPendingRetireAction({ kind: 'retire', tag, reason })
+    setAdminPwModalVisible(true)
+  }
+
+  const requestReplace = (tag: NFCTagInfo) => {
+    if (user?.role !== 'admin') {
+      Alert.alert('Admin Required', 'Only admins can replace NFC tags.')
+      return
+    }
+    setPendingRetireAction({ kind: 'replace', tag, reason: 'Tag lost or damaged — replaced' })
+    setAdminPwModalVisible(true)
+  }
+
   const handleRetireTag = (tag: NFCTagInfo) => {
+    // Offer a quick reason picker, then gate with admin password
     Alert.alert(
       'Retire Tag',
-      `Retire tag ${tag.uid}? The physical tag will stop working for this equipment.`,
+      `Retire tag ${tag.uid}?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Retire',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.equipment.retireTag(tag.id)
-              show('Tag retired.', 'success')
-              await loadNfcTags()
-            } catch {
-              show('Could not retire tag.', 'error')
-            }
-          },
-        },
+        { text: 'Lost / damaged', onPress: () => requestRetire(tag, 'Tag lost or damaged') },
+        { text: 'Other', onPress: () => requestRetire(tag, 'Retired') },
       ],
     )
   }
@@ -1323,31 +1366,31 @@ export default function MachineDetailScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>NFC Tags</Text>
-            {canEdit && nfcSupported && (
-              <TouchableOpacity
-                style={styles.reportBtn}
-                onPress={() => {
-                  const hasActiveTag = nfcTags.some(t => t.status === 'active')
-                  if (hasActiveTag) {
-                    // Tag already assigned — require admin password to re-write
-                    if (user?.role !== 'admin') {
-                      Alert.alert(
-                        'Admin Required',
-                        'This equipment already has an active NFC tag. Only an admin can program a new tag to replace it.',
-                      )
-                      return
-                    }
-                    setAdminPwModalVisible(true)
-                  } else {
-                    setTagLabelModalVisible(true)
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="add" size={14} color={Colors.dark} />
-                <Text style={styles.reportBtnText}>Write Tag</Text>
-              </TouchableOpacity>
-            )}
+            {canEdit && nfcSupported && (() => {
+              const activeTag = nfcTags.find(t => t.status === 'active')
+              if (activeTag) {
+                return (
+                  <TouchableOpacity
+                    style={[styles.reportBtn, { backgroundColor: Colors.warning }]}
+                    onPress={() => requestReplace(activeTag)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="refresh" size={14} color="#fff" />
+                    <Text style={[styles.reportBtnText, { color: '#fff' }]}>Tag Lost — Replace</Text>
+                  </TouchableOpacity>
+                )
+              }
+              return (
+                <TouchableOpacity
+                  style={styles.reportBtn}
+                  onPress={() => setTagLabelModalVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="add" size={14} color={Colors.dark} />
+                  <Text style={styles.reportBtnText}>Write Tag</Text>
+                </TouchableOpacity>
+              )
+            })()}
           </View>
           {nfcTags.length === 0 ? (
             <Card>
