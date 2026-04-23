@@ -57,36 +57,50 @@
       </form>
     </div>
   </div>
-  <div class="card-body py-2">
-    <div class="row g-2" id="grpMembers-{{ g.id }}">
-      {% set site_machine_ids = [] %}
-      {% if g.project_id %}
-        {# Show machines assigned to the same site first, then others #}
-      {% endif %}
-      {% for m in machines %}
-        {% set is_member = (m.group_id == g.id) %}
-        <div class="col-sm-6 col-md-4 col-lg-3">
-          <label class="form-check d-flex align-items-center gap-2 px-2 py-1 border rounded {% if is_member %}border-success bg-success-subtle{% endif %}"
-                 style="cursor:pointer;">
-            <input type="checkbox" class="form-check-input mt-0 group-member-toggle"
-                   data-group-id="{{ g.id }}"
-                   data-machine-id="{{ m.id }}"
-                   {% if is_member %}checked{% endif %}
-                   {% if m.group_id and m.group_id != g.id %}disabled title="Already in another group"{% endif %}>
-            <span class="small flex-grow-1 text-truncate" title="{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}">
-              {{ m.name }}
-              {% if m.plant_id %}<small class="text-muted">({{ m.plant_id }})</small>{% endif %}
-            </span>
-            {% if m.group_id and m.group_id != g.id %}
-              {% for other in groups if other.id == m.group_id %}
-                <small class="text-muted" title="Currently in {{ other.name }}">↗</small>
-              {% endfor %}
-            {% endif %}
-          </label>
-        </div>
-      {% endfor %}
+  <div class="card-body py-3">
+    {# Current members shown as removable pills #}
+    <div class="mb-2">
+      <div class="small fw-semibold text-muted mb-1">In this group ({{ g.machines | selectattr('active') | list | length }})</div>
+      <div id="grpMembers-{{ g.id }}" class="d-flex flex-wrap gap-1">
+        {% set members = g.machines | selectattr('active') | list %}
+        {% if members %}
+          {% for m in members %}
+          <span class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1 py-1 px-2" data-member-pill-machine="{{ m.id }}">
+            {{ m.name }}{% if m.plant_id %} <small class="text-success-emphasis">({{ m.plant_id }})</small>{% endif %}
+            <button type="button" class="btn btn-sm p-0 ms-1 text-success group-remove-member" style="line-height:1;" title="Remove from group"
+                    data-group-id="{{ g.id }}" data-machine-id="{{ m.id }}">
+              <i class="bi bi-x-circle-fill"></i>
+            </button>
+          </span>
+          {% endfor %}
+        {% else %}
+          <span class="small text-muted fst-italic">No machines yet — use the search below to add some.</span>
+        {% endif %}
+      </div>
     </div>
-    <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>A machine can only be in one group. Machines in other groups show as locked here — edit them from their own group or the equipment page.</div>
+
+    {# Search to add a machine #}
+    <div class="mt-3 position-relative">
+      <label class="small fw-semibold text-muted mb-1"><i class="bi bi-plus-circle me-1"></i>Add equipment</label>
+      <input type="search" class="form-control form-control-sm group-add-search" placeholder="Search by name or plant ID..."
+             data-group-id="{{ g.id }}" autocomplete="off"
+             data-search-source="#groupSearchSource-{{ g.id }}">
+      <div class="list-group list-group-flush position-absolute w-100 shadow-sm group-add-results" style="display:none; z-index:10; max-height:240px; overflow-y:auto;"
+           id="groupAddResults-{{ g.id }}"></div>
+      {# Hidden data source for this group's candidate machines — those not currently in ANY group #}
+      <template id="groupSearchSource-{{ g.id }}">
+        {% for m in machines %}
+          {% if not m.group_id %}
+          <div class="group-search-item" data-machine-id="{{ m.id }}"
+               data-search="{{ (m.name ~ ' ' ~ (m.plant_id or '') ~ ' ' ~ (m.machine_type or '')) | lower }}">
+            <div class="fw-semibold small">{{ m.name }}{% if m.plant_id %} <span class="text-muted">({{ m.plant_id }})</span>{% endif %}</div>
+            {% if m.machine_type %}<div class="small text-muted">{{ m.machine_type }}</div>{% endif %}
+          </div>
+          {% endif %}
+        {% endfor %}
+      </template>
+    </div>
+    <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>A machine can only be in one group. Remove from its current group first to reassign.</div>
   </div>
 </div>
 
@@ -180,34 +194,83 @@
 </div>
 
 <script>
-// Inline toggle machines in/out of a group via AJAX so the page doesn't reload on every tick
-document.querySelectorAll('.group-member-toggle').forEach(cb => {
-  cb.addEventListener('change', async (e) => {
-    const groupId = cb.dataset.groupId;
-    const machineId = cb.dataset.machineId;
-    const checked = cb.checked;
-    const label = cb.closest('label');
-    cb.disabled = true;
+async function postToggleMembership(groupId, machineId, checked) {
+  const fd = new FormData();
+  fd.append('action', 'toggle_machine');
+  fd.append('group_id', groupId);
+  fd.append('machine_id', machineId);
+  fd.append('checked', checked ? '1' : '0');
+  const res = await fetch(window.location.pathname, { method: 'POST', body: fd });
+  if (!res.ok) throw new Error('request failed');
+}
+
+// Remove machine from a group — click the × on a pill
+document.querySelectorAll('.group-remove-member').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const groupId = btn.dataset.groupId;
+    const machineId = btn.dataset.machineId;
+    btn.disabled = true;
     try {
-      const fd = new FormData();
-      fd.append('action', 'toggle_machine');
-      fd.append('group_id', groupId);
-      fd.append('machine_id', machineId);
-      fd.append('checked', checked ? '1' : '0');
-      const res = await fetch(window.location.pathname, { method: 'POST', body: fd });
-      if (!res.ok) throw new Error('request failed');
-      // Visual feedback
-      if (checked) {
-        label.classList.add('border-success', 'bg-success-subtle');
-      } else {
-        label.classList.remove('border-success', 'bg-success-subtle');
-      }
+      await postToggleMembership(groupId, machineId, false);
+      // Page reload is simplest — keeps all groups' search sources in sync
+      window.location.reload();
     } catch {
-      cb.checked = !checked;
-      alert('Could not update group membership.');
-    } finally {
-      cb.disabled = false;
+      btn.disabled = false;
+      alert('Could not remove machine from group.');
     }
+  });
+});
+
+// Search-to-add
+document.querySelectorAll('.group-add-search').forEach(input => {
+  const groupId = input.dataset.groupId;
+  const resultsId = 'groupAddResults-' + groupId;
+  const results = document.getElementById(resultsId);
+  const sourceTpl = document.querySelector(input.dataset.searchSource);
+  const candidates = sourceTpl
+    ? Array.from(sourceTpl.content.querySelectorAll('.group-search-item'))
+    : [];
+
+  function render(filter) {
+    results.innerHTML = '';
+    const q = (filter || '').trim().toLowerCase();
+    if (!q) {
+      results.style.display = 'none';
+      return;
+    }
+    const matches = candidates.filter(c => (c.dataset.search || '').includes(q)).slice(0, 10);
+    if (matches.length === 0) {
+      const div = document.createElement('div');
+      div.className = 'list-group-item small text-muted bg-light';
+      div.textContent = 'No matches. Either the machine is in another group already, or there\'s nothing by that name.';
+      results.appendChild(div);
+    } else {
+      matches.forEach(c => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'list-group-item list-group-item-action small text-start';
+        item.innerHTML = c.innerHTML;
+        item.addEventListener('click', async () => {
+          item.disabled = true;
+          try {
+            await postToggleMembership(groupId, c.dataset.machineId, true);
+            window.location.reload();
+          } catch {
+            item.disabled = false;
+            alert('Could not add machine to group.');
+          }
+        });
+        results.appendChild(item);
+      });
+    }
+    results.style.display = 'block';
+  }
+
+  input.addEventListener('input', () => render(input.value));
+  input.addEventListener('focus', () => { if (input.value) render(input.value); });
+  input.addEventListener('blur', () => {
+    // Hide after a delay to allow clicks on results
+    setTimeout(() => { results.style.display = 'none'; }, 150);
   });
 });
 </script>
