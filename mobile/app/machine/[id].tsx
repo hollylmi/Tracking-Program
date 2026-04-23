@@ -945,17 +945,6 @@ export default function MachineDetailScreen() {
       }
       await NfcManager.ndefHandler.writeNdefMessage(bytes)
 
-      // Permanently lock the tag so no one else can overwrite the NDEF data
-      let locked = false
-      try {
-        await NfcManager.ndefHandler.makeReadOnly()
-        locked = true
-      } catch (lockErr) {
-        // Some tags (or hardware) don't support hardware lock — not fatal,
-        // the tag is still registered and works for scanning.
-        console.warn('Tag lock failed:', lockErr)
-      }
-
       // Register the UID on the server
       const resp = await api.equipment.registerTag(display.id, {
         uid: tagUid,
@@ -967,10 +956,8 @@ export default function MachineDetailScreen() {
 
       if (resp.data.already_assigned) {
         show('Tag was already assigned — no change.', 'info')
-      } else if (locked) {
-        show('NFC tag written and locked against tampering.', 'success')
       } else {
-        show('NFC tag written (hardware lock not supported — writable).', 'info')
+        show('NFC tag written and registered.', 'success')
       }
       setPendingTagLabel('')
       await loadNfcTags()

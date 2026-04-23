@@ -112,15 +112,6 @@ export default function NewEquipmentScreen() {
       if (!bytes) throw new Error('Could not encode tag payload')
       await NfcManager.ndefHandler.writeNdefMessage(bytes)
 
-      // Lock the tag so no one can overwrite the data
-      let locked = false
-      try {
-        await NfcManager.ndefHandler.makeReadOnly()
-        locked = true
-      } catch {
-        // Not fatal — tag still works for scanning
-      }
-
       await api.equipment.registerTag(createdMachine.id, {
         uid: tagUid,
         label: tagLabel.trim() || undefined,
@@ -128,12 +119,7 @@ export default function NewEquipmentScreen() {
 
       NfcManager.cancelTechnologyRequest().catch(() => {})
       setNfcWriting(false)
-      show(
-        locked
-          ? 'Equipment added and tag locked against tampering.'
-          : 'Equipment added and tag written (not locked).',
-        'success',
-      )
+      show('Equipment added and NFC tag written.', 'success')
       router.replace({ pathname: '/machine/[id]', params: { id: String(createdMachine.id) } })
     } catch (e: any) {
       NfcManager.cancelTechnologyRequest().catch(() => {})

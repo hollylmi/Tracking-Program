@@ -4291,20 +4291,41 @@ def register_machine_nfc_tag(machine_id):
         return {'error': 'uid required'}, 400
     label = (data.get('label') or '').strip() or None
 
+    user_id = int(get_jwt_identity())
     existing = NFCTag.query.filter_by(uid=uid).first()
     if existing:
-        if existing.machine_id == machine_id and existing.status == 'active':
-            return {'ok': True, 'tag': _nfc_tag_to_dict(existing), 'already_assigned': True}, 200
-        return {
-            'error': 'UID already registered',
-            'conflict': {
-                'machine_id': existing.machine_id,
-                'machine_name': existing.machine.name,
-                'status': existing.status,
-            },
-        }, 409
+        if existing.status == 'active':
+            if existing.machine_id == machine_id:
+                return {'ok': True, 'tag': _nfc_tag_to_dict(existing), 'already_assigned': True}, 200
+            # Active tag on a different machine — still a conflict
+            return {
+                'error': 'UID already registered',
+                'conflict': {
+                    'machine_id': existing.machine_id,
+                    'machine_name': existing.machine.name,
+                    'status': existing.status,
+                },
+            }, 409
+        # Retired tag — reactivate and reassign (handles admin re-writing the same physical tag)
+        # Retire any other currently-active tag on the target machine first
+        for t in NFCTag.query.filter_by(machine_id=machine_id, status='active').all():
+            if t.id != existing.id:
+                t.status = 'retired'
+                t.retired_at = datetime.utcnow()
+                t.retired_by_user_id = user_id
+                t.retired_reason = 'Replaced by new tag'
+        existing.machine_id = machine_id
+        existing.status = 'active'
+        existing.label = label or existing.label
+        existing.assigned_at = datetime.utcnow()
+        existing.assigned_by_user_id = user_id
+        existing.retired_at = None
+        existing.retired_by_user_id = None
+        existing.retired_reason = None
+        db.session.commit()
+        return {'ok': True, 'tag': _nfc_tag_to_dict(existing), 'reactivated': True}, 200
 
-    user_id = int(get_jwt_identity())
+    # Fresh UID — retire any active tag on the machine, then create the new record
     for t in NFCTag.query.filter_by(machine_id=machine_id, status='active').all():
         t.status = 'retired'
         t.retired_at = datetime.utcnow()
