@@ -160,7 +160,6 @@ def index():
         # batches stay visible for the rest of the day so users can see their
         # activity on the list.
         from datetime import datetime as _dt
-        from models import MachineDailyCheck
         accessible_pids = {p.id for p in (current_user.accessible_projects() or [])}
         is_admin = current_user.role == 'admin'
         site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
