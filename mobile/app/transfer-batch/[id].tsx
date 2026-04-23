@@ -325,8 +325,12 @@ export default function TransferBatchScreen() {
 
         {/* Items */}
         {batch.items.map(item => {
-          const needsPreCheck = !item.pre_checked && batch.status === 'scheduled'
-          const needsArrival = item.pre_checked && !item.arrived && batch.status === 'in_transit'
+          // Drive button visibility from the ITEM state (not batch status) so
+          // multiple items can be pre-checked sequentially. Also gate by what
+          // the current user is allowed to do — source users pre-check, destination
+          // users arrive, admins can do either.
+          const needsPreCheck = !item.pre_checked && (batch as any).can_pre_check !== false
+          const needsArrival = item.pre_checked && !item.arrived && (batch as any).can_arrive !== false
           return (
             <View key={item.id} style={styles.itemCard}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

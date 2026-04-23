@@ -3623,61 +3623,69 @@ def my_todos():
         site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
                             if accessible_pids else db.false())
 
-    # ── Incoming transfers (destination side) ────────────────────────────
-    incoming = TransferBatch.query.filter(
+    # Find every batch the user touches from either side. One query + split.
+    active_batches = TransferBatch.query.filter(
         TransferBatch.status.in_(('scheduled', 'in_transit')),
-        db.or_(TransferBatch.arrival_user_id == user.id, site_filter_to),
+        db.or_(
+            TransferBatch.pre_check_user_id == user.id,
+            TransferBatch.arrival_user_id == user.id,
+            site_filter_from,
+            site_filter_to,
+        ),
     ).all()
 
-    # ── Outgoing transfers (source side) ─────────────────────────────────
-    outgoing = TransferBatch.query.filter(
-        TransferBatch.status == 'scheduled',
-        db.or_(TransferBatch.pre_check_user_id == user.id, site_filter_from),
-    ).all()
+    for batch in active_batches:
+        items = batch.items
+        total = len(items)
+        checked = sum(1 for t in items if t.pre_check_id)
+        arrived = sum(1 for t in items if t.arrival_check_id)
 
-    # Deduplicate — same batch may match both queries for the same user
-    seen_ids = set()
-    for batch in incoming:
-        if batch.id in seen_ids:
-            continue
-        seen_ids.add(batch.id)
-        arrived = sum(1 for t in batch.items if t.arrival_check_id)
-        total = len(batch.items)
-        label_parts = [f'Incoming transfer — {total} machine{"s" if total != 1 else ""}']
-        if batch.status == 'scheduled':
-            label_parts[0] = 'Inbound transfer scheduled — ' + label_parts[0].split('— ')[1]
-        todos.append({
-            'project_id': batch.to_project_id,
-            'project_name': batch.to_project.name if batch.to_project else None,
-            'task_type': 'incoming_transfer',
-            'label': label_parts[0],
-            'completed': arrived >= total and batch.status == 'in_transit',
-            'done': arrived,
-            'total': total,
-            'batch_id': batch.id,
-            'scheduled_date': batch.scheduled_date.isoformat() if batch.scheduled_date else None,
-            'anticipated_arrival_date': batch.anticipated_arrival_date.isoformat() if batch.anticipated_arrival_date else None,
-            'batch_status': batch.status,
-        })
-    for batch in outgoing:
-        if batch.id in seen_ids:
-            continue
-        seen_ids.add(batch.id)
-        checked = sum(1 for t in batch.items if t.pre_check_id)
-        total = len(batch.items)
-        todos.append({
-            'project_id': batch.from_project_id,
-            'project_name': batch.from_project.name if batch.from_project else None,
-            'task_type': 'pre_check_transfer',
-            'label': f'Pre-move check — {total} machine{"s" if total != 1 else ""} leaving',
-            'completed': checked >= total,
-            'done': checked,
-            'total': total,
-            'batch_id': batch.id,
-            'scheduled_date': batch.scheduled_date.isoformat() if batch.scheduled_date else None,
-            'anticipated_arrival_date': batch.anticipated_arrival_date.isoformat() if batch.anticipated_arrival_date else None,
-            'batch_status': batch.status,
-        })
+        is_source_side = (
+            user.id == batch.pre_check_user_id or
+            is_admin or
+            (accessible_pids and batch.from_project_id in accessible_pids)
+        )
+        is_dest_side = (
+            user.id == batch.arrival_user_id or
+            is_admin or
+            (accessible_pids and batch.to_project_id in accessible_pids)
+        )
+        # Clean up labelling: source users that are ALSO destination users (e.g.
+        # admins with full access) still see correct actions — we emit BOTH
+        # todos when appropriate rather than merging them.
+
+        # Outbound pre-check todo — only while there's pre-check work left
+        if is_source_side and checked < total:
+            todos.append({
+                'project_id': batch.from_project_id,
+                'project_name': batch.from_project.name if batch.from_project else None,
+                'task_type': 'pre_check_transfer',
+                'label': f'Outbound transfer — {total} machine{"s" if total != 1 else ""} to {batch.to_project.name if batch.to_project else "—"}',
+                'completed': False,
+                'done': checked,
+                'total': total,
+                'batch_id': batch.id,
+                'scheduled_date': batch.scheduled_date.isoformat() if batch.scheduled_date else None,
+                'anticipated_arrival_date': batch.anticipated_arrival_date.isoformat() if batch.anticipated_arrival_date else None,
+                'batch_status': batch.status,
+            })
+
+        # Inbound arrival todo — only once something is physically moving
+        # (i.e. at least one item pre-checked) and there's still arrival work
+        if is_dest_side and checked > 0 and arrived < total:
+            todos.append({
+                'project_id': batch.to_project_id,
+                'project_name': batch.to_project.name if batch.to_project else None,
+                'task_type': 'incoming_transfer',
+                'label': f'Inbound transfer — {total} machine{"s" if total != 1 else ""} from {batch.from_project.name if batch.from_project else "—"}',
+                'completed': False,
+                'done': arrived,
+                'total': total,
+                'batch_id': batch.id,
+                'scheduled_date': batch.scheduled_date.isoformat() if batch.scheduled_date else None,
+                'anticipated_arrival_date': batch.anticipated_arrival_date.isoformat() if batch.anticipated_arrival_date else None,
+                'batch_status': batch.status,
+            })
 
     return {'date': today_date.isoformat(), 'todos': todos}, 200
 
@@ -4520,10 +4528,24 @@ def get_transfer_batch(batch_id):
     if not batch:
         return {'error': 'Transfer not found'}, 404
 
+    # Determine what actions this user can perform for the front-end to gate buttons
+    accessible = _accessible_ids(user)
+    is_admin = accessible is None
+    if is_admin:
+        # Admin has access to everything
+        can_pre_check = True
+        can_arrive = True
+    else:
+        can_pre_check = (user.id == batch.pre_check_user_id) or (
+            batch.from_project_id in (accessible or set()))
+        can_arrive = (user.id == batch.arrival_user_id) or (
+            batch.to_project_id in (accessible or set()))
+
     return {
         'id': batch.id,
         'status': batch.status,
         'scheduled_date': batch.scheduled_date.isoformat() if batch.scheduled_date else None,
+        'anticipated_arrival_date': batch.anticipated_arrival_date.isoformat() if batch.anticipated_arrival_date else None,
         'from_project': {'id': batch.from_project_id,
                          'name': batch.from_project.name if batch.from_project else None},
         'to_project': {'id': batch.to_project_id,
@@ -4532,6 +4554,8 @@ def get_transfer_batch(batch_id):
         'dropoff_location': batch.dropoff_location,
         'travel_notes': batch.travel_notes,
         'transport_contact': batch.transport_contact,
+        'can_pre_check': can_pre_check,
+        'can_arrive': can_arrive,
         'items': [_transfer_item_to_dict(i) for i in batch.items],
     }, 200
 

@@ -306,12 +306,15 @@ export const api = {
         id: number
         status: string
         scheduled_date: string | null
+        anticipated_arrival_date: string | null
         from_project: { id: number; name: string | null }
         to_project: { id: number; name: string | null }
         pickup_location: string | null
         dropoff_location: string | null
         travel_notes: string | null
         transport_contact: string | null
+        can_pre_check: boolean
+        can_arrive: boolean
         items: Array<{
           id: number
           machine_id: number

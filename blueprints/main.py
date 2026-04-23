@@ -154,48 +154,58 @@ def index():
                 'machine_count': len(sc.machines),
             })
 
-        # Transfer todos — show any active transfer (scheduled or in_transit) where
-        # the user is assigned OR has access to the source/destination project.
+        # Transfer todos — one query, split into outbound/inbound per-user,
+        # only showing the ones where work remains on each side.
         accessible_pids = {p.id for p in (current_user.accessible_projects() or [])}
+        is_admin = current_user.role == 'admin'
         site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
                           if accessible_pids else db.false())
-        incoming_transfers = TransferBatch.query.filter(
-            TransferBatch.status.in_(('scheduled', 'in_transit')),
-            db.or_(TransferBatch.arrival_user_id == current_user.id, site_filter_to),
-        ).all()
-        for batch in incoming_transfers:
-            arrived_count = sum(1 for t in batch.items if t.arrival_check_id)
-            total_count = len(batch.items)
-            todos.append({
-                'project': batch.to_project,
-                'task_type': 'incoming_transfer',
-                'label': f'Incoming transfer — {total_count} machine{"s" if total_count != 1 else ""}',
-                'completed': arrived_count >= total_count,
-                'done': arrived_count,
-                'total': total_count,
-                'batch_id': batch.id,
-            })
-
-        # Pre-move checks — any scheduled transfer where the user is assigned
-        # or has access to the source project.
         site_filter_from = (TransferBatch.from_project_id.in_(accessible_pids)
                             if accessible_pids else db.false())
-        outgoing_transfers = TransferBatch.query.filter(
-            TransferBatch.status == 'scheduled',
-            db.or_(TransferBatch.pre_check_user_id == current_user.id, site_filter_from),
+        active_batches = TransferBatch.query.filter(
+            TransferBatch.status.in_(('scheduled', 'in_transit')),
+            db.or_(
+                TransferBatch.pre_check_user_id == current_user.id,
+                TransferBatch.arrival_user_id == current_user.id,
+                site_filter_from,
+                site_filter_to,
+            ),
         ).all()
-        for batch in outgoing_transfers:
-            checked_count = sum(1 for t in batch.items if t.pre_check_id)
-            total_count = len(batch.items)
-            todos.append({
-                'project': batch.from_project,
-                'task_type': 'pre_check_transfer',
-                'label': f'Pre-move check — {total_count} machine{"s" if total_count != 1 else ""} leaving',
-                'completed': checked_count >= total_count,
-                'done': checked_count,
-                'total': total_count,
-                'batch_id': batch.id,
-            })
+        for batch in active_batches:
+            items = batch.items
+            total = len(items)
+            checked = sum(1 for t in items if t.pre_check_id)
+            arrived = sum(1 for t in items if t.arrival_check_id)
+            is_source_side = (
+                current_user.id == batch.pre_check_user_id or is_admin or
+                (accessible_pids and batch.from_project_id in accessible_pids)
+            )
+            is_dest_side = (
+                current_user.id == batch.arrival_user_id or is_admin or
+                (accessible_pids and batch.to_project_id in accessible_pids)
+            )
+            # Outbound pre-check: show while source work remains
+            if is_source_side and checked < total:
+                todos.append({
+                    'project': batch.from_project,
+                    'task_type': 'pre_check_transfer',
+                    'label': f'Outbound transfer — {total} machine{"s" if total != 1 else ""} to {batch.to_project.name if batch.to_project else "—"}',
+                    'completed': False,
+                    'done': checked,
+                    'total': total,
+                    'batch_id': batch.id,
+                })
+            # Inbound arrival: show once items are physically moving + arrival work remains
+            if is_dest_side and checked > 0 and arrived < total:
+                todos.append({
+                    'project': batch.to_project,
+                    'task_type': 'incoming_transfer',
+                    'label': f'Inbound transfer — {total} machine{"s" if total != 1 else ""} from {batch.from_project.name if batch.from_project else "—"}',
+                    'completed': False,
+                    'done': arrived,
+                    'total': total,
+                    'batch_id': batch.id,
+                })
 
         my_todos = todos
 
