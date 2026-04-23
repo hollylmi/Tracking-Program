@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+{% block title %}Equipment Groups{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary mb-2">
+      <i class="bi bi-arrow-left me-1"></i>Back to Equipment
+    </a>
+    <h2 class="fw-bold mb-0"><i class="bi bi-collection me-2 text-info"></i>Equipment Groups</h2>
+    <div class="text-muted small">Group equipment by site so you can find it faster. Group colours come from the site.</div>
+  </div>
+  <button class="btn btn-info text-white" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+    <i class="bi bi-plus-lg me-1"></i>New Group
+  </button>
+</div>
+
+{% if not groups %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body text-center text-muted py-5">
+    <i class="bi bi-collection fs-1 d-block mb-2"></i>
+    No groups yet. Click <strong>New Group</strong> to create your first one.
+  </div>
+</div>
+{% endif %}
+
+{% for g in groups %}
+{% set site_colours = project_colour_map.get(g.project_id) if g.project_id else None %}
+{% set bg = site_colours[0] if site_colours else '#e9ecef' %}
+{% set fg = site_colours[1] if site_colours else '#495057' %}
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-header py-2 d-flex align-items-center justify-content-between" style="background:{{ bg }}; border-left: 4px solid {{ fg }};">
+    <div>
+      <strong style="color:{{ fg }};">{{ g.name }}</strong>
+      {% if g.project %}
+        <span class="small ms-2" style="color:{{ fg }}; opacity:0.85;">
+          <i class="bi bi-geo-alt me-1"></i>{{ g.project.name }}
+        </span>
+      {% else %}
+        <span class="small text-muted ms-2"><em>Not tied to a site</em></span>
+      {% endif %}
+      {% if g.delay_rate %}
+        <span class="badge bg-light text-dark ms-2">${{ '%.2f'|format(g.delay_rate) }}/hr</span>
+      {% endif %}
+      <span class="badge bg-light text-dark ms-2">
+        {{ g.machines | selectattr('active') | list | length }} machine{{ 's' if g.machines | selectattr('active') | list | length != 1 }}
+      </span>
+    </div>
+    <div class="d-flex gap-1">
+      <button class="btn btn-sm btn-outline-dark py-0"
+              data-bs-toggle="modal" data-bs-target="#editGroupModal{{ g.id }}"
+              title="Edit group"><i class="bi bi-pencil"></i></button>
+      <form method="POST" class="d-inline" onsubmit="return confirm('Delete group {{ g.name }}? Machines will be moved to ungrouped.');">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="group_id" value="{{ g.id }}">
+        <button type="submit" class="btn btn-sm btn-outline-danger py-0" title="Delete group"><i class="bi bi-trash"></i></button>
+      </form>
+    </div>
+  </div>
+  <div class="card-body py-2">
+    <div class="row g-2" id="grpMembers-{{ g.id }}">
+      {% set site_machine_ids = [] %}
+      {% if g.project_id %}
+        {# Show machines assigned to the same site first, then others #}
+      {% endif %}
+      {% for m in machines %}
+        {% set is_member = (m.group_id == g.id) %}
+        <div class="col-sm-6 col-md-4 col-lg-3">
+          <label class="form-check d-flex align-items-center gap-2 px-2 py-1 border rounded {% if is_member %}border-success bg-success-subtle{% endif %}"
+                 style="cursor:pointer;">
+            <input type="checkbox" class="form-check-input mt-0 group-member-toggle"
+                   data-group-id="{{ g.id }}"
+                   data-machine-id="{{ m.id }}"
+                   {% if is_member %}checked{% endif %}
+                   {% if m.group_id and m.group_id != g.id %}disabled title="Already in another group"{% endif %}>
+            <span class="small flex-grow-1 text-truncate" title="{{ m.name }}{% if m.plant_id %} ({{ m.plant_id }}){% endif %}">
+              {{ m.name }}
+              {% if m.plant_id %}<small class="text-muted">({{ m.plant_id }})</small>{% endif %}
+            </span>
+            {% if m.group_id and m.group_id != g.id %}
+              {% for other in groups if other.id == m.group_id %}
+                <small class="text-muted" title="Currently in {{ other.name }}">↗</small>
+              {% endfor %}
+            {% endif %}
+          </label>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>A machine can only be in one group. Machines in other groups show as locked here — edit them from their own group or the equipment page.</div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal fade" id="editGroupModal{{ g.id }}" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" class="modal-content">
+      <input type="hidden" name="action" value="edit">
+      <input type="hidden" name="group_id" value="{{ g.id }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Group — {{ g.name }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Name *</label>
+          <input type="text" name="name" class="form-control" required value="{{ g.name }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Site</label>
+          <select name="project_id" class="form-select">
+            <option value="">— Not site-specific —</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}" {% if g.project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text small">The group label will use this site's colour on the equipment list.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Description</label>
+          <input type="text" name="description" class="form-control" value="{{ g.description or '' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Delay Rate ($/hr)</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" name="delay_rate" class="form-control" min="0" step="0.01" value="{{ g.delay_rate or '' }}" placeholder="Optional shared rate">
+          </div>
+          <div class="form-text small">Machines in this group without their own rate will use this one.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Create modal -->
+<div class="modal fade" id="createGroupModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" class="modal-content">
+      <input type="hidden" name="action" value="create">
+      <div class="modal-header">
+        <h5 class="modal-title">New Equipment Group</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Name *</label>
+          <input type="text" name="name" class="form-control" required placeholder="e.g. Welding &amp; Testing Kit, Deployment Crew">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Site</label>
+          <select name="project_id" class="form-select">
+            <option value="">— Not site-specific —</option>
+            {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+          </select>
+          <div class="form-text small">Tie the group to a site so the label inherits its colour. Leave blank if shared across sites.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Description (optional)</label>
+          <input type="text" name="description" class="form-control" placeholder="What this group includes">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Delay Rate ($/hr, optional)</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" name="delay_rate" class="form-control" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-info text-white">Create Group</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// Inline toggle machines in/out of a group via AJAX so the page doesn't reload on every tick
+document.querySelectorAll('.group-member-toggle').forEach(cb => {
+  cb.addEventListener('change', async (e) => {
+    const groupId = cb.dataset.groupId;
+    const machineId = cb.dataset.machineId;
+    const checked = cb.checked;
+    const label = cb.closest('label');
+    cb.disabled = true;
+    try {
+      const fd = new FormData();
+      fd.append('action', 'toggle_machine');
+      fd.append('group_id', groupId);
+      fd.append('machine_id', machineId);
+      fd.append('checked', checked ? '1' : '0');
+      const res = await fetch(window.location.pathname, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('request failed');
+      // Visual feedback
+      if (checked) {
+        label.classList.add('border-success', 'bg-success-subtle');
+      } else {
+        label.classList.remove('border-success', 'bg-success-subtle');
+      }
+    } catch {
+      cb.checked = !checked;
+      alert('Could not update group membership.');
+    } finally {
+      cb.disabled = false;
+    }
+  });
+});
+</script>
+{% endblock %}

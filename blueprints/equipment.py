@@ -176,6 +176,76 @@ def equipment_history(machine_id):
     })
 
 
+@equipment_bp.route('/equipment/groups', methods=['GET', 'POST'])
+@require_role('admin', 'supervisor')
+def equipment_groups():
+    """Dedicated, simple groups management page. Admin + supervisor can
+    create/edit/delete groups, and tick machines in/out of a group."""
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'create':
+            name = (request.form.get('name') or '').strip()
+            project_id = request.form.get('project_id', type=int)
+            description = (request.form.get('description') or '').strip() or None
+            rate_str = (request.form.get('delay_rate') or '').strip()
+            if not name:
+                flash('Group name is required.', 'danger')
+            else:
+                db.session.add(MachineGroup(
+                    name=name,
+                    project_id=project_id or None,
+                    description=description,
+                    delay_rate=float(rate_str) if rate_str else None,
+                ))
+                db.session.commit()
+                flash(f'Group "{name}" created.', 'success')
+        elif action == 'edit':
+            grp = MachineGroup.query.get_or_404(request.form.get('group_id', type=int))
+            grp.name = (request.form.get('name') or grp.name).strip() or grp.name
+            project_id = request.form.get('project_id', type=int)
+            grp.project_id = project_id or None
+            grp.description = (request.form.get('description') or '').strip() or None
+            rate_str = (request.form.get('delay_rate') or '').strip()
+            grp.delay_rate = float(rate_str) if rate_str else None
+            db.session.commit()
+            flash('Group updated.', 'success')
+        elif action == 'delete':
+            grp = MachineGroup.query.get_or_404(request.form.get('group_id', type=int))
+            Machine.query.filter_by(group_id=grp.id).update({'group_id': None})
+            db.session.delete(grp)
+            db.session.commit()
+            flash('Group deleted. Machines moved to ungrouped.', 'info')
+        elif action == 'toggle_machine':
+            # Check/uncheck a machine's membership in a group
+            grp_id = request.form.get('group_id', type=int)
+            mid = request.form.get('machine_id', type=int)
+            checked = request.form.get('checked') == '1'
+            m = Machine.query.get_or_404(mid)
+            if checked:
+                m.group_id = grp_id
+            else:
+                if m.group_id == grp_id:
+                    m.group_id = None
+            db.session.commit()
+            return jsonify({'ok': True})
+        return redirect(url_for('equipment.equipment_groups'))
+
+    groups = MachineGroup.query.order_by(MachineGroup.name).all()
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
+
+    # Same palette as the equipment list so group = site colour visual match
+    PALETTE = [('#cfe2ff', '#084298'), ('#d1e7dd', '#0a3622'), ('#f8d7da', '#842029'),
+               ('#fff3cd', '#664d03'), ('#d2f4ea', '#0b4c34'), ('#fde8d8', '#6c3a00'),
+               ('#e2d9f3', '#3d1a78'), ('#dee2e6', '#343a40')]
+    all_proj_ordered = Project.query.order_by(Project.id).all()
+    project_colour_map = {p.id: PALETTE[i % len(PALETTE)] for i, p in enumerate(all_proj_ordered)}
+
+    return render_template('equipment/groups.html',
+                           groups=groups, projects=projects, machines=machines,
+                           project_colour_map=project_colour_map)
+
+
 @equipment_bp.route('/equipment')
 @require_role('admin', 'supervisor', 'site')
 def equipment_overview():
