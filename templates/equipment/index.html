@@ -333,10 +333,13 @@
               <td class="text-muted">{{ m.machine_type or '—' }}</td>
               <td>
                 {% if m.group %}
-                  {% set grp_site_colours = project_colour_map.get(m.group.project_id) if m.group.project_id else None %}
-                  {% if m.group.colour %}
-                    <span class="badge border" style="background:{{ m.group.colour }}22; color:{{ m.group.colour }}; border-color:{{ m.group.colour }}55 !important;">{{ m.group.name }}{% if m.group.project %} · {{ m.group.project.name }}{% endif %}</span>
-                  {% elif grp_site_colours %}
+                  {# grp attributes may be missing if migration hasn't run yet — default safely #}
+                  {% set grp_project_id = m.group.project_id if m.group.project_id is defined else None %}
+                  {% set grp_colour = m.group.colour if m.group.colour is defined else None %}
+                  {% set grp_site_colours = project_colour_map.get(grp_project_id) if grp_project_id else None %}
+                  {% if grp_colour %}
+                    <span class="badge border" style="background:{{ grp_colour }}22; color:{{ grp_colour }}; border-color:{{ grp_colour }}55 !important;">{{ m.group.name }}{% if grp_project_id and m.group.project %} · {{ m.group.project.name }}{% endif %}</span>
+                  {% elif grp_site_colours and m.group.project %}
                     <span class="badge border" style="background:{{ grp_site_colours[0] }}; color:{{ grp_site_colours[1] }}; border-color:{{ grp_site_colours[1] }}44 !important;">{{ m.group.name }} · {{ m.group.project.name }}</span>
                   {% else %}
                     <span class="badge bg-info-subtle text-info border border-info-subtle">{{ m.group.name }}</span>
