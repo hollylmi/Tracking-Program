@@ -4604,17 +4604,38 @@ def _do_transfer_pre_check(transfer_id):
                 'expected_machine_id': transfer.machine_id,
             }, 409
 
-    # Create the daily-check row that pre_check_id references
+    # Create OR UPDATE the daily-check row. The DB has a unique constraint on
+    # (machine_id, project_id, check_date) so we must reuse any existing daily
+    # check on the source project for today (e.g. from a regular pre-start).
     from models import MachineDailyCheck
-    check = MachineDailyCheck(
+    today = date.today()
+    check = MachineDailyCheck.query.filter_by(
         machine_id=transfer.machine_id,
         project_id=transfer.from_project_id,
-        check_date=date.today(),
-        checked_by_user_id=user.id,
-        condition=condition,
-        hours_reading=hours_reading,
-        notes=(notes or '') + (f' [Pre-move check for transfer #{transfer.id}]' if notes else f'Pre-move check for transfer #{transfer.id}'),
-    )
+        check_date=today,
+    ).first()
+    pre_note = f'Pre-move check for transfer #{transfer.id}'
+    if check:
+        # Overwrite with the transfer pre-check details; keep earlier note as prefix
+        existing_note = (check.notes or '').strip()
+        new_note = (notes or '').strip()
+        parts = [p for p in [existing_note, new_note, f'[{pre_note}]'] if p]
+        check.notes = ' | '.join(parts)
+        check.condition = condition
+        if hours_reading is not None:
+            check.hours_reading = hours_reading
+        check.checked_by_user_id = user.id
+    else:
+        check = MachineDailyCheck(
+            machine_id=transfer.machine_id,
+            project_id=transfer.from_project_id,
+            check_date=today,
+            checked_by_user_id=user.id,
+            condition=condition,
+            hours_reading=hours_reading,
+            notes=((notes or '').strip() + f' [{pre_note}]').strip(),
+        )
+        db.session.add(check)
 
     pending_photos = []
     legacy_photo = request.files.get('photo')
@@ -4631,7 +4652,6 @@ def _do_transfer_pre_check(transfer_id):
         check.photo_filename = stored
         check.photo_original_name = first.filename
 
-    db.session.add(check)
     db.session.flush()
     if len(pending_photos) > 1:
         for extra in pending_photos[1:]:
@@ -4711,16 +4731,37 @@ def _do_transfer_arrive(transfer_id):
                 'expected_machine_id': transfer.machine_id,
             }, 409
 
+    # Reuse any existing daily check for (machine, to_project, today) to avoid
+    # the unique-constraint violation — otherwise create one.
     from models import MachineDailyCheck
-    check = MachineDailyCheck(
+    today = date.today()
+    check = MachineDailyCheck.query.filter_by(
         machine_id=transfer.machine_id,
         project_id=transfer.to_project_id,
-        check_date=date.today(),
-        checked_by_user_id=user.id,
-        condition=condition,
-        hours_reading=hours_reading,
-        notes=(notes or '') + (f' [Arrival check for transfer #{transfer.id}]' if notes else f'Arrival check for transfer #{transfer.id}'),
-    )
+        check_date=today,
+    ).first()
+    arrive_note = f'Arrival check for transfer #{transfer.id}'
+    if check:
+        existing_note = (check.notes or '').strip()
+        new_note = (notes or '').strip()
+        parts = [p for p in [existing_note, new_note, f'[{arrive_note}]'] if p]
+        check.notes = ' | '.join(parts)
+        check.condition = condition
+        if hours_reading is not None:
+            check.hours_reading = hours_reading
+        check.checked_by_user_id = user.id
+    else:
+        check = MachineDailyCheck(
+            machine_id=transfer.machine_id,
+            project_id=transfer.to_project_id,
+            check_date=today,
+            checked_by_user_id=user.id,
+            condition=condition,
+            hours_reading=hours_reading,
+            notes=((notes or '').strip() + f' [{arrive_note}]').strip(),
+        )
+        db.session.add(check)
+
     pending_photos = []
     legacy_photo = request.files.get('photo')
     if legacy_photo and legacy_photo.filename:
@@ -4736,7 +4777,6 @@ def _do_transfer_arrive(transfer_id):
         check.photo_filename = stored
         check.photo_original_name = first.filename
 
-    db.session.add(check)
     db.session.flush()
     if len(pending_photos) > 1:
         for extra in pending_photos[1:]:
