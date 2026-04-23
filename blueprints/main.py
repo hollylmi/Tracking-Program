@@ -157,13 +157,19 @@ def index():
         accessible_pids = {p.id for p in (current_user.accessible_projects() or [])}
         site_filter_to = (TransferBatch.to_project_id.in_(accessible_pids)
                           if accessible_pids else db.false())
-        incoming_transfers = TransferBatch.query.filter(
+        candidate_incoming = TransferBatch.query.filter(
             TransferBatch.status.in_(('scheduled', 'in_transit')),
             db.or_(
                 TransferBatch.arrival_user_id == current_user.id,
-                db.and_(site_filter_to, TransferBatch.status == 'in_transit'),
+                site_filter_to,
             ),
         ).all()
+        # Destination supervisors only see it once any item has started moving
+        incoming_transfers = []
+        for b in candidate_incoming:
+            any_moving = any(i.pre_check_id and not i.arrival_check_id for i in b.items)
+            if b.arrival_user_id == current_user.id or any_moving:
+                incoming_transfers.append(b)
         for batch in incoming_transfers:
             arrived_count = sum(1 for t in batch.items if t.arrival_check_id)
             total_count = len(batch.items)

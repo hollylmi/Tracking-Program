@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, TextInput, Modal, Image, Platform,
-  KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback, InputAccessoryView,
+  KeyboardAvoidingView, Keyboard, InputAccessoryView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -413,15 +413,11 @@ export default function TransferBatchScreen() {
       <Modal visible={!!activeItem && !scanning} transparent animationType="slide"
         onRequestClose={closeForm}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
-          contentContainerStyle={styles.modalOverlay}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={[styles.modalCard, { maxWidth: 480 }]}>
+          <View style={[styles.modalCard, { maxWidth: 480, maxHeight: '90%' }]}>
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={{ ...Typography.h4, color: Colors.textPrimary }}>
               {stage === 'pre_check' ? 'Pre-Move Check' : 'Arrival Check'}
             </Text>
@@ -509,9 +505,8 @@ export default function TransferBatchScreen() {
                     </Text>}
               </TouchableOpacity>
             </View>
+          </ScrollView>
           </View>
-        </ScrollView>
-        </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
 

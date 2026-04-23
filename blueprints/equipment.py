@@ -934,10 +934,12 @@ def transfer_pre_check(transfer_id):
 
     # Flip THIS item's status immediately — it's now locked out of daily use
     transfer.status = 'in_transit'
-    # Flip batch status once every item has been pre-checked
+    # Flip batch status as soon as ANY item is pre-checked so the destination
+    # supervisor sees it in their todos. Batch only completes when all items
+    # have arrived (handled in transfer_arrive).
     if transfer.batch_id:
         batch = TransferBatch.query.get(transfer.batch_id)
-        if batch and all(t.pre_check_id for t in batch.items):
+        if batch and batch.status == 'scheduled':
             batch.status = 'in_transit'
 
     db.session.commit()

@@ -1192,6 +1192,15 @@ def get_machine(machine_id):
                      .order_by(MachineDailyCheck.check_date.desc())
                      .limit(10).all())
 
+    # Pending transfer (for the scan landing page banner)
+    pending_transfer = MachineTransfer.query.filter(
+        MachineTransfer.machine_id == machine_id,
+        MachineTransfer.status.in_(['scheduled', 'in_transit']),
+    ).order_by(MachineTransfer.scheduled_date).first()
+
+    # Active NFC tag (for pre-start check requirement)
+    active_tag = NFCTag.query.filter_by(machine_id=machine_id, status='active').first()
+
     return {
         'id': machine.id,
         'name': machine.name,
@@ -3614,18 +3623,29 @@ def my_todos():
                         if (not is_admin and accessible_pids) else db.false())
 
     # ── Incoming transfers (destination side) ────────────────────────────
+    # Supervisors on the destination project see inbound transfers any time
+    # at least one item has been pre-checked (actually moving). Assigned
+    # arrival users see theirs regardless of progress.
     incoming_conditions = [
         TransferBatch.arrival_user_id == user.id,   # explicitly assigned
     ]
     if is_admin:
         incoming_conditions.append(db.true())
     else:
-        # Supervisors on the destination project see inbound transfers once in_transit
-        incoming_conditions.append(db.and_(site_filter_to, TransferBatch.status == 'in_transit'))
-    incoming = TransferBatch.query.filter(
+        incoming_conditions.append(site_filter_to)
+    incoming_all = TransferBatch.query.filter(
         TransferBatch.status.in_(('scheduled', 'in_transit')),
         db.or_(*incoming_conditions),
     ).all()
+    # Filter: destination-side supervisors only see it once at least one item
+    # is pre-checked (things are physically moving). Assigned users see always.
+    incoming = []
+    for b in incoming_all:
+        any_moving = any(i.pre_check_id and not i.arrival_check_id for i in b.items)
+        if b.arrival_user_id == user.id or is_admin:
+            incoming.append(b)
+        elif any_moving:
+            incoming.append(b)
 
     # ── Outgoing transfers (source side) ─────────────────────────────────
     outgoing_conditions = [
@@ -4632,6 +4652,14 @@ def _do_transfer_pre_check(transfer_id):
 
     transfer.pre_check_id = check.id
     transfer.status = 'in_transit'  # lock this machine immediately
+    # Flip batch to in_transit as soon as ANY item has been pre-checked so
+    # the destination supervisor sees the batch in their todos. Batch only
+    # completes once every item has arrived (handled in the arrive endpoint).
+    if transfer.batch_id:
+        from models import TransferBatch as _TB
+        _batch = _TB.query.get(transfer.batch_id)
+        if _batch and _batch.status == 'scheduled':
+            _batch.status = 'in_transit'
 
     # Log hours
     if hours_reading is not None:
@@ -4644,16 +4672,6 @@ def _do_transfer_pre_check(transfer_id):
             recorded_by_user_id=user.id,
             daily_check_id=check.id,
         ))
-
-    # If all items in the batch are now pre-checked, flip the batch to in_transit
-    batch = transfer.batch if hasattr(transfer, 'batch') else None
-    if transfer.batch_id:
-        from models import TransferBatch
-        batch = TransferBatch.query.get(transfer.batch_id)
-        if batch and all(i.pre_check_id for i in batch.items):
-            batch.status = 'in_transit'
-            for i in batch.items:
-                i.status = 'in_transit'
 
     db.session.commit()
     return {'ok': True, 'item': _transfer_item_to_dict(transfer)}, 200
