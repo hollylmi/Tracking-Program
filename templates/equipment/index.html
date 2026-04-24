@@ -13,6 +13,11 @@
       <i class="bi bi-calendar-check me-1"></i>Scheduled Checks
     </a>
     {% endif %}
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('equipment.equipment_compliance') }}" class="btn btn-sm btn-outline-danger">
+      <i class="bi bi-shield-check me-1"></i>Compliance
+    </a>
+    {% endif %}
     <a href="{{ url_for('equipment.daily_checks_do') }}" class="btn btn-sm btn-primary">
       <i class="bi bi-check2-square me-1"></i>Daily Machine Checks
     </a>

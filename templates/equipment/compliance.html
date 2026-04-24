@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+{% block title %}Equipment Compliance — Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h2 class="fw-bold mb-0"><i class="bi bi-shield-check me-2 text-danger"></i>Compliance</h2>
+    <div class="text-muted small">Inspections, warranties, disposal dates — with alerts for anything in use that's out of date.</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-truck me-1"></i>Fleet
+    </a>
+    <a href="{{ url_for('equipment.operations_dashboard') }}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-speedometer2 me-1"></i>Operations
+    </a>
+  </div>
+</div>
+
+{# ── Red flags: pre-started today BUT overdue ───────────────────────── #}
+{% set has_red_flags = overdue_inspections_in_use or warranty_expired_in_use or past_dispose_in_use %}
+{% if has_red_flags %}
+<div class="alert alert-danger">
+  <h5 class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-2"></i>In-Use Compliance Issues</h5>
+  <div class="small mb-0">These machines were pre-started today but are out of inspection / warranty / dispose-by date.</div>
+</div>
+
+{% if overdue_inspections_in_use %}
+<div class="card border-0 shadow-sm mb-3 border-start border-danger border-3">
+  <div class="card-header bg-white py-2 fw-bold small"><i class="bi bi-search text-danger me-1"></i>Inspection Overdue — In Use Today ({{ overdue_inspections_in_use | length }})</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Machine</th><th>Plant ID</th><th>Site</th><th>Inspection Due</th><th>Days Overdue</th><th></th></tr></thead>
+      <tbody>
+        {% for m in overdue_inspections_in_use %}
+        {% set proj = machine_project.get(m.id) %}
+        {% set pc = project_colour_map.get(proj.id) if proj else None %}
+        <tr>
+          <td class="fw-semibold">{{ m.name }}</td>
+          <td class="small text-muted">{{ m.plant_id or '—' }}</td>
+          <td class="small">{% if pc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.7rem;">{{ proj.name }}</span>{% else %}—{% endif %}</td>
+          <td class="small text-danger">{{ m.next_inspection_date.strftime('%d/%m/%Y') }}</td>
+          <td><span class="badge bg-danger">{{ (today - m.next_inspection_date).days }} days</span></td>
+          <td class="text-end"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i> Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if warranty_expired_in_use %}
+<div class="card border-0 shadow-sm mb-3 border-start border-danger border-3">
+  <div class="card-header bg-white py-2 fw-bold small"><i class="bi bi-shield-slash text-danger me-1"></i>Warranty Expired — In Use Today ({{ warranty_expired_in_use | length }})</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Machine</th><th>Plant ID</th><th>Site</th><th>Warranty Expired</th><th>Days Ago</th><th></th></tr></thead>
+      <tbody>
+        {% for m in warranty_expired_in_use %}
+        {% set proj = machine_project.get(m.id) %}
+        {% set pc = project_colour_map.get(proj.id) if proj else None %}
+        <tr>
+          <td class="fw-semibold">{{ m.name }}</td>
+          <td class="small text-muted">{{ m.plant_id or '—' }}</td>
+          <td class="small">{% if pc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.7rem;">{{ proj.name }}</span>{% else %}—{% endif %}</td>
+          <td class="small text-danger">{{ m.warranty_expiry.strftime('%d/%m/%Y') }}</td>
+          <td><span class="badge bg-danger">{{ (today - m.warranty_expiry).days }} days</span></td>
+          <td class="text-end"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i> Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if past_dispose_in_use %}
+<div class="card border-0 shadow-sm mb-4 border-start border-danger border-3">
+  <div class="card-header bg-white py-2 fw-bold small"><i class="bi bi-trash text-danger me-1"></i>Past Dispose-By Date — In Use Today ({{ past_dispose_in_use | length }})</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Machine</th><th>Plant ID</th><th>Site</th><th>Dispose By</th><th>Days Past</th><th></th></tr></thead>
+      <tbody>
+        {% for m in past_dispose_in_use %}
+        {% set proj = machine_project.get(m.id) %}
+        {% set pc = project_colour_map.get(proj.id) if proj else None %}
+        <tr>
+          <td class="fw-semibold">{{ m.name }}</td>
+          <td class="small text-muted">{{ m.plant_id or '—' }}</td>
+          <td class="small">{% if pc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.7rem;">{{ proj.name }}</span>{% else %}—{% endif %}</td>
+          <td class="small text-danger">{{ m.dispose_by_date.strftime('%d/%m/%Y') }}</td>
+          <td><span class="badge bg-danger">{{ (today - m.dispose_by_date).days }} days</span></td>
+          <td class="text-end"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i> Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
+{# ── Upcoming inspections ──────────────────────────────────────────── #}
+<h5 class="fw-bold mb-3"><i class="bi bi-calendar-event me-2 text-warning"></i>Upcoming Inspections ({{ upcoming_inspections | length }})</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>Machine</th><th>Plant ID</th><th>Site</th><th>Next Inspection</th><th>Days</th><th>In Use Today</th><th></th></tr></thead>
+      <tbody>
+        {% if upcoming_inspections %}
+        {% for m in upcoming_inspections %}
+        {% set proj = machine_project.get(m.id) %}
+        {% set pc = project_colour_map.get(proj.id) if proj else None %}
+        {% set days = (m.next_inspection_date - today).days %}
+        <tr class="{% if days < 0 %}table-danger{% elif days <= 3 %}table-warning{% endif %}">
+          <td class="fw-semibold">{{ m.name }}</td>
+          <td class="small text-muted">{{ m.plant_id or '—' }}</td>
+          <td class="small">{% if pc %}<span class="badge rounded-pill px-2 py-1" style="background:{{ pc[0] }};color:{{ pc[1] }};font-size:.7rem;">{{ proj.name }}</span>{% else %}—{% endif %}</td>
+          <td class="small">{{ m.next_inspection_date.strftime('%d/%m/%Y') }}</td>
+          <td>
+            {% if days < 0 %}<span class="badge bg-danger">{{ -days }}d overdue</span>
+            {% elif days == 0 %}<span class="badge bg-warning">Today</span>
+            {% elif days <= 3 %}<span class="badge bg-warning">in {{ days }}d</span>
+            {% else %}<span class="small text-muted">in {{ days }}d</span>{% endif %}
+          </td>
+          <td>{% if m.id in pre_started_today_ids %}<i class="bi bi-check-circle-fill text-success" title="Pre-started today"></i>{% else %}<i class="bi bi-circle text-muted"></i>{% endif %}</td>
+          <td class="text-end"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i></a></td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-3">No inspections due in the next 30 days.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Upcoming warranty / disposal ──────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <h6 class="fw-bold mb-2"><i class="bi bi-shield-check me-2 text-warning"></i>Warranty Expiring ({{ upcoming_warranty | length }})</h6>
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if upcoming_warranty %}
+        <table class="table table-sm mb-0 align-middle">
+          <tbody>
+            {% for m in upcoming_warranty %}
+            {% set days = (m.warranty_expiry - today).days %}
+            <tr>
+              <td class="small">
+                <strong>{{ m.name }}</strong>{% if m.plant_id %} <span class="text-muted">({{ m.plant_id }})</span>{% endif %}
+                <br><span class="text-muted">{{ m.warranty_expiry.strftime('%d/%m/%Y') }} — {{ days }} day{{ 's' if days != 1 }}</span>
+              </td>
+              <td class="text-end"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i></a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-3 small">No warranties expiring in the next 60 days.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <h6 class="fw-bold mb-2"><i class="bi bi-trash me-2 text-danger"></i>Disposal Due ({{ upcoming_disposal | length }})</h6>
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if upcoming_disposal %}
+        <table class="table table-sm mb-0 align-middle">
+          <tbody>
+            {% for m in upcoming_disposal %}
+            {% set days = (m.dispose_by_date - today).days %}
+            <tr>
+              <td class="small">
+                <strong>{{ m.name }}</strong>{% if m.plant_id %} <span class="text-muted">({{ m.plant_id }})</span>{% endif %}
+                <br><span class="text-muted">{{ m.dispose_by_date.strftime('%d/%m/%Y') }} — {{ days }} day{{ 's' if days != 1 }}</span>
+              </td>
+              <td class="text-end"><a href="{{ url_for('equipment.machine_detail', machine_id=m.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i></a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-3 small">No disposal dates in the next 60 days.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Upcoming transfers ──────────────────────────────────────────── #}
+<h5 class="fw-bold mb-3"><i class="bi bi-arrow-left-right me-2 text-info"></i>Upcoming Transfers ({{ upcoming_transfers | length }})</h5>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light"><tr><th>From</th><th>To</th><th>Scheduled</th><th>Arrival</th><th>Machines</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% if upcoming_transfers %}
+        {% for b in upcoming_transfers %}
+        <tr>
+          <td class="small">{{ b.from_project.name if b.from_project else '—' }}</td>
+          <td class="small">{{ b.to_project.name if b.to_project else '—' }}</td>
+          <td class="small">{{ b.scheduled_date.strftime('%d/%m/%Y') }}</td>
+          <td class="small">{{ b.anticipated_arrival_date.strftime('%d/%m/%Y') if b.anticipated_arrival_date else '—' }}</td>
+          <td class="small fw-bold">{{ b.items | length }}</td>
+          <td><span class="badge {% if b.status == 'scheduled' %}bg-info{% else %}bg-warning{% endif %}">{{ b.status | replace('_', ' ') | title }}</span></td>
+          <td class="text-end"><a href="{{ url_for('equipment.transfer_batch_detail', batch_id=b.id) }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i></a></td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-3">No transfers scheduled in the next week.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

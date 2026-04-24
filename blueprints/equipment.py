@@ -2178,6 +2178,111 @@ def scheduled_check_delete(check_id):
 
 
 # ---------------------------------------------------------------------------
+# Equipment Compliance (admin) — inspection / warranty / disposal oversight
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/compliance')
+@require_role('admin')
+def equipment_compliance():
+    """Admin oversight page for inspection / warranty / disposal compliance.
+    Flags: upcoming inspections, equipment pre-started today that's out of
+    inspection, past warranty, or past dispose-by date, and pending transfers."""
+    today_date = date.today()
+
+    # Machines pre-started (had a daily check submitted) today
+    pre_started_today_ids = {
+        row.machine_id for row in (
+            MachineDailyCheck.query
+            .filter(MachineDailyCheck.check_date == today_date)
+            .with_entities(MachineDailyCheck.machine_id).distinct().all()
+        ) if row.machine_id
+    }
+
+    # ── 1. Upcoming inspections (all machines) ──────────────────────────
+    upcoming_inspections = Machine.query.filter(
+        Machine.active == True,
+        Machine.next_inspection_date.isnot(None),
+        Machine.next_inspection_date <= today_date + timedelta(days=30),
+    ).order_by(Machine.next_inspection_date).all()
+
+    # ── 2. Overdue inspections — machine HAS been pre-started today but
+    #      inspection has passed
+    overdue_inspections_in_use = []
+    for m in Machine.query.filter(
+        Machine.active == True,
+        Machine.next_inspection_date.isnot(None),
+        Machine.next_inspection_date < today_date,
+    ).all():
+        if m.id in pre_started_today_ids:
+            overdue_inspections_in_use.append(m)
+
+    # ── 3. Warranty expired + in use ───────────────────────────────────
+    warranty_expired_in_use = []
+    for m in Machine.query.filter(
+        Machine.active == True,
+        Machine.warranty_expiry.isnot(None),
+        Machine.warranty_expiry < today_date,
+    ).all():
+        if m.id in pre_started_today_ids:
+            warranty_expired_in_use.append(m)
+
+    # ── 4. Past dispose-by date but still in use ───────────────────────
+    past_dispose_in_use = []
+    for m in Machine.query.filter(
+        Machine.active == True,
+        Machine.dispose_by_date.isnot(None),
+        Machine.dispose_by_date < today_date,
+    ).all():
+        if m.id in pre_started_today_ids:
+            past_dispose_in_use.append(m)
+
+    # ── 5. Upcoming warranty / disposal (no pre-start requirement) ─────
+    upcoming_warranty = Machine.query.filter(
+        Machine.active == True,
+        Machine.warranty_expiry.isnot(None),
+        Machine.warranty_expiry >= today_date,
+        Machine.warranty_expiry <= today_date + timedelta(days=60),
+    ).order_by(Machine.warranty_expiry).all()
+
+    upcoming_disposal = Machine.query.filter(
+        Machine.active == True,
+        Machine.dispose_by_date.isnot(None),
+        Machine.dispose_by_date >= today_date,
+        Machine.dispose_by_date <= today_date + timedelta(days=60),
+    ).order_by(Machine.dispose_by_date).all()
+
+    # ── 6. Pending transfers (scheduled for today/tomorrow/this week)
+    pending_transfers = TransferBatch.query.filter(
+        TransferBatch.status.in_(('scheduled', 'in_transit')),
+    ).order_by(TransferBatch.scheduled_date).all()
+    upcoming_transfers = [b for b in pending_transfers
+                          if b.scheduled_date <= today_date + timedelta(days=7)]
+
+    # Machine → current project map for colour-coding
+    all_pm = ProjectMachine.query.all()
+    machine_project = {pm.machine_id: pm.project for pm in all_pm}
+
+    PALETTE = [('#cfe2ff', '#084298'), ('#d1e7dd', '#0a3622'), ('#f8d7da', '#842029'),
+               ('#fff3cd', '#664d03'), ('#d2f4ea', '#0b4c34'), ('#fde8d8', '#6c3a00'),
+               ('#e2d9f3', '#3d1a78'), ('#dee2e6', '#343a40')]
+    all_proj = Project.query.order_by(Project.id).all()
+    project_colour_map = {p.id: PALETTE[i % len(PALETTE)] for i, p in enumerate(all_proj)}
+
+    return render_template('equipment/compliance.html',
+                           today=today_date,
+                           pre_started_today_ids=pre_started_today_ids,
+                           upcoming_inspections=upcoming_inspections,
+                           overdue_inspections_in_use=overdue_inspections_in_use,
+                           warranty_expired_in_use=warranty_expired_in_use,
+                           past_dispose_in_use=past_dispose_in_use,
+                           upcoming_warranty=upcoming_warranty,
+                           upcoming_disposal=upcoming_disposal,
+                           upcoming_transfers=upcoming_transfers,
+                           machine_project=machine_project,
+                           project_colour_map=project_colour_map)
+
+
+# ---------------------------------------------------------------------------
 # Equipment Operations Dashboard (admin)
 # ---------------------------------------------------------------------------
 
