@@ -24,24 +24,76 @@
 <!-- Filter bar -->
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-body py-2">
-    <form method="GET" class="row g-2 align-items-end">
-      <div class="col-sm-4">
-        <label class="form-label small fw-semibold mb-1">Project</label>
-        <select name="project_id" class="form-select form-select-sm">
-          <option value="">All Projects</option>
-          {% for p in projects %}
-          <option value="{{ p.id }}" {% if project and project.id == p.id %}selected{% endif %}>{{ p.name }}</option>
-          {% endfor %}
-        </select>
+    <ul class="nav nav-pills nav-sm mb-2" role="tablist">
+      <li class="nav-item">
+        <button type="button" class="nav-link btn-sm {% if not range_mode %}active{% endif %}" data-bs-toggle="pill" data-bs-target="#singleMode">Single day</button>
+      </li>
+      <li class="nav-item">
+        <button type="button" class="nav-link btn-sm {% if range_mode %}active{% endif %}" data-bs-toggle="pill" data-bs-target="#rangeMode">Date range</button>
+      </li>
+    </ul>
+    <div class="tab-content">
+      {# Single day mode #}
+      <div class="tab-pane fade {% if not range_mode %}show active{% endif %}" id="singleMode">
+        <form method="GET" class="row g-2 align-items-end">
+          <div class="col-sm-4">
+            <label class="form-label small fw-semibold mb-1">Project</label>
+            <select name="project_id" class="form-select form-select-sm">
+              <option value="">All Projects</option>
+              {% for p in projects %}
+                <option value="{{ p.id }}" {% if project and project.id == p.id %}selected{% endif %}>{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small fw-semibold mb-1">Date</label>
+            <input type="date" name="date" class="form-control form-control-sm" value="{{ check_date.isoformat() }}">
+          </div>
+          <div class="col-sm-2">
+            <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search me-1"></i>View</button>
+          </div>
+        </form>
       </div>
-      <div class="col-sm-3">
-        <label class="form-label small fw-semibold mb-1">Date</label>
-        <input type="date" name="date" class="form-control form-control-sm" value="{{ check_date.isoformat() }}">
+      {# Date range mode #}
+      <div class="tab-pane fade {% if range_mode %}show active{% endif %}" id="rangeMode">
+        <form method="GET" class="row g-2 align-items-end">
+          <div class="col-sm-4">
+            <label class="form-label small fw-semibold mb-1">Project</label>
+            <select name="project_id" class="form-select form-select-sm">
+              <option value="">All Projects</option>
+              {% for p in projects %}
+                <option value="{{ p.id }}" {% if project and project.id == p.id %}selected{% endif %}>{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small fw-semibold mb-1">From</label>
+            <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from.isoformat() }}" required>
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small fw-semibold mb-1">To</label>
+            <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to.isoformat() }}" required>
+          </div>
+          <div class="col-sm-2">
+            <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search me-1"></i>View</button>
+          </div>
+        </form>
       </div>
-      <div class="col-sm-2">
-        <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search me-1"></i>View</button>
-      </div>
-    </form>
+    </div>
+    {# Export row — uses the currently-applied filter (always has project_id + range, even in single-day mode we expand to 1 day) #}
+    <div class="mt-2 pt-2 border-top d-flex gap-2 flex-wrap align-items-center">
+      <span class="small text-muted">Export this report:</span>
+      <a class="btn btn-sm btn-outline-danger"
+         href="{{ url_for('equipment.pre_start_report_export',
+                          project_id=project.id if project else '',
+                          date_from=date_from.isoformat(),
+                          date_to=date_to.isoformat()) }}">
+        <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+      </a>
+      <span class="small text-muted ms-1">
+        Includes compliance warnings and pre-starts done despite overdue items.
+      </span>
+    </div>
   </div>
 </div>
 

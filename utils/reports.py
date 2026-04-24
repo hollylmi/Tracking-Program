@@ -2247,3 +2247,179 @@ def generate_entry_pdf(entry, settings):
             pdf.set_y(pdf.get_y() + cell_h + 2)
 
     return bytes(pdf.output())
+
+
+# ---------------------------------------------------------------------------
+# Pre-Start Report PDF (mechanical pre-start / daily checks)
+# ---------------------------------------------------------------------------
+
+def generate_prestart_report_pdf(project, date_from, date_to, checks,
+                                 compliance_warnings, violations, settings):
+    """Build the Pre-Start Report PDF and return bytes.
+
+    Args:
+        project: Project or None (None = all projects in the range)
+        date_from, date_to: date range (inclusive)
+        checks: list of MachineDailyCheck (in range, sorted newest-first)
+        compliance_warnings: list of dicts [{machine, kind, due_date, days}]
+        violations: list of dicts [{machine, check, issues: [str]}]
+        settings: dict (for company_name)
+    """
+    pdf = FPDF()
+    pdf.set_margins(12, 12, 12)
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=14)
+
+    company = safe(settings.get('company_name', '') or 'Project Tracker')
+
+    # Header
+    pdf.set_font('Helvetica', 'B', 18)
+    pdf.cell(0, 10, company, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.set_font('Helvetica', 'B', 13)
+    pdf.cell(0, 8, 'PRE-START REPORT', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.set_font('Helvetica', '', 9)
+    pdf.cell(0, 5,
+             f'{date_from.strftime("%d/%m/%Y")} – {date_to.strftime("%d/%m/%Y")}'
+             + (f'  ·  {safe(project.name)}' if project else '  ·  All projects'),
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.set_font('Helvetica', '', 8)
+    pdf.cell(0, 4, f'Generated {date.today().strftime("%d/%m/%Y")}',
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+    pdf.ln(5)
+
+    # ── Summary ─────────────────────────────────────────────────────────
+    total = len(checks)
+    by_condition = defaultdict(int)
+    for c in checks:
+        by_condition[c.condition or 'unknown'] += 1
+    unique_machines = len({c.machine_id or f'h-{c.hired_machine_id}' for c in checks})
+
+    pdf.set_fill_color(230, 240, 255)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.cell(0, 7, 'SUMMARY', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+    pdf.set_font('Helvetica', '', 9)
+    pdf.cell(0, 5, f'Total pre-starts: {total}   ·   Unique machines: {unique_machines}',
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 5,
+             f'Good: {by_condition.get("good", 0)}   ·   Fair: {by_condition.get("fair", 0)}'
+             f'   ·   Poor: {by_condition.get("poor", 0)}'
+             f'   ·   Broken down: {by_condition.get("broken_down", 0)}',
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(3)
+
+    # ── Compliance violations ──────────────────────────────────────────
+    if violations:
+        pdf.set_fill_color(255, 220, 220)
+        pdf.set_text_color(120, 20, 20)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(0, 7, f'PRE-STARTED WITH OVERDUE COMPLIANCE ({len(violations)})',
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font('Helvetica', '', 8)
+        col_w = [28, 50, 30, 30, 48]
+        headers = ['Date', 'Machine', 'Plant ID', 'Condition', 'Issue']
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(250, 230, 230)
+        for i, (h, w) in enumerate(zip(headers, col_w)):
+            pdf.cell(w, 5, h, border=1, fill=True,
+                     new_x=XPos.LMARGIN if i == len(col_w) - 1 else XPos.RIGHT,
+                     new_y=YPos.NEXT if i == len(col_w) - 1 else YPos.TOP)
+        pdf.set_font('Helvetica', '', 7)
+        for v in violations:
+            issues_txt = '; '.join(v['issues'])
+            row = [
+                v['check'].check_date.strftime('%d/%m/%Y'),
+                safe(v['machine_name'])[:30],
+                safe(v['plant_id'] or '')[:16],
+                safe((v['check'].condition or '').replace('_', ' ').title())[:16],
+                safe(issues_txt)[:42],
+            ]
+            # Print, with last cell as multi-cell if long
+            y = pdf.get_y()
+            for i, (val, w) in enumerate(zip(row, col_w)):
+                is_last = i == len(col_w) - 1
+                if is_last:
+                    pdf.multi_cell(w, 5, val, border=1, align='L',
+                                   new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                else:
+                    pdf.cell(w, 5, val, border=1,
+                             new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.ln(3)
+
+    # ── Compliance warnings (upcoming) ─────────────────────────────────
+    if compliance_warnings:
+        pdf.set_fill_color(255, 240, 210)
+        pdf.set_text_color(120, 80, 0)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(0, 7, f'UPCOMING COMPLIANCE / INSPECTIONS ({len(compliance_warnings)})',
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+        pdf.set_text_color(0, 0, 0)
+        col_w = [60, 30, 36, 30, 30]
+        headers = ['Machine', 'Plant ID', 'Requirement', 'Due', 'Days']
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.set_fill_color(250, 240, 210)
+        for i, (h, w) in enumerate(zip(headers, col_w)):
+            pdf.cell(w, 5, h, border=1, fill=True,
+                     new_x=XPos.LMARGIN if i == len(col_w) - 1 else XPos.RIGHT,
+                     new_y=YPos.NEXT if i == len(col_w) - 1 else YPos.TOP)
+        pdf.set_font('Helvetica', '', 8)
+        for w_row in compliance_warnings:
+            due_str = w_row['due_date'].strftime('%d/%m/%Y') if w_row.get('due_date') else '-'
+            row = [
+                safe(w_row['machine_name'])[:36],
+                safe(w_row['plant_id'] or '')[:18],
+                safe(w_row['kind_label'])[:22],
+                due_str,
+                str(w_row.get('days', '')),
+            ]
+            for i, (val, w) in enumerate(zip(row, col_w)):
+                is_last = i == len(col_w) - 1
+                pdf.cell(w, 5, val, border=1,
+                         new_x=XPos.LMARGIN if is_last else XPos.RIGHT,
+                         new_y=YPos.NEXT if is_last else YPos.TOP)
+        pdf.ln(3)
+
+    # ── Pre-start records ──────────────────────────────────────────────
+    pdf.set_fill_color(230, 240, 255)
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.cell(0, 7, f'PRE-START RECORDS ({total})',
+             new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+
+    if total == 0:
+        pdf.set_font('Helvetica', 'I', 9)
+        pdf.set_text_color(120, 120, 120)
+        pdf.cell(0, 6, 'No pre-starts recorded in this period.',
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_text_color(0, 0, 0)
+    else:
+        col_w = [24, 46, 22, 22, 18, 20, 34]
+        headers = ['Date', 'Machine', 'Plant ID', 'Condition', 'Hours', 'By', 'Notes']
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.set_fill_color(220, 230, 255)
+        for i, (h, w) in enumerate(zip(headers, col_w)):
+            is_last = i == len(col_w) - 1
+            pdf.cell(w, 5, h, border=1, fill=True,
+                     new_x=XPos.LMARGIN if is_last else XPos.RIGHT,
+                     new_y=YPos.NEXT if is_last else YPos.TOP)
+        pdf.set_font('Helvetica', '', 7)
+        for c in checks:
+            machine_name = c.machine.name if c.machine else (c.hired_machine.machine_name if c.hired_machine else '-')
+            plant_id = (c.machine.plant_id if c.machine else (c.hired_machine.plant_id if c.hired_machine else '')) or ''
+            user = c.checked_by_user.display_name if c.checked_by_user else ''
+            notes = (c.notes or '').replace('\n', ' ')[:60]
+            row = [
+                c.check_date.strftime('%d/%m/%Y'),
+                safe(machine_name)[:28],
+                safe(plant_id)[:14],
+                safe((c.condition or '').replace('_', ' ').title())[:12],
+                str(c.hours_reading) if c.hours_reading is not None else '-',
+                safe(user)[:12],
+                safe(notes),
+            ]
+            for i, (val, w) in enumerate(zip(row, col_w)):
+                is_last = i == len(col_w) - 1
+                pdf.cell(w, 5, val, border=1,
+                         new_x=XPos.LMARGIN if is_last else XPos.RIGHT,
+                         new_y=YPos.NEXT if is_last else YPos.TOP)
+
+    return bytes(pdf.output())

@@ -2421,29 +2421,49 @@ def operations_dashboard():
 @equipment_bp.route('/equipment/daily-checks/view')
 @require_role('admin', 'supervisor', 'site')
 def daily_checks_view():
-    """View all daily checks for a project on a specific date."""
-    project_id = request.args.get('project_id', type=int)
-    date_str = request.args.get('date', '')
+    """Pre-Start Report — single-day or date-range view of pre-starts.
 
-    if date_str:
+    Query params:
+        project_id (optional)
+        date       — single-day mode (default: today if no range given)
+        date_from, date_to — range mode; overrides single-day
+    """
+    project_id = request.args.get('project_id', type=int)
+    date_str = request.args.get('date', '').strip()
+    date_from_str = request.args.get('date_from', '').strip()
+    date_to_str = request.args.get('date_to', '').strip()
+
+    def _parse(s, fallback):
         try:
-            check_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            return datetime.strptime(s, '%Y-%m-%d').date()
         except ValueError:
-            check_date = date.today()
+            return fallback
+
+    # Range mode if either date_from or date_to given
+    range_mode = bool(date_from_str or date_to_str)
+    if range_mode:
+        date_from = _parse(date_from_str, date.today() - timedelta(days=6))
+        date_to = _parse(date_to_str, date.today())
+        if date_from > date_to:
+            date_from, date_to = date_to, date_from
+        check_date = date_to  # used for single-date legacy template bits
     else:
-        check_date = date.today()
+        check_date = _parse(date_str, date.today()) if date_str else date.today()
+        date_from = date_to = check_date
 
     project = Project.query.get_or_404(project_id) if project_id else None
 
-    # Get all checks for this project and date
-    query = MachineDailyCheck.query.filter_by(check_date=check_date)
+    query = MachineDailyCheck.query.filter(
+        MachineDailyCheck.check_date >= date_from,
+        MachineDailyCheck.check_date <= date_to,
+    )
     if project_id:
         query = query.filter_by(project_id=project_id)
-    checks = query.order_by(MachineDailyCheck.created_at.desc()).all()
+    checks = query.order_by(MachineDailyCheck.check_date.desc(), MachineDailyCheck.created_at.desc()).all()
 
-    # Get all machines assigned to this project to show what's NOT been checked
+    # Unchecked machines — only meaningful in single-day mode.
     unchecked_machines = []
-    if project_id:
+    if project_id and not range_mode:
         checked_machine_ids = {c.machine_id for c in checks if c.machine_id}
         checked_hired_ids = {c.hired_machine_id for c in checks if c.hired_machine_id}
         for pm in ProjectMachine.query.filter_by(project_id=project_id).all():
@@ -2455,7 +2475,6 @@ def daily_checks_view():
 
     projects = Project.query.filter_by(active=True).order_by(Project.name).all()
 
-    # Project colour map
     PALETTE = [('#cfe2ff','#084298'),('#d1e7dd','#0a3622'),('#f8d7da','#842029'),
                ('#fff3cd','#664d03'),('#d2f4ea','#0b4c34'),('#fde8d8','#6c3a00'),
                ('#e2d9f3','#3d1a78'),('#dee2e6','#343a40')]
@@ -2464,8 +2483,160 @@ def daily_checks_view():
 
     return render_template('equipment/daily_checks_view.html',
                            checks=checks, project=project, check_date=check_date,
+                           date_from=date_from, date_to=date_to, range_mode=range_mode,
                            unchecked_machines=unchecked_machines, projects=projects,
                            project_colour_map=project_colour_map)
+
+
+@equipment_bp.route('/equipment/pre-start-report/export')
+@require_role('admin', 'supervisor')
+def pre_start_report_export():
+    """PDF export of the Pre-Start Report for a project over a date range.
+    Includes compliance warnings (upcoming) and violations (pre-started while
+    a compliance item was overdue)."""
+    from utils.reports import generate_prestart_report_pdf
+    from utils.settings import load_settings
+
+    project_id = request.args.get('project_id', type=int)
+    date_from_str = request.args.get('date_from', '').strip()
+    date_to_str = request.args.get('date_to', '').strip()
+
+    try:
+        date_from = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+    except ValueError:
+        date_from = date.today() - timedelta(days=6)
+    try:
+        date_to = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        date_to = date.today()
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+
+    project = Project.query.get(project_id) if project_id else None
+
+    # Pre-starts in range
+    q = MachineDailyCheck.query.filter(
+        MachineDailyCheck.check_date >= date_from,
+        MachineDailyCheck.check_date <= date_to,
+    )
+    if project_id:
+        q = q.filter_by(project_id=project_id)
+    checks = q.order_by(MachineDailyCheck.check_date.desc(), MachineDailyCheck.created_at.desc()).all()
+
+    # Machines in scope for compliance checks — any fleet machine that appears
+    # in the pre-starts OR (if project scoped) any machine currently assigned
+    # to that project.
+    scoped_machine_ids = {c.machine_id for c in checks if c.machine_id}
+    if project_id:
+        scoped_machine_ids |= {
+            pm.machine_id for pm in ProjectMachine.query.filter_by(project_id=project_id).all()
+        }
+
+    # ── Upcoming compliance / inspections (next 30 days after date_to) ─
+    warning_window = date_to + timedelta(days=30)
+    compliance_warnings = []
+
+    def _machine_meta(m):
+        return {'machine_name': m.name, 'plant_id': m.plant_id}
+
+    scoped_machines = Machine.query.filter(
+        Machine.active == True,
+        Machine.id.in_(scoped_machine_ids) if scoped_machine_ids else db.false(),
+    ).all()
+
+    for m in scoped_machines:
+        if m.next_inspection_date and date_to <= m.next_inspection_date <= warning_window:
+            compliance_warnings.append({
+                **_machine_meta(m),
+                'kind_label': 'Inspection',
+                'due_date': m.next_inspection_date,
+                'days': (m.next_inspection_date - date_to).days,
+            })
+        if m.warranty_expiry and date_to <= m.warranty_expiry <= warning_window:
+            compliance_warnings.append({
+                **_machine_meta(m),
+                'kind_label': 'Warranty',
+                'due_date': m.warranty_expiry,
+                'days': (m.warranty_expiry - date_to).days,
+            })
+        if m.dispose_by_date and date_to <= m.dispose_by_date <= warning_window:
+            compliance_warnings.append({
+                **_machine_meta(m),
+                'kind_label': 'Dispose-by',
+                'due_date': m.dispose_by_date,
+                'days': (m.dispose_by_date - date_to).days,
+            })
+
+    # Service/cal/T&T/annual cert dues
+    if scoped_machine_ids:
+        for mc in MachineCompliance.query.filter(
+            MachineCompliance.machine_id.in_(scoped_machine_ids),
+            MachineCompliance.next_due_date.isnot(None),
+        ).all():
+            if date_to <= mc.next_due_date <= warning_window and mc.machine:
+                compliance_warnings.append({
+                    **_machine_meta(mc.machine),
+                    'kind_label': COMPLIANCE_KIND_LABELS.get(mc.kind, mc.kind),
+                    'due_date': mc.next_due_date,
+                    'days': (mc.next_due_date - date_to).days,
+                })
+    compliance_warnings.sort(key=lambda r: (r['due_date'], r['machine_name']))
+
+    # ── Violations: pre-started while compliance overdue ──────────────
+    violations = []
+    # Pre-index compliance by machine for quick lookup.
+    mc_by_machine = {}
+    if scoped_machine_ids:
+        for mc in MachineCompliance.query.filter(
+            MachineCompliance.machine_id.in_(scoped_machine_ids)
+        ).all():
+            mc_by_machine.setdefault(mc.machine_id, []).append(mc)
+
+    for c in checks:
+        if not c.machine_id:
+            continue  # only flag fleet (compliance lives on Machine)
+        m = c.machine
+        if not m:
+            continue
+        issues = []
+        if m.next_inspection_date and m.next_inspection_date < c.check_date:
+            issues.append(f'Inspection overdue (due {m.next_inspection_date.strftime("%d/%m/%Y")})')
+        if m.warranty_expiry and m.warranty_expiry < c.check_date:
+            issues.append(f'Warranty expired {m.warranty_expiry.strftime("%d/%m/%Y")}')
+        if m.dispose_by_date and m.dispose_by_date < c.check_date:
+            issues.append(f'Past dispose-by {m.dispose_by_date.strftime("%d/%m/%Y")}')
+        for mc in mc_by_machine.get(m.id, []):
+            if mc.next_due_date and mc.next_due_date < c.check_date:
+                issues.append(
+                    f'{COMPLIANCE_KIND_LABELS.get(mc.kind, mc.kind)} overdue since {mc.next_due_date.strftime("%d/%m/%Y")}'
+                )
+        if issues:
+            violations.append({
+                'check': c,
+                'machine_name': m.name,
+                'plant_id': m.plant_id,
+                'issues': issues,
+            })
+    # Worst offenders first (most issues), then newest
+    violations.sort(key=lambda v: (-len(v['issues']), -v['check'].check_date.toordinal()))
+
+    settings = load_settings()
+    pdf_bytes = generate_prestart_report_pdf(
+        project=project,
+        date_from=date_from,
+        date_to=date_to,
+        checks=checks,
+        compliance_warnings=compliance_warnings,
+        violations=violations,
+        settings=settings,
+    )
+
+    filename_project = (project.name if project else 'all').replace(' ', '_').replace('/', '-')
+    filename = f'pre-start_{filename_project}_{date_from.isoformat()}_{date_to.isoformat()}.pdf'
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 # ---------------------------------------------------------------------------
