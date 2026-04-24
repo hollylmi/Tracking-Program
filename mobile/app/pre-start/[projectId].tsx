@@ -10,10 +10,12 @@ import ScreenHeader from '../../components/layout/ScreenHeader'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
 import CheckModal, { CONDITION_OPTIONS } from '../../components/equipment/CheckModal'
+import CheckDetailModal from '../../components/equipment/CheckDetailModal'
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme'
 import { api } from '../../lib/api'
 import { useToastStore } from '../../store/toast'
 import { useProjectStore } from '../../store/project'
+import { useAuthStore } from '../../store/auth'
 import type { DailyCheckMachine, DailyChecksResponse } from '../../types'
 
 export default function PreStartScreen() {
@@ -23,11 +25,13 @@ export default function PreStartScreen() {
   const { show } = useToastStore()
   const availableProjects = useProjectStore((s) => s.availableProjects)
   const activeProject = useProjectStore((s) => s.activeProject)
+  const user = useAuthStore((s) => s.user)
 
   const projectId = Number(params.projectId)
   const project = availableProjects.find((p) => p.id === projectId) || (activeProject?.id === projectId ? activeProject : null)
 
   const [checkingMachine, setCheckingMachine] = useState<DailyCheckMachine | null>(null)
+  const [viewingMachine, setViewingMachine] = useState<DailyCheckMachine | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
   const { data, isLoading, refetch } = useQuery({
@@ -178,14 +182,17 @@ export default function PreStartScreen() {
           renderItem={({ item }) => (
             <MachineRow
               machine={item}
-              onPress={() => setCheckingMachine(item)}
+              onPress={() => {
+                if (item.check) setViewingMachine(item)
+                else setCheckingMachine(item)
+              }}
             />
           )}
           contentContainerStyle={s.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
           ListFooterComponent={
             <Text style={s.hint}>
-              Only pre-start the machines you're using today. Unused machines can be skipped.
+              Only pre-start the machines you're using today. Tap a completed row to view or edit its details.
             </Text>
           }
         />
@@ -201,6 +208,23 @@ export default function PreStartScreen() {
           onSubmit={handleSubmit}
         />
       )}
+
+      {viewingMachine && (
+        <CheckDetailModal
+          visible={!!viewingMachine}
+          machine={viewingMachine}
+          userRole={user?.role}
+          onClose={() => setViewingMachine(null)}
+          onSaved={() => {
+            setViewingMachine(null)
+            queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
+          }}
+          onDeleted={() => {
+            setViewingMachine(null)
+            queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
+          }}
+        />
+      )}
     </SafeAreaView>
   )
 }
@@ -212,8 +236,8 @@ function MachineRow({ machine, onPress }: { machine: DailyCheckMachine; onPress:
   const hasTag = !!machine.active_tag_uid
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.8} disabled={checked}>
-      <Card padding="none" style={{ overflow: 'hidden', opacity: checked ? 0.7 : 1 }}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+      <Card padding="none" style={{ overflow: 'hidden' }}>
         <View style={[s.accentBar, {
           backgroundColor: checked ? Colors.success : hasAlerts ? Colors.warning : Colors.border,
         }]} />
@@ -231,6 +255,9 @@ function MachineRow({ machine, onPress }: { machine: DailyCheckMachine; onPress:
             <Text style={s.name}>{machine.name}</Text>
             {machine.plant_id ? <Text style={s.type}>#{machine.plant_id}</Text> : null}
             {machine.type ? <Text style={s.type}>{machine.type}</Text> : null}
+            {checked && machine.check?.hours_reading != null ? (
+              <Text style={s.type}>{machine.check.hours_reading} hrs</Text>
+            ) : null}
             {!checked && !hasTag ? (
               <Text style={[s.type, { color: Colors.textLight, fontStyle: 'italic' }]}>
                 No tag registered — scan not required
@@ -239,8 +266,11 @@ function MachineRow({ machine, onPress }: { machine: DailyCheckMachine; onPress:
           </View>
           <View style={s.right}>
             {checked && condOpt ? (
-              <View style={[s.statusPill, { backgroundColor: condOpt.bg }]}>
-                <Text style={[s.statusText, { color: condOpt.color }]}>{condOpt.label}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
+                <View style={[s.statusPill, { backgroundColor: condOpt.bg }]}>
+                  <Text style={[s.statusText, { color: condOpt.color }]}>{condOpt.label}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
               </View>
             ) : (
               <View style={s.scanBtn}>

@@ -273,7 +273,9 @@ export interface DailyCheckMachine {
     hours_reading: number | null
     notes: string | null
     checked_by: string | null
+    checked_at?: string | null
     photo_url: string | null
+    extra_photo_urls?: string[]
   } | null
 }
 
