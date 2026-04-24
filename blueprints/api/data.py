@@ -4115,12 +4115,14 @@ def scheduled_check_detail(check_id):
             MachineTransfer.status.in_(['scheduled', 'in_transit']),
         ).first()
 
+        active_tag = next((t for t in (m.nfc_tags or []) if t.status == 'active'), None)
         machines_list.append({
             'machine_id': m.id,
             'name': m.name,
             'plant_id': m.plant_id,
             'type': m.machine_type,
             'alerts': alerts,
+            'active_tag_uid': active_tag.uid if active_tag else None,
             'pending_transfer': {
                 'to_project': transfer.to_project.name if transfer and transfer.to_project else None,
                 'scheduled_date': transfer.scheduled_date.isoformat() if transfer else None,

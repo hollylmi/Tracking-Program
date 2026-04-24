@@ -36,12 +36,10 @@ function useUniversalLinkHandler() {
       // Supports both new public URL (/e/<id>) and legacy (/equipment/scan/<id>)
       const match = event.url.match(/\/e\/(\d+)/) || event.url.match(/\/equipment\/scan\/(\d+)/)
       if (match) {
-        // Replace current route with equipment tab so "back" from scan has a valid target
-        router.replace('/(tabs)/equipment')
-        // Then push the scan screen on top — setTimeout avoids a race on cold boot
-        setTimeout(() => {
-          router.push({ pathname: '/scan/[id]', params: { id: match[1] } })
-        }, 100)
+        // Push directly — scan screen's goBack falls back to equipment tab if
+        // there's nothing in history (cold-boot from NFC). Avoids the flicker
+        // that replace+push caused.
+        router.push({ pathname: '/scan/[id]', params: { id: match[1] } })
       }
     }
 

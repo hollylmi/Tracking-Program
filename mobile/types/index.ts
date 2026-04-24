@@ -361,6 +361,7 @@ export interface ScheduledCheckMachine {
   plant_id: string | null
   type: string | null
   alerts: MachineAlert[]
+  active_tag_uid: string | null
   pending_transfer: MachineTransferBrief | null
   check: {
     id: number
