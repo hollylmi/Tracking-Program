@@ -163,6 +163,7 @@ export default function CheckModal({ visible, machineName, isFleetMachine, activ
             )}
           </TouchableOpacity>
         </View>
+        <View style={s.headerAccent} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
             {tagRequired && (
@@ -285,6 +286,7 @@ export default function CheckModal({ visible, machineName, isFleetMachine, activ
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.dark, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 4 },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   cancel: { ...Typography.body, color: Colors.textLight },
   title: { ...Typography.h4, color: Colors.white, flex: 1, textAlign: 'center', marginHorizontal: Spacing.sm },
   save: { ...Typography.body, color: Colors.primary, fontWeight: '700' },

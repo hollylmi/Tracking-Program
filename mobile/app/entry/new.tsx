@@ -83,12 +83,15 @@ interface InternalHeaderProps {
 
 function InternalHeader({ step, onBack }: InternalHeaderProps) {
   return (
-    <View style={ih.bar}>
-      <TouchableOpacity style={ih.backBtn} onPress={onBack} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Ionicons name="chevron-back" size={24} color={Colors.white} />
-      </TouchableOpacity>
-      <Text style={ih.title} numberOfLines={1}>{STEP_HEADER_TITLES[step]}</Text>
-      <Text style={ih.counter}>Step {step} of {TOTAL_STEPS}</Text>
+    <View>
+      <View style={ih.bar}>
+        <TouchableOpacity style={ih.backBtn} onPress={onBack} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="chevron-back" size={24} color={Colors.white} />
+        </TouchableOpacity>
+        <Text style={ih.title} numberOfLines={1}>{STEP_HEADER_TITLES[step]}</Text>
+        <Text style={ih.counter}>Step {step} of {TOTAL_STEPS}</Text>
+      </View>
+      <View style={ih.accent} />
     </View>
   )
 }
@@ -101,6 +104,7 @@ const ih = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: 13,
   },
+  accent: { height: 3, backgroundColor: Colors.primary },
   backBtn: {
     width: 32,
     alignItems: 'flex-start',

@@ -34,10 +34,10 @@ export default function Card({ children, style, shadow = 'sm', padding = 'md' }:
 }
 
 const styles = StyleSheet.create({
+  // Borderless + soft shadow — matches the web app's `.card { border: none;
+  // box-shadow: 0 1px 4px rgba(0,0,0,0.07) }` look.
   card: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
 })

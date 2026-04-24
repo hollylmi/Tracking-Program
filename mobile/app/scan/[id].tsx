@@ -268,6 +268,7 @@ export default function ScanLandingScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>{machine.name}</Text>
         <View style={{ width: 32 }} />
       </View>
+      <View style={styles.headerAccent} />
 
       <ScrollView contentContainerStyle={{ padding: Spacing.md, paddingBottom: Spacing.xl * 2 }}>
         {/* Hero */}
@@ -701,6 +702,7 @@ function InfoModal({ visible, mode, setMode, scanInfo, detail, detailLoading, on
           <Text style={infoStyles.title} numberOfLines={1}>{m.name}</Text>
           <View style={{ width: 40 }} />
         </View>
+        <View style={infoStyles.headerAccent} />
         <View style={infoStyles.segmentWrap}>
           <TouchableOpacity
             style={[infoStyles.segment, mode === 'details' && infoStyles.segmentActive]}
@@ -848,13 +850,19 @@ function InfoModal({ visible, mode, setMode, scanInfo, detail, detailLoading, on
 
 const infoStyles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.dark, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 4 },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   title: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 16, fontWeight: '600', marginHorizontal: Spacing.sm },
   segmentWrap: { flexDirection: 'row', backgroundColor: Colors.surface, padding: 4, margin: Spacing.md, borderRadius: BorderRadius.sm, gap: 4 },
   segment: { flex: 1, paddingVertical: Spacing.xs + 2, alignItems: 'center', borderRadius: BorderRadius.sm },
   segmentActive: { backgroundColor: Colors.primary },
   segmentText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
   segmentTextActive: { color: Colors.dark, fontWeight: '700' },
-  section: { backgroundColor: '#fff', borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.border },
+  section: {
+    backgroundColor: '#fff', borderRadius: BorderRadius.md,
+    padding: Spacing.md, marginBottom: Spacing.md,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
+  },
   sectionTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', color: Colors.textSecondary, marginBottom: Spacing.sm },
   row: { flexDirection: 'row', paddingVertical: 4 },
   label: { width: 120, fontSize: 12, color: Colors.textSecondary },
@@ -874,6 +882,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: Colors.dark, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
   },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   headerTitle: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 16, fontWeight: '600' },
   backBtn: { padding: Spacing.xs },
   photo: { width: 120, height: 120, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
@@ -883,8 +892,8 @@ const styles = StyleSheet.create({
   },
   alertDanger: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#f8d7da', padding: Spacing.sm, borderRadius: BorderRadius.md,
-    marginTop: Spacing.md, borderWidth: 1, borderColor: '#f1aeb5',
+    backgroundColor: '#f8d7da', padding: Spacing.sm + 2, borderRadius: BorderRadius.md,
+    marginTop: Spacing.sm + 2,
   },
   grid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.md,

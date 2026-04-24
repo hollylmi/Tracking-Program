@@ -78,19 +78,23 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   const content = state.routes.map((route: any, index: number) => renderTab(route, index))
 
   return (
-    <View style={[tb.outer, { paddingBottom: Math.max(insets.bottom, 4) }]}>
-      {isWide ? (
-        <View style={tb.wideRow}>{content}</View>
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={tb.scroll}
-          bounces={false}
-        >
-          {content}
-        </ScrollView>
-      )}
+    <View style={{ backgroundColor: Colors.dark }}>
+      {/* Pink accent line on top of the tab bar — matches the web navbar. */}
+      <View style={tb.accentLine} />
+      <View style={[tb.outer, { paddingBottom: Math.max(insets.bottom, 4) }]}>
+        {isWide ? (
+          <View style={tb.wideRow}>{content}</View>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={tb.scroll}
+            bounces={false}
+          >
+            {content}
+          </ScrollView>
+        )}
+      </View>
     </View>
   )
 }
@@ -98,8 +102,10 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
 const tb = StyleSheet.create({
   outer: {
     backgroundColor: Colors.dark,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,183,197,0.15)',
+  },
+  accentLine: {
+    height: 2,
+    backgroundColor: Colors.primary,
   },
   scroll: {
     flexDirection: 'row',

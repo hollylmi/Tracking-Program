@@ -42,9 +42,8 @@ function MachineCheckCard({ machine, onCheck }: { machine: ScheduledCheckMachine
   return (
     <TouchableOpacity activeOpacity={0.7} onPress={onCheck}>
     <Card padding="none" style={{ overflow: 'hidden' }}>
-      <View style={[s.accentBar, { backgroundColor: checked ? Colors.success : hasAlerts ? Colors.warning : Colors.border }]} />
       <View style={s.row}>
-        <View style={[s.iconWrap, { backgroundColor: checked ? 'rgba(61,139,65,0.15)' : Colors.surface }]}>
+        <View style={[s.iconWrap, { backgroundColor: checked ? 'rgba(61,139,65,0.12)' : Colors.background }]}>
           <Ionicons name={checked ? 'checkmark-circle' : 'ellipse-outline'} size={22}
             color={checked ? Colors.success : Colors.textLight} />
         </View>
@@ -218,6 +217,7 @@ function CheckModal({ visible, machine, onClose, onSubmit, initialCondition, ini
               : <Text style={m.save}>{tagRequired && !verifiedTagUid ? 'Scan first' : 'Submit'}</Text>}
           </TouchableOpacity>
         </View>
+        <View style={m.headerAccent} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={m.body} keyboardShouldPersistTaps="handled">
           {tagRequired && (
@@ -460,7 +460,6 @@ const s = StyleSheet.create({
   progressTrack: { height: 6, backgroundColor: Colors.border, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
   progressLabel: { ...Typography.caption, color: Colors.textLight, marginTop: Spacing.xs },
-  accentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, borderTopLeftRadius: BorderRadius.md, borderBottomLeftRadius: BorderRadius.md },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, paddingLeft: Spacing.md + 4, paddingRight: Spacing.md, gap: Spacing.md },
   iconWrap: { width: 40, height: 40, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   info: { flex: 1 },
@@ -487,6 +486,7 @@ const s = StyleSheet.create({
 const m = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.dark, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 4 },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   cancel: { ...Typography.body, color: Colors.textLight },
   title: { ...Typography.h4, color: Colors.white, flex: 1, textAlign: 'center', marginHorizontal: Spacing.sm },
   save: { ...Typography.body, color: Colors.primary, fontWeight: '700' },

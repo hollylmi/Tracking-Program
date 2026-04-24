@@ -272,6 +272,7 @@ export default function TransferBatchScreen() {
         </Text>
         <View style={{ width: 32 }} />
       </View>
+      <View style={styles.headerAccent} />
 
       <ScrollView contentContainerStyle={{ padding: Spacing.md, paddingBottom: Spacing.xl * 2 }}>
         <View style={styles.summaryCard}>
@@ -553,12 +554,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: Colors.dark, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
   },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   headerTitle: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 14, fontWeight: '600' },
   backBtn: { padding: Spacing.xs },
   summaryCard: {
     backgroundColor: '#fff', padding: Spacing.md,
     borderRadius: BorderRadius.md, marginBottom: Spacing.md,
-    borderWidth: 1, borderColor: Colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
   },
   statusPill: {
     paddingHorizontal: 10, paddingVertical: 3,
@@ -567,7 +570,8 @@ const styles = StyleSheet.create({
   itemCard: {
     backgroundColor: '#fff', padding: Spacing.md,
     borderRadius: BorderRadius.md, marginBottom: Spacing.sm,
-    borderWidth: 1, borderColor: Colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
     gap: Spacing.xs,
   },
   itemAction: {

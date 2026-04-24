@@ -87,7 +87,6 @@ function MachineCard({
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
       <Card padding="none" style={{ overflow: 'hidden' }}>
-        <View style={[styles.accentBar, { backgroundColor: borderColor }]} />
         <View style={styles.row}>
           {photoUri ? (
             <Image source={{ uri: photoUri }} style={styles.machineThumb} />
@@ -182,7 +181,6 @@ function HiredMachineCard({ machine }: { machine: HiredMachine }) {
 
   return (
     <Card padding="none" style={{ overflow: 'hidden' }}>
-      <View style={[styles.accentBar, { backgroundColor: status.color }]} />
       <View style={styles.row}>
         <View style={[styles.iconWrap, { backgroundColor: status.color + '20' }]}>
           <Ionicons name={status.icon as any} size={22} color={status.color} />
@@ -255,9 +253,8 @@ function MachineCheckCard({ machine, onViewCheck }: { machine: DailyCheckMachine
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
     <Card padding="none" style={{ overflow: 'hidden' }}>
-      <View style={[styles.accentBar, { backgroundColor: checked ? Colors.success : hasAlerts ? Colors.warning : Colors.border }]} />
       <View style={styles.row}>
-        <View style={[styles.iconWrap, { backgroundColor: checked ? 'rgba(61,139,65,0.15)' : hasAlerts ? 'rgba(201,106,0,0.1)' : Colors.surface }]}>
+        <View style={[styles.iconWrap, { backgroundColor: checked ? 'rgba(61,139,65,0.12)' : hasAlerts ? 'rgba(201,106,0,0.1)' : Colors.background }]}>
           <Ionicons name={checked ? 'checkmark-circle' : hasAlerts ? 'alert-circle' : 'ellipse-outline'} size={22}
             color={checked ? Colors.success : hasAlerts ? Colors.warning : Colors.textLight} />
         </View>
@@ -834,15 +831,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
 
-  accentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    borderTopLeftRadius: BorderRadius.md,
-    borderBottomLeftRadius: BorderRadius.md,
-  },
+
 
   row: {
     flexDirection: 'row',

@@ -120,6 +120,9 @@ export default function ScreenHeader({ title, subtitle, showBack = false, right,
         {subtitle && <Text style={styles.subtitle}> — {subtitle}</Text>}
         {right && <View style={styles.rightSlot}>{right}</View>}
       </View>
+
+      {/* Pink accent line — matches the web navbar's bottom border. */}
+      <View style={styles.accentLine} />
     </View>
   )
 }
@@ -202,5 +205,12 @@ const styles = StyleSheet.create({
   },
   rightSlot: {
     marginLeft: 'auto',
+  },
+  accentLine: {
+    height: 3,
+    backgroundColor: Colors.primary,
+    marginHorizontal: -Spacing.md,      // bleeds out to the edge of the header
+    marginTop: Spacing.xs + 2,
+    marginBottom: -Spacing.xs,          // flush to the container's bottom edge
   },
 })

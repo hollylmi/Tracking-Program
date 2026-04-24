@@ -115,6 +115,7 @@ export default function CheckDetailModal({ visible, machine, userRole, onClose, 
             </TouchableOpacity>
           ) : <View style={{ width: 40 }} />}
         </View>
+        <View style={s.headerAccent} />
 
         <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
           {!editing ? (
@@ -243,6 +244,7 @@ export default function CheckDetailModal({ visible, machine, userRole, onClose, 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.dark, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 4 },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   cancel: { ...Typography.body, color: Colors.textLight },
   title: { ...Typography.h4, color: Colors.white, flex: 1, textAlign: 'center', marginHorizontal: Spacing.sm },
   save: { ...Typography.body, color: Colors.primary, fontWeight: '700' },

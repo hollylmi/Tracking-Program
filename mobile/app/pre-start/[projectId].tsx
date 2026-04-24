@@ -238,12 +238,9 @@ function MachineRow({ machine, onPress }: { machine: DailyCheckMachine; onPress:
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
       <Card padding="none" style={{ overflow: 'hidden' }}>
-        <View style={[s.accentBar, {
-          backgroundColor: checked ? Colors.success : hasAlerts ? Colors.warning : Colors.border,
-        }]} />
         <View style={s.row}>
           <View style={[s.iconWrap, {
-            backgroundColor: checked ? 'rgba(61,139,65,0.15)' : hasAlerts ? 'rgba(201,106,0,0.1)' : Colors.surface,
+            backgroundColor: checked ? 'rgba(61,139,65,0.12)' : hasAlerts ? 'rgba(201,106,0,0.1)' : Colors.background,
           }]}>
             <Ionicons
               name={checked ? 'checkmark-circle' : hasAlerts ? 'alert-circle' : 'ellipse-outline'}
@@ -302,7 +299,6 @@ const s = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 4 },
   progressLabel: { ...Typography.caption, color: Colors.textSecondary, fontWeight: '600' },
   list: { padding: Spacing.md, gap: Spacing.sm },
-  accentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, paddingLeft: Spacing.md + 4, paddingRight: Spacing.md, gap: Spacing.md },
   iconWrap: { width: 40, height: 40, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1 },

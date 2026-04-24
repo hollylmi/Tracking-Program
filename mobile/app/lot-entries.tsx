@@ -100,6 +100,7 @@ export default function LotEntriesScreen() {
         </View>
         <View style={{ width: 32 }} />
       </View>
+      <View style={styles.headerAccent} />
 
       {/* Body */}
       {isLoading ? (
@@ -168,6 +169,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
   },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   backBtn: {
     width: 32,
     alignItems: 'flex-start',

@@ -50,9 +50,8 @@ function ChecklistItemCard({
 
   return (
     <Card padding="none" style={{ overflow: 'hidden' }}>
-      <View style={[styles.accentBar, { backgroundColor: item.checked ? Colors.success : Colors.border }]} />
       <View style={styles.row}>
-        <View style={[styles.iconWrap, { backgroundColor: item.checked ? 'rgba(61,139,65,0.15)' : Colors.surface }]}>
+        <View style={[styles.iconWrap, { backgroundColor: item.checked ? 'rgba(61,139,65,0.12)' : Colors.background }]}>
           <Ionicons
             name={item.checked ? 'checkmark-circle' : 'ellipse-outline'}
             size={22}
@@ -148,6 +147,7 @@ function CheckModal({
             )}
           </TouchableOpacity>
         </View>
+        <View style={modalStyles.headerAccent} />
 
         <View style={modalStyles.body}>
           <Text style={modalStyles.label}>Condition</Text>
@@ -360,15 +360,6 @@ const styles = StyleSheet.create({
   },
   progressLabel: { ...Typography.caption, color: Colors.textLight, marginTop: Spacing.xs },
 
-  accentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    borderTopLeftRadius: BorderRadius.md,
-    borderBottomLeftRadius: BorderRadius.md,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -422,6 +413,7 @@ const modalStyles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm + 4,
   },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   cancel: { ...Typography.body, color: Colors.textLight },
   title: { ...Typography.h4, color: Colors.white, flex: 1, textAlign: 'center', marginHorizontal: Spacing.sm },
   save: { ...Typography.body, color: Colors.primary, fontWeight: '700' },

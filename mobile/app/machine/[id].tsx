@@ -1136,6 +1136,7 @@ export default function MachineDetailScreen() {
           </TouchableOpacity>
         ) : <View style={{ width: 32 }} />}
       </View>
+      <View style={styles.headerAccent} />
 
       <ScrollView
         style={styles.scroll}
@@ -1760,6 +1761,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
   },
+  headerAccent: { height: 3, backgroundColor: Colors.primary },
   backBtn: { width: 32, alignItems: 'flex-start' },
   editBtn: { width: 32, alignItems: 'flex-end' },
   headerTitle: { ...Typography.h3, color: Colors.white, flex: 1, textAlign: 'center' },
