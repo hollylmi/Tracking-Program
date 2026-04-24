@@ -151,6 +151,21 @@ export const api = {
         manufacturer?: string | null; model_number?: string | null; serial_number?: string | null
       }>('/equipment', data),
     detail: (id: number) => apiClient.get<MachineDetail>(`/equipment/${id}`),
+    scanInfo: (id: number) => apiClient.get<{
+      id: number; name: string; plant_id: string | null; type: string | null
+      manufacturer: string | null; model_number: string | null; photo_url: string | null
+      next_inspection_date: string | null
+      active_tag_uid: string | null
+      project_id: number | null; project_name: string | null
+      is_storage_location: boolean
+      breakdowns: Array<{ id: number; description: string | null; repair_status: string }>
+      pending_transfer: null | {
+        id: number; batch_id: number | null
+        from_project: string | null; to_project: string | null
+        scheduled_date: string | null; anticipated_arrival_date: string | null
+        status: string; pre_checked: boolean; arrived: boolean
+      }
+    }>(`/equipment/${id}/scan-info`),
     update: (id: number, data: Partial<MachineDetail>) =>
       apiClient.patch<MachineDetail>(`/equipment/${id}`, data),
     breakdowns: (projectId?: number) =>

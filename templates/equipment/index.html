@@ -9,6 +9,9 @@
     <a href="{{ url_for('equipment.equipment_groups') }}" class="btn btn-sm btn-outline-info">
       <i class="bi bi-collection me-1"></i>Manage Groups
     </a>
+    <a href="{{ url_for('equipment.scheduled_checks_page') }}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-calendar-check me-1"></i>Scheduled Checks
+    </a>
     {% endif %}
     <a href="{{ url_for('equipment.daily_checks_do') }}" class="btn btn-sm btn-primary">
       <i class="bi bi-check2-square me-1"></i>Daily Machine Checks

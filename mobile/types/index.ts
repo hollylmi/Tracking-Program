@@ -148,9 +148,13 @@ export interface Machine {
   name: string
   type: string
   active: boolean
+  plant_id: string | null
   group_id: number | null
   group_name: string | null
   photo_url: string | null
+  project_id: number | null
+  project_name: string | null
+  is_storage_location: boolean
 }
 
 export interface Breakdown {

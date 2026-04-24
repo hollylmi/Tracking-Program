@@ -63,10 +63,12 @@ export default function ScanLandingScreen() {
   const [scanningForCheck, setScanningForCheck] = useState(false)
 
   const { data: machine, isLoading, isError } = useQuery({
-    queryKey: ['machine', id],
-    queryFn: () => cachedQuery(`machine_${id}`, () =>
-      api.equipment.detail(Number(id)).then(r => r.data)),
-    staleTime: 2 * 60 * 1000,
+    queryKey: ['scan-info', id],
+    // Fast minimal endpoint — only what the scan landing needs. Cached for 5
+    // minutes so repeated scans of the same tag are instant.
+    queryFn: () => cachedQuery(`scan_info_${id}`, () =>
+      api.equipment.scanInfo(Number(id)).then(r => r.data)),
+    staleTime: 5 * 60 * 1000,
   })
 
   // On arrival, record a scan event + grab GPS. This runs whether you got here

@@ -97,7 +97,30 @@ function MachineCard({
           )}
           <View style={styles.info}>
             <Text style={styles.name}>{machine.name}</Text>
-            {machine.type ? <Text style={styles.type}>{machine.type}</Text> : null}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center', marginTop: 2 }}>
+              {machine.plant_id ? (
+                <Text style={{ ...Typography.caption, color: Colors.textSecondary, fontWeight: '600' }}>
+                  {machine.plant_id}
+                </Text>
+              ) : null}
+              {machine.type ? (
+                <Text style={{ ...Typography.caption, color: Colors.textLight }}>
+                  {machine.plant_id ? ' · ' : ''}{machine.type}
+                </Text>
+              ) : null}
+            </View>
+            {machine.project_name ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                <Ionicons
+                  name={machine.is_storage_location ? ('cube-outline' as any) : ('location-outline' as any)}
+                  size={11}
+                  color={machine.is_storage_location ? Colors.warning : Colors.primary}
+                />
+                <Text style={{ ...Typography.caption, color: machine.is_storage_location ? Colors.warning : Colors.primary, fontWeight: '600' }}>
+                  {machine.project_name}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.right}>
             <View style={[styles.statusPill, { backgroundColor: statusBg }]}>

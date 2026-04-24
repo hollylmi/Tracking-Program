@@ -959,16 +959,27 @@ def get_equipment():
                     .filter(Machine.id.in_(assigned_ids), Machine.active == True)
                     .order_by(Machine.name).all())
 
+    # Bulk lookup of current project assignments
+    project_by_machine = {
+        pm.machine_id: pm.project
+        for pm in ProjectMachine.query.all()
+        if pm.project
+    }
+
     return {
         'machines': [
             {
                 'id': m.id,
                 'name': m.name,
+                'plant_id': m.plant_id,
                 'type': m.machine_type,
                 'active': m.active,
                 'group_id': m.group_id,
                 'group_name': m.group.name if m.group else None,
                 'photo_url': _photo_url(f'machine_photos/{m.photo_filename}', f'/equipment/machine-photo/{m.photo_filename}') if m.photo_filename else None,
+                'project_id': project_by_machine.get(m.id).id if project_by_machine.get(m.id) else None,
+                'project_name': project_by_machine.get(m.id).name if project_by_machine.get(m.id) else None,
+                'is_storage_location': bool(project_by_machine.get(m.id) and project_by_machine.get(m.id).is_storage),
             }
             for m in machines
         ]
@@ -1151,6 +1162,74 @@ def create_breakdown():
         'anticipated_return': bd.anticipated_return.isoformat() if bd.anticipated_return else None,
         'resolved': bd.repair_status == 'completed',
     }, 201
+
+
+@api_data_bp.route('/equipment/<int:machine_id>/scan-info', methods=['GET'])
+@jwt_required()
+def get_machine_scan_info(machine_id):
+    """Minimal payload for the scan landing page — optimised for speed.
+    Skips breakdown photos, daily check history, and other heavy relationships
+    so the page renders instantly after an NFC tap."""
+    user, err = _get_user()
+    if err:
+        return err
+
+    machine = Machine.query.get(machine_id)
+    if not machine:
+        return {'error': 'Machine not found'}, 404
+
+    # Single active breakdown if any (no photos/history)
+    active_bd = MachineBreakdown.query.filter(
+        MachineBreakdown.machine_id == machine_id,
+        MachineBreakdown.repair_status != 'completed',
+    ).order_by(MachineBreakdown.incident_date.desc()).first()
+
+    # Pending transfer (for the banner + action button)
+    pending_transfer = MachineTransfer.query.filter(
+        MachineTransfer.machine_id == machine_id,
+        MachineTransfer.status.in_(('scheduled', 'in_transit')),
+    ).order_by(MachineTransfer.scheduled_date).first()
+
+    active_tag = NFCTag.query.filter_by(machine_id=machine_id, status='active').first()
+
+    assignment = ProjectMachine.query.filter_by(machine_id=machine_id).first()
+
+    photo_url = None
+    if machine.photo_filename:
+        photo_url = _photo_url(f'machine_photos/{machine.photo_filename}',
+                               f'/equipment/machine-photo/{machine.photo_filename}')
+
+    return {
+        'id': machine.id,
+        'name': machine.name,
+        'plant_id': machine.plant_id,
+        'type': machine.machine_type,
+        'manufacturer': machine.manufacturer,
+        'model_number': machine.model_number,
+        'photo_url': photo_url,
+        'next_inspection_date': machine.next_inspection_date.isoformat() if machine.next_inspection_date else None,
+        'active_tag_uid': active_tag.uid if active_tag else None,
+        'project_id': assignment.project_id if assignment else None,
+        'project_name': assignment.project.name if assignment and assignment.project else None,
+        'is_storage_location': bool(assignment and assignment.project and assignment.project.is_storage),
+        'breakdowns': [{
+            'id': active_bd.id,
+            'description': active_bd.description,
+            'repair_status': active_bd.repair_status or 'pending',
+        }] if active_bd else [],
+        'pending_transfer': {
+            'id': pending_transfer.id,
+            'batch_id': pending_transfer.batch_id,
+            'from_project': pending_transfer.from_project.name if pending_transfer.from_project else None,
+            'to_project': pending_transfer.to_project.name if pending_transfer.to_project else None,
+            'scheduled_date': pending_transfer.scheduled_date.isoformat() if pending_transfer.scheduled_date else None,
+            'anticipated_arrival_date': pending_transfer.batch.anticipated_arrival_date.isoformat()
+                if (pending_transfer.batch and pending_transfer.batch.anticipated_arrival_date) else None,
+            'status': pending_transfer.status,
+            'pre_checked': bool(pending_transfer.pre_check_id),
+            'arrived': bool(pending_transfer.arrival_check_id),
+        } if pending_transfer else None,
+    }, 200
 
 
 @api_data_bp.route('/equipment/<int:machine_id>', methods=['GET'])

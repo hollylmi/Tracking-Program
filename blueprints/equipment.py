@@ -2039,6 +2039,33 @@ def daily_checks_do():
 # Scheduled equipment checks (admin creates, assigns to supervisor/site user)
 # ---------------------------------------------------------------------------
 
+@equipment_bp.route('/equipment/scheduled-checks')
+@require_role('admin', 'supervisor')
+def scheduled_checks_page():
+    """Dedicated page to manage scheduled equipment checks — assignable from
+    the equipment page so admins don't have to dig through the main dashboard."""
+    all_checks = ScheduledEquipmentCheck.query.order_by(
+        ScheduledEquipmentCheck.active.desc(),
+        ScheduledEquipmentCheck.next_due_date,
+    ).all()
+    projects = Project.query.filter_by(active=True).order_by(Project.name).all()
+    # All active users that can be assigned (admin/supervisor/site)
+    users = User.query.filter(
+        User.active == True,
+        User.role.in_(('admin', 'supervisor', 'site')),
+    ).order_by(User.display_name).all()
+    machines = Machine.query.filter_by(active=True).order_by(Machine.name).all()
+    # Bulk map machine → project for the "per site" picker
+    machine_project_map = {}
+    for pm in ProjectMachine.query.all():
+        machine_project_map.setdefault(pm.machine_id, []).append(pm.project_id)
+    return render_template('equipment/scheduled_checks.html',
+                           checks=all_checks, projects=projects,
+                           users=users, machines=machines,
+                           machine_project_map=machine_project_map,
+                           today=date.today())
+
+
 @equipment_bp.route('/equipment/scheduled-check/create', methods=['POST'])
 @require_role('admin')
 def scheduled_check_create():
