@@ -2279,8 +2279,8 @@ def generate_prestart_report_pdf(project, date_from, date_to, checks,
     pdf.cell(0, 8, 'PRE-START REPORT', new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
     pdf.set_font('Helvetica', '', 9)
     pdf.cell(0, 5,
-             f'{date_from.strftime("%d/%m/%Y")} – {date_to.strftime("%d/%m/%Y")}'
-             + (f'  ·  {safe(project.name)}' if project else '  ·  All projects'),
+             f'{date_from.strftime("%d/%m/%Y")} - {date_to.strftime("%d/%m/%Y")}'
+             + (f'   |   {safe(project.name)}' if project else '   |   All projects'),
              new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
     pdf.set_font('Helvetica', '', 8)
     pdf.cell(0, 4, f'Generated {date.today().strftime("%d/%m/%Y")}',
@@ -2298,12 +2298,12 @@ def generate_prestart_report_pdf(project, date_from, date_to, checks,
     pdf.set_font('Helvetica', 'B', 10)
     pdf.cell(0, 7, 'SUMMARY', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
     pdf.set_font('Helvetica', '', 9)
-    pdf.cell(0, 5, f'Total pre-starts: {total}   ·   Unique machines: {unique_machines}',
+    pdf.cell(0, 5, f'Total pre-starts: {total}   |   Unique machines: {unique_machines}',
              new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.cell(0, 5,
-             f'Good: {by_condition.get("good", 0)}   ·   Fair: {by_condition.get("fair", 0)}'
-             f'   ·   Poor: {by_condition.get("poor", 0)}'
-             f'   ·   Broken down: {by_condition.get("broken_down", 0)}',
+             f'Good: {by_condition.get("good", 0)}   |   Fair: {by_condition.get("fair", 0)}'
+             f'   |   Poor: {by_condition.get("poor", 0)}'
+             f'   |   Broken down: {by_condition.get("broken_down", 0)}',
              new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(3)
 
