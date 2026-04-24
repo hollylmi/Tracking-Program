@@ -20,6 +20,7 @@ from models import (
     ScheduledEquipmentCheck, ScheduledCheckCompletion,
     FlightBooking, AccommodationBooking, AccommodationProperty, AccommodationDocument,
     NFCTag, MachineDailyCheckPhoto, MachineScanEvent,
+    MachineCompliance, COMPLIANCE_KIND_LABELS,
 )
 from utils.files import allowed_photo
 import storage
@@ -1199,6 +1200,25 @@ def get_machine_scan_info(machine_id):
         photo_url = _photo_url(f'machine_photos/{machine.photo_filename}',
                                f'/equipment/machine-photo/{machine.photo_filename}')
 
+    # All configured compliance obligations for this machine (service / cal /
+    # T&T / annual cert). Each one is returned with a live status so the scan
+    # page can flag overdue or upcoming items in a single pass.
+    today_d = date.today()
+    compliance_items = []
+    for mc in MachineCompliance.query.filter_by(machine_id=machine_id).all():
+        days_until = None
+        if mc.next_due_date:
+            days_until = (mc.next_due_date - today_d).days
+        compliance_items.append({
+            'kind': mc.kind,
+            'label': COMPLIANCE_KIND_LABELS.get(mc.kind, mc.kind),
+            'interval_days': mc.interval_days,
+            'interval_unit': mc.unit,
+            'last_done_date': mc.last_done_date.isoformat() if mc.last_done_date else None,
+            'next_due_date': mc.next_due_date.isoformat() if mc.next_due_date else None,
+            'days_until_due': days_until,
+        })
+
     return {
         'id': machine.id,
         'name': machine.name,
@@ -1206,8 +1226,22 @@ def get_machine_scan_info(machine_id):
         'type': machine.machine_type,
         'manufacturer': machine.manufacturer,
         'model_number': machine.model_number,
+        'serial_number': machine.serial_number,
+        'engine_number': machine.engine_number,
+        'description': machine.description,
         'photo_url': photo_url,
+        # Lifecycle / compliance dates — rendered alongside service / T&T etc
+        # on the scan page so supervisors see every warning at a glance.
+        'acquired_date': machine.acquired_date.isoformat() if machine.acquired_date else None,
+        'build_date': machine.build_date.isoformat() if machine.build_date else None,
+        'warranty_expiry': machine.warranty_expiry.isoformat() if machine.warranty_expiry else None,
         'next_inspection_date': machine.next_inspection_date.isoformat() if machine.next_inspection_date else None,
+        'inspection_interval_days': machine.inspection_interval_days,
+        'dispose_by_date': machine.dispose_by_date.isoformat() if machine.dispose_by_date else None,
+        'service_instructions': machine.service_instructions,
+        'storage_instructions': machine.storage_instructions,
+        'spare_parts_notes': machine.spare_parts_notes,
+        'compliance_items': compliance_items,
         'active_tag_uid': active_tag.uid if active_tag else None,
         'project_id': assignment.project_id if assignment else None,
         'project_name': assignment.project.name if assignment and assignment.project else None,

@@ -153,11 +153,25 @@ export const api = {
     detail: (id: number) => apiClient.get<MachineDetail>(`/equipment/${id}`),
     scanInfo: (id: number) => apiClient.get<{
       id: number; name: string; plant_id: string | null; type: string | null
-      manufacturer: string | null; model_number: string | null; photo_url: string | null
-      next_inspection_date: string | null
+      manufacturer: string | null; model_number: string | null
+      serial_number: string | null; engine_number: string | null
+      description: string | null
+      photo_url: string | null
+      acquired_date: string | null; build_date: string | null
+      warranty_expiry: string | null
+      next_inspection_date: string | null; inspection_interval_days: number | null
+      dispose_by_date: string | null
+      service_instructions: string | null; storage_instructions: string | null
+      spare_parts_notes: string | null
       active_tag_uid: string | null
       project_id: number | null; project_name: string | null
       is_storage_location: boolean
+      compliance_items: Array<{
+        kind: string; label: string
+        interval_days: number | null; interval_unit: string | null
+        last_done_date: string | null; next_due_date: string | null
+        days_until_due: number | null
+      }>
       breakdowns: Array<{ id: number; description: string | null; repair_status: string }>
       pending_transfer: null | {
         id: number; batch_id: number | null
