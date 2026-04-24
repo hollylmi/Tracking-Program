@@ -135,7 +135,15 @@ export default function CheckModal({ visible, machineName, isFleetMachine, activ
       selectionLimit: remaining,
     })
     if (!result.canceled && result.assets.length > 0) {
-      for (const asset of result.assets.slice(0, remaining)) await addCompressed(asset.uri)
+      // Compress in parallel — serial compression is noticeably slow on older
+      // phones when picking several images at once.
+      const compressed = await Promise.all(
+        result.assets.slice(0, remaining).map(async (a, i) => ({
+          uri: await compressImage(a.uri),
+          filename: `dc_${Date.now()}_${i}.jpg`,
+        }))
+      )
+      setPhotos((prev) => [...prev, ...compressed].slice(0, MAX_PHOTOS))
     }
   }
 

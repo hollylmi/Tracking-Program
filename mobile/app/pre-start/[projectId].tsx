@@ -14,7 +14,7 @@ import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme
 import { api } from '../../lib/api'
 import { useToastStore } from '../../store/toast'
 import { useProjectStore } from '../../store/project'
-import type { DailyCheckMachine } from '../../types'
+import type { DailyCheckMachine, DailyChecksResponse } from '../../types'
 
 export default function PreStartScreen() {
   const params = useLocalSearchParams<{ projectId: string }>()
@@ -61,32 +61,76 @@ export default function PreStartScreen() {
     async (condition: string, notes: string, hoursReading: string | undefined,
            photos: { uri: string; filename: string }[], tagUid: string | undefined) => {
       if (!checkingMachine) return
-      try {
-        await api.equipment.submitDailyCheck({
-          machine_id: checkingMachine.machine_id ?? undefined,
-          hired_machine_id: checkingMachine.hired_machine_id ?? undefined,
-          project_id: projectId,
-          condition,
-          notes: notes || undefined,
-          hours_reading: hoursReading,
-          tag_uid: tagUid,
-          photos,
+      const machine = checkingMachine
+      const pid = projectId
+      // Close the modal straight away — the upload runs in the background so the
+      // user can move on to the next machine immediately.
+      setCheckingMachine(null)
+
+      // Optimistic cache update: mark this machine as checked so the list
+      // reflects progress before the server responds.
+      const key = ['daily-checks', pid]
+      const snapshot = queryClient.getQueryData<DailyChecksResponse>(key)
+      if (snapshot) {
+        queryClient.setQueryData<DailyChecksResponse>(key, {
+          ...snapshot,
+          checked: Math.min(snapshot.total, snapshot.checked + 1),
+          machines: snapshot.machines.map((m) => {
+            const same =
+              (m.machine_id && m.machine_id === machine.machine_id) ||
+              (m.hired_machine_id && m.hired_machine_id === machine.hired_machine_id)
+            if (!same || m.check) return m
+            return {
+              ...m,
+              check: {
+                id: -1,
+                condition,
+                hours_reading: hoursReading ? Number(hoursReading) : null,
+                notes: notes || null,
+                checked_by: 'You',
+                photo_url: null,
+              },
+            }
+          }),
         })
-        show('Pre-start recorded', 'success')
-        setCheckingMachine(null)
-        queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
-        if (condition === 'broken_down') {
-          router.push({
-            pathname: '/breakdown/new',
-            params: {
-              machine_id: String(checkingMachine.machine_id ?? ''),
-              machine_name: checkingMachine.name,
-            },
-          })
-        }
-      } catch {
-        show('Failed to submit pre-start', 'error')
       }
+
+      show('Pre-start saved', 'success')
+
+      // If the machine was flagged broken down, jump straight to the breakdown
+      // form — don't wait for the pre-start upload to finish.
+      if (condition === 'broken_down' && machine.machine_id) {
+        router.push({
+          pathname: '/breakdown/new',
+          params: {
+            machine_id: String(machine.machine_id),
+            machine_name: machine.name,
+          },
+        })
+      }
+
+      // Fire-and-forget upload. The network round-trip + photo bytes happen
+      // behind the scenes; the UI has already moved on.
+      api.equipment.submitDailyCheck({
+        machine_id: machine.machine_id ?? undefined,
+        hired_machine_id: machine.hired_machine_id ?? undefined,
+        project_id: pid,
+        condition,
+        notes: notes || undefined,
+        hours_reading: hoursReading,
+        tag_uid: tagUid,
+        photos,
+      })
+        .then(() => {
+          // Refresh once the real record exists so ids / checked_by land.
+          queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
+        })
+        .catch(() => {
+          show('Pre-start failed — please retry', 'error')
+          // Resync from the server rather than rolling back a stale snapshot —
+          // other submits may have landed between now and the original capture.
+          queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
+        })
     },
     [checkingMachine, projectId, queryClient, router, show]
   )
