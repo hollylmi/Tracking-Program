@@ -42,6 +42,7 @@
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hours"><i class="bi bi-clock-history me-1"></i>Hours</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-checks"><i class="bi bi-check2-square me-1"></i>Daily Checks</button></li>
   <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-breakdowns"><i class="bi bi-exclamation-triangle me-1"></i>Breakdowns <span class="badge bg-secondary ms-1">{{ breakdowns | selectattr('is_active') | list | length }}</span></button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-compliance"><i class="bi bi-clipboard-check me-1"></i>Compliance <span class="badge bg-secondary ms-1">{{ compliance_items | length }}</span></button></li>
 </ul>
 
 <div class="tab-content">
@@ -448,7 +449,166 @@
     {% endif %}
   </div>
 
+  <!-- ===== COMPLIANCE TAB ===== -->
+  <div class="tab-pane fade" id="tab-compliance">
+    {% if not compliance_items %}
+      <div class="card border-0 shadow-sm">
+        <div class="card-body text-center text-muted py-5">
+          <i class="bi bi-clipboard-x fs-1 d-block mb-2"></i>
+          No compliance requirements configured for this equipment type
+          {% if machine.machine_type %}(<strong>{{ machine.machine_type }}</strong>){% endif %}.
+          {% if current_user.role == 'admin' %}
+            <div class="mt-2"><a href="{{ url_for('equipment.type_compliance') }}" class="btn btn-sm btn-outline-primary">Configure Type Rules</a></div>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <div class="row g-3">
+        {% for c in compliance_items %}
+          {% set history = compliance_history.get(c.id, []) %}
+          {% set status = 'ok' %}
+          {% set days_until = None %}
+          {% if c.next_due_date %}
+            {% set days_until = (c.next_due_date - today).days %}
+            {% if days_until < 0 %}{% set status = 'overdue' %}
+            {% elif days_until <= 14 %}{% set status = 'due-soon' %}
+            {% endif %}
+          {% elif not c.last_done_date %}
+            {% set status = 'never' %}
+          {% endif %}
+          {% set border_colour = {
+            'ok': 'success',
+            'due-soon': 'warning',
+            'overdue': 'danger',
+            'never': 'secondary',
+          }[status] %}
+          <div class="col-lg-6">
+            <div class="card border-0 shadow-sm border-start border-4 border-{{ border_colour }}">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h5 class="fw-bold mb-1">{{ compliance_kind_labels.get(c.kind, c.kind) }}</h5>
+                    <div class="small text-muted">
+                      Interval: {{ c.interval_days ~ ' days' if c.interval_days else 'Not set' }}
+                    </div>
+                  </div>
+                  <span class="badge bg-{{ border_colour }}">
+                    {% if status == 'overdue' %}Overdue by {{ -days_until }} day{{ 's' if -days_until != 1 }}
+                    {% elif status == 'due-soon' %}Due in {{ days_until }} day{{ 's' if days_until != 1 }}
+                    {% elif status == 'never' %}No baseline
+                    {% else %}OK{% endif %}
+                  </span>
+                </div>
+                <dl class="row small mb-2 mt-3">
+                  <dt class="col-4 text-muted">Last done</dt>
+                  <dd class="col-8">{{ c.last_done_date.strftime('%d/%m/%Y') if c.last_done_date else '—' }}</dd>
+                  <dt class="col-4 text-muted">Next due</dt>
+                  <dd class="col-8">{{ c.next_due_date.strftime('%d/%m/%Y') if c.next_due_date else '—' }}</dd>
+                </dl>
+                {% if current_user.role in ['admin', 'supervisor'] %}
+                  <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#logCompliance{{ c.id }}">
+                    <i class="bi bi-plus-lg me-1"></i>Log {{ compliance_kind_labels.get(c.kind, c.kind) }}
+                  </button>
+                {% endif %}
+                {% if history %}
+                  <hr class="my-3">
+                  <div class="small fw-semibold text-muted mb-1">History ({{ history|length }})</div>
+                  <ul class="list-unstyled small mb-0">
+                    {% for r in history[:8] %}
+                      <li class="d-flex justify-content-between align-items-start py-1 border-bottom">
+                        <div>
+                          <strong>{{ r.completed_date.strftime('%d/%m/%Y') }}</strong>
+                          {% if r.result == 'pass' %}<span class="badge bg-success ms-1">Pass</span>{% elif r.result == 'fail' %}<span class="badge bg-danger ms-1">Fail</span>{% endif %}
+                          {% if r.performed_by %}<span class="text-muted ms-1">· {{ r.performed_by }}</span>{% endif %}
+                          {% if r.notes %}<div class="text-muted">{{ r.notes }}</div>{% endif %}
+                          {% set all_docs = (r.documents or []) + (r.report_group.documents if r.report_group else []) %}
+                          {% if all_docs %}
+                            <div class="mt-1">
+                              {% for d in all_docs %}
+                                <a class="badge bg-light text-dark border text-decoration-none me-1" href="{{ url_for('equipment.compliance_document', doc_id=d.id) }}" target="_blank">
+                                  <i class="bi bi-paperclip"></i> {{ d.original_name or 'file' }}
+                                </a>
+                              {% endfor %}
+                            </div>
+                          {% endif %}
+                          {% if r.report_group %}
+                            <div class="small"><a href="{{ url_for('equipment.compliance_bulk_view', group_id=r.report_group.id) }}">Part of bulk report</a></div>
+                          {% endif %}
+                        </div>
+                        {% if current_user.role == 'admin' %}
+                          <form method="POST" action="{{ url_for('equipment.compliance_record_delete', record_id=r.id) }}"
+                                onsubmit="return confirm('Delete this record?');" class="ms-2">
+                            <button class="btn btn-sm btn-link text-danger p-0" type="submit"><i class="bi bi-trash"></i></button>
+                          </form>
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
 </div>
+
+{# Log-compliance modals — one per compliance item #}
+{% if current_user.role in ['admin', 'supervisor'] %}
+  {% for c in compliance_items %}
+    <div class="modal fade" id="logCompliance{{ c.id }}" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <form method="POST" action="{{ url_for('equipment.machine_compliance_log', machine_id=machine.id) }}" enctype="multipart/form-data">
+          <input type="hidden" name="compliance_id" value="{{ c.id }}">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Log {{ compliance_kind_labels.get(c.kind, c.kind) }} — {{ machine.name }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <label class="form-label">Completed Date</label>
+                  <input type="date" name="completed_date" class="form-control" required value="{{ today.isoformat() }}">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Result</label>
+                  <select name="result" class="form-select">
+                    <option value="">—</option>
+                    <option value="pass">Pass</option>
+                    <option value="fail">Fail</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Interval <small class="text-muted">(days)</small></label>
+                  <input type="number" min="1" name="interval_days" class="form-control" value="{{ c.interval_days or '' }}">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Performed By</label>
+                  <input type="text" name="performed_by" class="form-control" placeholder="Technician / contractor">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Documents</label>
+                  <input type="file" name="documents" class="form-control" multiple accept="application/pdf,image/*">
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Notes</label>
+                  <textarea name="notes" class="form-control" rows="2"></textarea>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save Record</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+{% endif %}
 
 <!-- Edit check modals (admin only) -->
 {% if current_user.role == 'admin' %}

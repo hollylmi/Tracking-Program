@@ -11,6 +11,12 @@
     <a href="{{ url_for('equipment.equipment_overview') }}" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-truck me-1"></i>Fleet
     </a>
+    <a href="{{ url_for('equipment.type_compliance') }}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-sliders me-1"></i>Type Rules
+    </a>
+    <a href="{{ url_for('equipment.compliance_bulk') }}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-clipboard-check me-1"></i>Bulk Log
+    </a>
     <a href="{{ url_for('equipment.operations_dashboard') }}" class="btn btn-sm btn-outline-primary">
       <i class="bi bi-speedometer2 me-1"></i>Operations
     </a>
@@ -99,6 +105,85 @@
   </div>
 </div>
 {% endif %}
+{% endif %}
+
+{# ── Service / cal / T&T / annual cert compliance ──────────────────── #}
+{% if compliance_overdue or compliance_due_soon or compliance_never %}
+<h5 class="fw-bold mb-3"><i class="bi bi-clipboard-check me-2 text-primary"></i>Service &amp; Certification Compliance</h5>
+<div class="row g-3 mb-4">
+  {% if compliance_overdue %}
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm border-start border-danger border-3 h-100">
+        <div class="card-header bg-white fw-bold text-danger">
+          <i class="bi bi-exclamation-triangle me-1"></i>Overdue ({{ compliance_overdue | length }})
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for c, days in compliance_overdue[:12] %}
+            <li class="list-group-item py-2">
+              <a href="{{ url_for('equipment.machine_detail', machine_id=c.machine_id) }}#compliance" class="text-decoration-none">
+                <strong class="text-dark">{{ c.machine.name }}</strong>
+              </a>
+              <div class="small text-muted">
+                {{ compliance_kind_labels.get(c.kind, c.kind) }} · {{ -days }} day{{ 's' if -days != 1 }} overdue
+              </div>
+            </li>
+          {% endfor %}
+          {% if compliance_overdue | length > 12 %}
+            <li class="list-group-item text-center text-muted small">+ {{ compliance_overdue | length - 12 }} more</li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+  {% if compliance_due_soon %}
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm border-start border-warning border-3 h-100">
+        <div class="card-header bg-white fw-bold text-warning">
+          <i class="bi bi-hourglass-split me-1"></i>Due Soon ({{ compliance_due_soon | length }})
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for c, days in compliance_due_soon[:12] %}
+            <li class="list-group-item py-2">
+              <a href="{{ url_for('equipment.machine_detail', machine_id=c.machine_id) }}#compliance" class="text-decoration-none">
+                <strong class="text-dark">{{ c.machine.name }}</strong>
+              </a>
+              <div class="small text-muted">
+                {{ compliance_kind_labels.get(c.kind, c.kind) }} · in {{ days }} day{{ 's' if days != 1 }}
+              </div>
+            </li>
+          {% endfor %}
+          {% if compliance_due_soon | length > 12 %}
+            <li class="list-group-item text-center text-muted small">+ {{ compliance_due_soon | length - 12 }} more</li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+  {% if compliance_never %}
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm border-start border-secondary border-3 h-100">
+        <div class="card-header bg-white fw-bold text-secondary">
+          <i class="bi bi-question-circle me-1"></i>No Baseline ({{ compliance_never | length }})
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for c in compliance_never[:12] %}
+            <li class="list-group-item py-2">
+              <a href="{{ url_for('equipment.machine_detail', machine_id=c.machine_id) }}#compliance" class="text-decoration-none">
+                <strong class="text-dark">{{ c.machine.name }}</strong>
+              </a>
+              <div class="small text-muted">
+                {{ compliance_kind_labels.get(c.kind, c.kind) }} · never logged
+              </div>
+            </li>
+          {% endfor %}
+          {% if compliance_never | length > 12 %}
+            <li class="list-group-item text-center text-muted small">+ {{ compliance_never | length - 12 }} more</li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+</div>
 {% endif %}
 
 {# ── Upcoming inspections ──────────────────────────────────────────── #}

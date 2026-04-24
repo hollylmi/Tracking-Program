@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
-from datetime import datetime
+from datetime import datetime, timedelta
 
 db = SQLAlchemy()
 
@@ -1494,3 +1494,129 @@ class AccommodationBooking(db.Model):
 
     def __repr__(self):
         return f'<AccommodationBooking {self.employee_id} {self.date_from}-{self.date_to}>'
+
+
+# ---------------------------------------------------------------------------
+# Compliance tracking — per-machine service/calibration/test&tag/annual-cert
+# ---------------------------------------------------------------------------
+
+# Fixed kinds (no catalog table — these four only).
+COMPLIANCE_KINDS = ('service', 'calibration', 'test_tag', 'annual_cert')
+COMPLIANCE_KIND_LABELS = {
+    'service': 'Mechanical Service',
+    'calibration': 'Calibration',
+    'test_tag': 'Electrical Test & Tag',
+    'annual_cert': 'Annual Certification',
+}
+
+
+class MachineTypeCompliance(db.Model):
+    """Which compliance kinds apply to a given machine_type, with default intervals.
+    One row per distinct machine_type string."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_type = db.Column(db.String(100), nullable=False, unique=True)
+    service_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    service_interval_days = db.Column(db.Integer, nullable=True)
+    calibration_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    calibration_interval_days = db.Column(db.Integer, nullable=True)
+    test_tag_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    test_tag_interval_days = db.Column(db.Integer, nullable=True)
+    annual_cert_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    annual_cert_interval_days = db.Column(db.Integer, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def is_enabled(self, kind):
+        return bool(getattr(self, f'{kind}_enabled', False))
+
+    def interval_for(self, kind):
+        return getattr(self, f'{kind}_interval_days', None)
+
+    def __repr__(self):
+        return f'<MachineTypeCompliance {self.machine_type}>'
+
+
+class MachineCompliance(db.Model):
+    """Per-machine obligation for one of the four compliance kinds.
+    Auto-synced from MachineTypeCompliance when a machine is created or its
+    type changes. Interval inherits the type default but can be overridden."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)  # one of COMPLIANCE_KINDS
+    interval_days = db.Column(db.Integer, nullable=True)
+    last_done_date = db.Column(db.Date, nullable=True)
+    next_due_date = db.Column(db.Date, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    machine = db.relationship('Machine', backref='compliance_items')
+
+    __table_args__ = (
+        db.UniqueConstraint('machine_id', 'kind', name='uq_machine_compliance_kind'),
+    )
+
+    def recompute_next_due(self):
+        if self.last_done_date and self.interval_days:
+            self.next_due_date = self.last_done_date + timedelta(days=self.interval_days)
+        else:
+            self.next_due_date = None
+
+    @property
+    def label(self):
+        return COMPLIANCE_KIND_LABELS.get(self.kind, self.kind)
+
+    def __repr__(self):
+        return f'<MachineCompliance machine={self.machine_id} kind={self.kind}>'
+
+
+class ComplianceReportGroup(db.Model):
+    """A single report covering multiple machines (e.g. one T&T report for a whole site).
+    Records reference this group when they were entered in bulk."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(300), nullable=True)
+    kind = db.Column(db.String(20), nullable=False)
+    report_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_user_id])
+
+    def __repr__(self):
+        return f'<ComplianceReportGroup {self.kind} {self.report_date}>'
+
+
+class ComplianceRecord(db.Model):
+    """A single completed service / test / cert event for one machine."""
+    id = db.Column(db.Integer, primary_key=True)
+    machine_compliance_id = db.Column(db.Integer, db.ForeignKey('machine_compliance.id'), nullable=False, index=True)
+    completed_date = db.Column(db.Date, nullable=False)
+    performed_by = db.Column(db.String(300), nullable=True)
+    result = db.Column(db.String(20), nullable=True)  # 'pass' / 'fail' / null
+    notes = db.Column(db.Text, nullable=True)
+    report_group_id = db.Column(db.Integer, db.ForeignKey('compliance_report_group.id'), nullable=True, index=True)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    compliance = db.relationship('MachineCompliance', backref=db.backref('records', cascade='all, delete-orphan'))
+    report_group = db.relationship('ComplianceReportGroup', backref='records')
+    created_by = db.relationship('User', foreign_keys=[created_by_user_id])
+
+    def __repr__(self):
+        return f'<ComplianceRecord compliance={self.machine_compliance_id} {self.completed_date}>'
+
+
+class ComplianceDocument(db.Model):
+    """Document (PDF, photo, etc) attached to either a record or a report group."""
+    id = db.Column(db.Integer, primary_key=True)
+    record_id = db.Column(db.Integer, db.ForeignKey('compliance_record.id'), nullable=True, index=True)
+    report_group_id = db.Column(db.Integer, db.ForeignKey('compliance_report_group.id'), nullable=True, index=True)
+    filename = db.Column(db.String(500), nullable=False)           # stored name (UUID-based)
+    original_name = db.Column(db.String(500), nullable=True)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    record = db.relationship('ComplianceRecord', backref=db.backref('documents', cascade='all, delete-orphan'))
+    report_group = db.relationship('ComplianceReportGroup', backref=db.backref('documents', cascade='all, delete-orphan'))
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_user_id])
+
+    def __repr__(self):
+        return f'<ComplianceDocument {self.original_name}>'

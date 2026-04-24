@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}Bulk Compliance Report{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <a href="{{ url_for('equipment.type_compliance') }}" class="btn btn-sm btn-outline-secondary mb-2">
+      <i class="bi bi-arrow-left me-1"></i>Back to Compliance Rules
+    </a>
+    <h2 class="fw-bold mb-0"><i class="bi bi-clipboard-check me-2 text-primary"></i>Bulk Compliance Report</h2>
+    <div class="text-muted small">
+      One report date, one document, many machines — e.g. site-wide test &amp; tag.
+    </div>
+  </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data" class="card border-0 shadow-sm">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Compliance Type</label>
+        <select name="kind" class="form-select" required id="bulkKind">
+          <option value="">Select…</option>
+          {% for k in kinds %}
+            <option value="{{ k }}">{{ kind_labels[k] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Report Date</label>
+        <input type="date" name="report_date" class="form-control" required value="{{ today.isoformat() }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Report Name <span class="text-muted small">(optional)</span></label>
+        <input type="text" name="name" class="form-control" placeholder="e.g. Site A T&amp;T - Mar 2026">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Performed By</label>
+        <input type="text" name="performed_by" class="form-control" placeholder="Contractor / technician">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Result</label>
+        <select name="result" class="form-select">
+          <option value="">—</option>
+          <option value="pass">Pass</option>
+          <option value="fail">Fail</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Documents <span class="text-muted small">(PDF/image, multiple ok)</span></label>
+        <input type="file" name="documents" class="form-control" multiple accept="application/pdf,image/*">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Notes</label>
+        <textarea name="notes" class="form-control" rows="2" placeholder="Any notes that apply to every item in this report"></textarea>
+      </div>
+    </div>
+
+    <hr class="my-4">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div>
+        <h5 class="fw-bold mb-0">Select Equipment</h5>
+        <div class="small text-muted">Search, group-select, or tick individually. Only active equipment shown.</div>
+      </div>
+      <div class="d-flex gap-2 align-items-center">
+        <input type="search" id="machineFilter" class="form-control form-control-sm" placeholder="Filter by name / plant ID / type" style="min-width: 240px;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMachines(true)">Select all</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMachines(false)">Clear</button>
+      </div>
+    </div>
+
+    <div class="border rounded" style="max-height: 420px; overflow-y: auto;">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th style="width: 44px;"></th>
+            <th>Name</th>
+            <th>Plant ID</th>
+            <th>Type</th>
+          </tr>
+        </thead>
+        <tbody id="machineRows">
+          {% for m in machines %}
+            <tr data-search="{{ (m.name ~ ' ' ~ (m.plant_id or '') ~ ' ' ~ (m.machine_type or ''))|lower }}">
+              <td><input class="form-check-input machine-check" type="checkbox" name="machine_ids" value="{{ m.id }}"></td>
+              <td>{{ m.name }}</td>
+              <td>{{ m.plant_id or '—' }}</td>
+              <td>{{ m.machine_type or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <span class="small text-muted"><span id="selectedCount">0</span> selected</span>
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-save me-1"></i>Save Report
+    </button>
+  </div>
+</form>
+
+{% if recent_groups %}
+<h5 class="fw-bold mt-4 mb-2">Recent Reports</h5>
+<div class="list-group shadow-sm">
+  {% for g in recent_groups %}
+    <a href="{{ url_for('equipment.compliance_bulk_view', group_id=g.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+      <div>
+        <strong>{{ kind_labels.get(g.kind, g.kind) }}</strong>
+        {% if g.name %}<span class="text-muted ms-2">{{ g.name }}</span>{% endif %}
+        <div class="small text-muted">
+          {{ g.report_date.strftime('%d/%m/%Y') }}
+          · {{ g.records|length }} item{{ 's' if g.records|length != 1 }}
+          {% if g.documents %}· {{ g.documents|length }} file{{ 's' if g.documents|length != 1 }}{% endif %}
+        </div>
+      </div>
+      <i class="bi bi-chevron-right text-muted"></i>
+    </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script>
+  function toggleAllMachines(on) {
+    document.querySelectorAll('#machineRows .machine-check').forEach(cb => {
+      if (cb.closest('tr').style.display !== 'none') cb.checked = on;
+    });
+    updateCount();
+  }
+  function updateCount() {
+    const n = document.querySelectorAll('#machineRows .machine-check:checked').length;
+    document.getElementById('selectedCount').textContent = n;
+  }
+  document.querySelectorAll('#machineRows .machine-check').forEach(cb => cb.addEventListener('change', updateCount));
+  document.getElementById('machineFilter').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('#machineRows tr').forEach(tr => {
+      tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none';
+    });
+  });
+</script>
+{% endblock %}

@@ -16,7 +16,11 @@ from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBre
                     MachineTransfer, SiteEquipmentChecklist, SiteEquipmentChecklistItem,
                     MachineDailyCheck, MachineDocument, MachineHoursLog,
                     ProjectDailyTaskAssignment, ScheduledEquipmentCheck,
-                    ScheduledCheckCompletion, TransferBatch, NFCTag, MachineScanEvent)
+                    ScheduledCheckCompletion, TransferBatch, NFCTag, MachineScanEvent,
+                    MachineTypeCompliance, MachineCompliance, ComplianceRecord,
+                    ComplianceReportGroup, ComplianceDocument,
+                    COMPLIANCE_KINDS, COMPLIANCE_KIND_LABELS)
+from utils.compliance import backfill_all_machines  # side effects: register SQLAlchemy listeners
 import storage
 
 equipment_bp = Blueprint('equipment', __name__)
@@ -1693,12 +1697,23 @@ def machine_detail(machine_id):
     nfc_tags = NFCTag.query.filter_by(machine_id=machine_id).order_by(
         NFCTag.status.desc(), NFCTag.assigned_at.desc()).all()
 
+    compliance_items = MachineCompliance.query.filter_by(machine_id=machine_id).all()
+    compliance_items.sort(key=lambda c: COMPLIANCE_KINDS.index(c.kind) if c.kind in COMPLIANCE_KINDS else 99)
+    compliance_history = {
+        c.id: ComplianceRecord.query.filter_by(machine_compliance_id=c.id)
+        .order_by(ComplianceRecord.completed_date.desc()).all()
+        for c in compliance_items
+    }
+
     return render_template('equipment/machine_detail.html',
                            machine=m, docs=docs, hours_logs=hours_logs,
                            recent_checks=recent_checks, breakdowns=breakdowns,
                            assignment=assignment, transfers=transfers,
                            projects=projects, today=date.today(),
-                           nfc_tags=nfc_tags)
+                           nfc_tags=nfc_tags,
+                           compliance_items=compliance_items,
+                           compliance_history=compliance_history,
+                           compliance_kind_labels=COMPLIANCE_KIND_LABELS)
 
 
 # ---------------------------------------------------------------------------
@@ -2258,6 +2273,26 @@ def equipment_compliance():
     upcoming_transfers = [b for b in pending_transfers
                           if b.scheduled_date <= today_date + timedelta(days=7)]
 
+    # ── 7. Compliance obligations (service / cal / T&T / annual cert) ──
+    all_compliance = MachineCompliance.query.all()
+    compliance_overdue = []
+    compliance_due_soon = []   # within 30 days
+    compliance_never = []      # enabled but no baseline yet
+    for c in all_compliance:
+        m = c.machine
+        if not m or not m.active:
+            continue
+        if c.next_due_date:
+            days = (c.next_due_date - today_date).days
+            if days < 0:
+                compliance_overdue.append((c, days))
+            elif days <= 30:
+                compliance_due_soon.append((c, days))
+        elif not c.last_done_date:
+            compliance_never.append(c)
+    compliance_overdue.sort(key=lambda x: x[1])
+    compliance_due_soon.sort(key=lambda x: x[1])
+
     # Machine → current project map for colour-coding
     all_pm = ProjectMachine.query.all()
     machine_project = {pm.machine_id: pm.project for pm in all_pm}
@@ -2279,7 +2314,11 @@ def equipment_compliance():
                            upcoming_disposal=upcoming_disposal,
                            upcoming_transfers=upcoming_transfers,
                            machine_project=machine_project,
-                           project_colour_map=project_colour_map)
+                           project_colour_map=project_colour_map,
+                           compliance_overdue=compliance_overdue,
+                           compliance_due_soon=compliance_due_soon,
+                           compliance_never=compliance_never,
+                           compliance_kind_labels=COMPLIANCE_KIND_LABELS)
 
 
 # ---------------------------------------------------------------------------
@@ -2425,3 +2464,256 @@ def daily_checks_view():
                            checks=checks, project=project, check_date=check_date,
                            unchecked_machines=unchecked_machines, projects=projects,
                            project_colour_map=project_colour_map)
+
+
+# ---------------------------------------------------------------------------
+# Compliance — type × requirement toggles and per-machine records
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/type-compliance', methods=['GET', 'POST'])
+@require_role('admin')
+def type_compliance():
+    """Admin page: for each distinct machine_type, toggle which of the four
+    compliance kinds apply and set default intervals."""
+    # Distinct machine_type strings in use. Include types without rules yet so
+    # they show up in the form.
+    types_in_use = sorted({
+        (m.machine_type or '').strip()
+        for m in Machine.query.with_entities(Machine.machine_type).distinct().all()
+        if m.machine_type and m.machine_type.strip()
+    })
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'save_rules':
+            for mt in types_in_use:
+                rule = MachineTypeCompliance.query.filter_by(machine_type=mt).first()
+                if not rule:
+                    rule = MachineTypeCompliance(machine_type=mt)
+                    db.session.add(rule)
+                for kind in COMPLIANCE_KINDS:
+                    enabled = request.form.get(f'{mt}__{kind}__enabled') == '1'
+                    interval_raw = (request.form.get(f'{mt}__{kind}__interval') or '').strip()
+                    setattr(rule, f'{kind}_enabled', enabled)
+                    setattr(rule, f'{kind}_interval_days',
+                            int(interval_raw) if interval_raw.isdigit() else None)
+            db.session.commit()
+            # Propagate to every machine so newly-enabled kinds get rows and
+            # existing machines with no override inherit new default intervals.
+            backfill_all_machines()
+            flash('Compliance rules saved and applied to all equipment.', 'success')
+            return redirect(url_for('equipment.type_compliance'))
+        if action == 'backfill':
+            backfill_all_machines()
+            flash('All equipment synced with current type rules.', 'success')
+            return redirect(url_for('equipment.type_compliance'))
+
+    rules = {r.machine_type: r for r in MachineTypeCompliance.query.all()}
+    return render_template(
+        'equipment/type_compliance.html',
+        types_in_use=types_in_use,
+        rules=rules,
+        kinds=COMPLIANCE_KINDS,
+        kind_labels=COMPLIANCE_KIND_LABELS,
+    )
+
+
+@equipment_bp.route('/equipment/machine/<int:machine_id>/compliance/log', methods=['POST'])
+@require_role('admin', 'supervisor')
+def machine_compliance_log(machine_id):
+    """Log a single compliance completion (service, T&T, cal, cert) for one machine."""
+    machine = Machine.query.get_or_404(machine_id)
+    compliance_id = request.form.get('compliance_id', type=int)
+    mc = MachineCompliance.query.get_or_404(compliance_id)
+    if mc.machine_id != machine.id:
+        abort(400)
+
+    completed_date_str = (request.form.get('completed_date') or '').strip()
+    try:
+        completed_date = datetime.strptime(completed_date_str, '%Y-%m-%d').date() if completed_date_str else date.today()
+    except ValueError:
+        completed_date = date.today()
+    performed_by = (request.form.get('performed_by') or '').strip() or None
+    result = (request.form.get('result') or '').strip() or None
+    notes = (request.form.get('notes') or '').strip() or None
+
+    # Optional: allow updating the interval inline (keeps machine detail simple).
+    interval_raw = (request.form.get('interval_days') or '').strip()
+    if interval_raw.isdigit():
+        mc.interval_days = int(interval_raw)
+
+    record = ComplianceRecord(
+        machine_compliance_id=mc.id,
+        completed_date=completed_date,
+        performed_by=performed_by,
+        result=result,
+        notes=notes,
+        created_by_user_id=current_user.id,
+    )
+    db.session.add(record)
+    db.session.flush()
+
+    # Documents
+    for f in request.files.getlist('documents'):
+        if not f or not f.filename:
+            continue
+        ext = os.path.splitext(f.filename)[1].lower()
+        stored = f'{uuid.uuid4().hex}{ext}'
+        local_path = os.path.join(UPLOAD_FOLDER, 'compliance', stored)
+        storage.upload_file(f, f'compliance/{stored}', local_path)
+        db.session.add(ComplianceDocument(
+            record_id=record.id,
+            filename=stored,
+            original_name=f.filename,
+            uploaded_by_user_id=current_user.id,
+        ))
+
+    # Advance the obligation: last_done updates only if this record is newest.
+    latest = ComplianceRecord.query.filter_by(machine_compliance_id=mc.id) \
+        .order_by(ComplianceRecord.completed_date.desc()).first()
+    if latest:
+        mc.last_done_date = latest.completed_date
+    mc.recompute_next_due()
+    db.session.commit()
+    flash(f'{mc.label} record saved.', 'success')
+    return redirect(url_for('equipment.machine_detail', machine_id=machine.id) + '#compliance')
+
+
+@equipment_bp.route('/equipment/compliance/record/<int:record_id>/delete', methods=['POST'])
+@require_role('admin')
+def compliance_record_delete(record_id):
+    rec = ComplianceRecord.query.get_or_404(record_id)
+    mc = rec.compliance
+    machine_id = mc.machine_id if mc else None
+    db.session.delete(rec)
+    db.session.flush()
+    if mc:
+        latest = ComplianceRecord.query.filter_by(machine_compliance_id=mc.id) \
+            .order_by(ComplianceRecord.completed_date.desc()).first()
+        mc.last_done_date = latest.completed_date if latest else None
+        mc.recompute_next_due()
+    db.session.commit()
+    flash('Record deleted.', 'success')
+    if machine_id:
+        return redirect(url_for('equipment.machine_detail', machine_id=machine_id) + '#compliance')
+    return redirect(url_for('equipment.type_compliance'))
+
+
+@equipment_bp.route('/equipment/compliance/document/<int:doc_id>')
+@require_role('admin', 'supervisor', 'site')
+def compliance_document(doc_id):
+    doc = ComplianceDocument.query.get_or_404(doc_id)
+    return storage.serve_file(
+        f'compliance/{doc.filename}',
+        os.path.join(UPLOAD_FOLDER, 'compliance', doc.filename),
+        download_name=doc.original_name or doc.filename,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Compliance — bulk report entry (e.g. one T&T report for many items)
+# ---------------------------------------------------------------------------
+
+@equipment_bp.route('/equipment/compliance/bulk', methods=['GET', 'POST'])
+@require_role('admin', 'supervisor')
+def compliance_bulk():
+    """Attach one report + date to many machines at once."""
+    if request.method == 'POST':
+        kind = (request.form.get('kind') or '').strip()
+        if kind not in COMPLIANCE_KINDS:
+            flash('Invalid compliance type.', 'danger')
+            return redirect(url_for('equipment.compliance_bulk'))
+        report_date_str = (request.form.get('report_date') or '').strip()
+        try:
+            report_date = datetime.strptime(report_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Report date required.', 'danger')
+            return redirect(url_for('equipment.compliance_bulk'))
+        machine_ids = [int(x) for x in request.form.getlist('machine_ids') if x.isdigit()]
+        if not machine_ids:
+            flash('Select at least one machine.', 'danger')
+            return redirect(url_for('equipment.compliance_bulk'))
+
+        notes = (request.form.get('notes') or '').strip() or None
+        name = (request.form.get('name') or '').strip() or None
+        performed_by = (request.form.get('performed_by') or '').strip() or None
+        result = (request.form.get('result') or '').strip() or None
+
+        group = ComplianceReportGroup(
+            name=name, kind=kind, report_date=report_date, notes=notes,
+            uploaded_by_user_id=current_user.id,
+        )
+        db.session.add(group)
+        db.session.flush()
+
+        # Upload documents once, link to the group (records inherit via group).
+        for f in request.files.getlist('documents'):
+            if not f or not f.filename:
+                continue
+            ext = os.path.splitext(f.filename)[1].lower()
+            stored = f'{uuid.uuid4().hex}{ext}'
+            local_path = os.path.join(UPLOAD_FOLDER, 'compliance', stored)
+            storage.upload_file(f, f'compliance/{stored}', local_path)
+            db.session.add(ComplianceDocument(
+                report_group_id=group.id,
+                filename=stored,
+                original_name=f.filename,
+                uploaded_by_user_id=current_user.id,
+            ))
+
+        created = 0
+        for mid in machine_ids:
+            m = Machine.query.get(mid)
+            if not m:
+                continue
+            # Ensure the machine has a MachineCompliance row for this kind.
+            mc = MachineCompliance.query.filter_by(machine_id=m.id, kind=kind).first()
+            if not mc:
+                # Type rule may not cover this kind — create anyway since the
+                # admin is explicitly recording it. Interval stays null.
+                mc = MachineCompliance(machine_id=m.id, kind=kind)
+                db.session.add(mc)
+                db.session.flush()
+            db.session.add(ComplianceRecord(
+                machine_compliance_id=mc.id,
+                completed_date=report_date,
+                performed_by=performed_by,
+                result=result,
+                notes=None,
+                report_group_id=group.id,
+                created_by_user_id=current_user.id,
+            ))
+            # Only advance last_done if this record is the newest.
+            if not mc.last_done_date or report_date >= mc.last_done_date:
+                mc.last_done_date = report_date
+                mc.recompute_next_due()
+            created += 1
+
+        db.session.commit()
+        flash(f'Bulk {COMPLIANCE_KIND_LABELS[kind]} report saved — {created} record{"s" if created != 1 else ""} created.', 'success')
+        return redirect(url_for('equipment.compliance_bulk_view', group_id=group.id))
+
+    machines = Machine.query.filter_by(active=True).order_by(Machine.machine_type, Machine.name).all()
+    recent_groups = ComplianceReportGroup.query.order_by(
+        ComplianceReportGroup.report_date.desc(),
+        ComplianceReportGroup.created_at.desc(),
+    ).limit(20).all()
+    return render_template(
+        'equipment/compliance_bulk.html',
+        machines=machines,
+        kinds=COMPLIANCE_KINDS,
+        kind_labels=COMPLIANCE_KIND_LABELS,
+        recent_groups=recent_groups,
+        today=date.today(),
+    )
+
+
+@equipment_bp.route('/equipment/compliance/bulk/<int:group_id>')
+@require_role('admin', 'supervisor')
+def compliance_bulk_view(group_id):
+    group = ComplianceReportGroup.query.get_or_404(group_id)
+    return render_template(
+        'equipment/compliance_bulk_view.html',
+        group=group,
+        kind_labels=COMPLIANCE_KIND_LABELS,
+    )
