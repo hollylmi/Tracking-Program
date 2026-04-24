@@ -2741,6 +2741,12 @@ def compliance_bulk():
         return redirect(url_for('equipment.compliance_bulk_view', group_id=group.id))
 
     machines = Machine.query.filter_by(active=True).order_by(Machine.machine_type, Machine.name).all()
+    # Which compliance kinds apply to each machine — drives client-side filtering
+    # so picking "Electrical Test & Tag" hides equipment that doesn't have that
+    # obligation set up in its type rules.
+    applicable_kinds = {}
+    for mc in MachineCompliance.query.all():
+        applicable_kinds.setdefault(mc.machine_id, []).append(mc.kind)
     recent_groups = ComplianceReportGroup.query.order_by(
         ComplianceReportGroup.report_date.desc(),
         ComplianceReportGroup.created_at.desc(),
@@ -2748,6 +2754,7 @@ def compliance_bulk():
     return render_template(
         'equipment/compliance_bulk.html',
         machines=machines,
+        applicable_kinds=applicable_kinds,
         kinds=COMPLIANCE_KINDS,
         kind_labels=COMPLIANCE_KIND_LABELS,
         recent_groups=recent_groups,

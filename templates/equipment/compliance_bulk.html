@@ -57,14 +57,14 @@
     </div>
 
     <hr class="my-4">
-    <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
       <div>
         <h5 class="fw-bold mb-0">Select Equipment</h5>
-        <div class="small text-muted">Search, group-select, or tick individually. Only active equipment shown.</div>
+        <div class="small text-muted" id="equipmentHelp">Pick a compliance type above to see applicable equipment.</div>
       </div>
-      <div class="d-flex gap-2 align-items-center">
-        <input type="search" id="machineFilter" class="form-control form-control-sm" placeholder="Filter by name / plant ID / type" style="min-width: 240px;">
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMachines(true)">Select all</button>
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <input type="search" id="machineFilter" class="form-control form-control-sm" placeholder="Search by name, plant ID, or type" style="min-width: 260px;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMachines(true)">Select visible</button>
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMachines(false)">Clear</button>
       </div>
     </div>
@@ -81,7 +81,9 @@
         </thead>
         <tbody id="machineRows">
           {% for m in machines %}
-            <tr data-search="{{ (m.name ~ ' ' ~ (m.plant_id or '') ~ ' ' ~ (m.machine_type or ''))|lower }}">
+            {% set kinds_for_m = applicable_kinds.get(m.id, []) %}
+            <tr data-search="{{ (m.name ~ ' ' ~ (m.plant_id or '') ~ ' ' ~ (m.machine_type or ''))|lower }}"
+                data-kinds="{{ ','.join(kinds_for_m) }}">
               <td><input class="form-check-input machine-check" type="checkbox" name="machine_ids" value="{{ m.id }}"></td>
               <td>{{ m.name }}</td>
               <td>{{ m.plant_id or '—' }}</td>
@@ -90,6 +92,10 @@
           {% endfor %}
         </tbody>
       </table>
+    </div>
+    <div id="emptyHint" class="small text-muted text-center py-3" style="display:none;">
+      No equipment has this compliance type configured. Open
+      <a href="{{ url_for('equipment.type_compliance') }}">Type Rules</a> to enable it.
     </div>
   </div>
   <div class="card-footer d-flex justify-content-between align-items-center">
@@ -121,6 +127,42 @@
 {% endif %}
 
 <script>
+  const kindSelect = document.getElementById('bulkKind');
+  const filterInput = document.getElementById('machineFilter');
+  const help = document.getElementById('equipmentHelp');
+  const emptyHint = document.getElementById('emptyHint');
+
+  function applyFilters() {
+    const kind = kindSelect.value;
+    const q = (filterInput.value || '').trim().toLowerCase();
+    let applicableCount = 0;
+    let visibleCount = 0;
+    document.querySelectorAll('#machineRows tr').forEach(tr => {
+      const kinds = (tr.dataset.kinds || '').split(',').filter(Boolean);
+      const kindOk = !kind || kinds.includes(kind);
+      const searchOk = !q || tr.dataset.search.includes(q);
+      if (kindOk) applicableCount++;
+      const show = kindOk && searchOk;
+      tr.style.display = show ? '' : 'none';
+      if (show) visibleCount++;
+      if (!show) {
+        const cb = tr.querySelector('.machine-check');
+        if (cb) cb.checked = false;
+      }
+    });
+    if (!kind) {
+      help.textContent = 'Choose a compliance type above to filter the list to applicable equipment.';
+      emptyHint.style.display = 'none';
+    } else if (applicableCount === 0) {
+      help.textContent = '';
+      emptyHint.style.display = '';
+    } else {
+      help.textContent = `${applicableCount} equipment item${applicableCount !== 1 ? 's' : ''} have this compliance type configured.`;
+      emptyHint.style.display = 'none';
+    }
+    updateCount();
+  }
+
   function toggleAllMachines(on) {
     document.querySelectorAll('#machineRows .machine-check').forEach(cb => {
       if (cb.closest('tr').style.display !== 'none') cb.checked = on;
@@ -132,11 +174,9 @@
     document.getElementById('selectedCount').textContent = n;
   }
   document.querySelectorAll('#machineRows .machine-check').forEach(cb => cb.addEventListener('change', updateCount));
-  document.getElementById('machineFilter').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    document.querySelectorAll('#machineRows tr').forEach(tr => {
-      tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none';
-    });
-  });
+  filterInput.addEventListener('input', applyFilters);
+  kindSelect.addEventListener('change', applyFilters);
+  // Initial pass — list starts empty until a kind is chosen.
+  applyFilters();
 </script>
 {% endblock %}
