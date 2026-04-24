@@ -99,8 +99,11 @@ export default function ScanLandingScreen() {
   }, [id])
 
   const goBack = () => {
-    if (router.canGoBack()) router.back()
-    else router.replace('/(tabs)/equipment')
+    // Always send users to the Equipment tab rather than trying to pop the
+    // nav stack — back() can fail with "unmatched route" when the scan was
+    // opened via universal link on a cold boot (no history). Replace is
+    // snappier and reliably lands somewhere valid.
+    router.replace('/(tabs)/equipment')
   }
 
   const takeOrPickPhoto = async (multi: boolean) => {

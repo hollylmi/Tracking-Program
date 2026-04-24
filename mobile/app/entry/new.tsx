@@ -1168,15 +1168,10 @@ export default function NewEntryScreen() {
     id: e.id, label: e.name, sublabel: e.role || undefined,
   }))
 
-  // Only show machines that were started/checked today — if no checks exist, show all
-  const checkedMachineIds = new Set(
-    (dailyChecksData?.machines ?? []).filter((m) => m.check && m.machine_id).map((m) => m.machine_id!)
-  )
-  const filteredMachines = checkedMachineIds.size > 0
-    ? allMachines.filter((m) => checkedMachineIds.has(m.id))
-    : allMachines
-
-  const machineItems: ChecklistItem[] = [...filteredMachines]
+  // Show every machine assigned to the site regardless of whether it was
+  // pre-checked today. Pre-start / inspection compliance is tracked separately
+  // on the admin compliance dashboard — not a blocker for daily entry picks.
+  const machineItems: ChecklistItem[] = [...allMachines]
     .sort((a, b) => (a.group_name || 'zzz').localeCompare(b.group_name || 'zzz') || a.name.localeCompare(b.name))
     .map((m) => ({
       id: m.id,

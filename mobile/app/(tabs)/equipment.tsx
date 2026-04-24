@@ -279,7 +279,8 @@ function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyChe
             </View>
           ) : (
             <TouchableOpacity style={checkStyles.checkBtn} onPress={onCheck} activeOpacity={0.8}>
-              <Text style={checkStyles.checkBtnText}>Check</Text>
+              <Ionicons name="scan-outline" size={12} color={Colors.dark} style={{ marginRight: 4 }} />
+              <Text style={checkStyles.checkBtnText}>{machine.active_tag_uid ? 'Scan to Check' : 'Check'}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -319,23 +320,71 @@ function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyChe
 
 // ── Check modal ──────────────────────────────────────────────────────────────
 
-function CheckModal({ visible, machineName, isFleetMachine, onClose, onSubmit }: {
-  visible: boolean; machineName: string; isFleetMachine: boolean; onClose: () => void
-  onSubmit: (condition: string, notes: string, hoursReading: string | undefined, photos: { uri: string; filename: string }[]) => Promise<void>
+function CheckModal({ visible, machineName, isFleetMachine, activeTagUid, onClose, onSubmit }: {
+  visible: boolean; machineName: string; isFleetMachine: boolean; activeTagUid: string | null; onClose: () => void
+  onSubmit: (condition: string, notes: string, hoursReading: string | undefined, photos: { uri: string; filename: string }[], tagUid: string | undefined) => Promise<void>
 }) {
   const [condition, setCondition] = useState('good')
   const [notes, setNotes] = useState('')
   const [hoursReading, setHoursReading] = useState('')
   const [photos, setPhotos] = useState<{ uri: string; filename: string }[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [verifiedTagUid, setVerifiedTagUid] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
 
+  const tagRequired = !!activeTagUid
   const MAX_PHOTOS = 10
 
+  useEffect(() => {
+    if (!visible) {
+      setVerifiedTagUid(null)
+      setCondition('good'); setNotes(''); setHoursReading(''); setPhotos([])
+    }
+  }, [visible])
+
+  const triggerScan = async () => {
+    if (!NfcManager) {
+      Alert.alert('NFC Not Available', 'This device does not support NFC.')
+      return
+    }
+    if (scanning) return
+    setVerifiedTagUid(null)
+    try { await NfcManager.cancelTechnologyRequest() } catch {}
+    setScanning(true)
+    try {
+      await NfcManager.requestTechnology(NfcTech.Ndef)
+      const tag = await NfcManager.getTag()
+      const uid: string | undefined = tag?.id
+      try { await NfcManager.cancelTechnologyRequest() } catch {}
+      setScanning(false)
+      if (!uid) {
+        Alert.alert('Scan Failed', 'Could not read the NFC tag.')
+        return
+      }
+      if (activeTagUid && uid !== activeTagUid) {
+        Alert.alert('Wrong Machine', `That tag does not match "${machineName}".`)
+        return
+      }
+      setVerifiedTagUid(uid)
+    } catch (e: any) {
+      try { await NfcManager.cancelTechnologyRequest() } catch {}
+      setScanning(false)
+      if (e?.message !== 'cancelled') {
+        Alert.alert('Scan Failed', 'Could not read the NFC tag. Try again.')
+      }
+    }
+  }
+
   const handleSubmit = async () => {
+    if (tagRequired && !verifiedTagUid) {
+      Alert.alert('Scan Required', 'Scan the NFC tag on this machine first.')
+      return
+    }
     setSubmitting(true)
     try {
-      await onSubmit(condition, notes, hoursReading || undefined, photos)
+      await onSubmit(condition, notes, hoursReading || undefined, photos, verifiedTagUid || undefined)
       setCondition('good'); setNotes(''); setHoursReading(''); setPhotos([])
+      setVerifiedTagUid(null)
     } finally { setSubmitting(false) }
   }
 
@@ -374,17 +423,46 @@ function CheckModal({ visible, machineName, isFleetMachine, onClose, onSubmit }:
 
   const removePhoto = (i: number) => setPhotos(prev => prev.filter((_, idx) => idx !== i))
 
+  const submitDisabled = submitting || (tagRequired && !verifiedTagUid)
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={modalStyles.root} edges={['top', 'bottom']}>
         <View style={modalStyles.header}>
           <TouchableOpacity onPress={onClose}><Text style={modalStyles.cancel}>Cancel</Text></TouchableOpacity>
           <Text style={modalStyles.title} numberOfLines={1}>{machineName}</Text>
-          <TouchableOpacity onPress={handleSubmit} disabled={submitting}>
-            {submitting ? <ActivityIndicator size="small" color={Colors.primary} /> : <Text style={modalStyles.save}>Submit</Text>}
+          <TouchableOpacity onPress={handleSubmit} disabled={submitDisabled} style={{ opacity: submitDisabled ? 0.4 : 1 }}>
+            {submitting ? <ActivityIndicator size="small" color={Colors.primary} /> : (
+              <Text style={modalStyles.save}>{tagRequired && !verifiedTagUid ? 'Scan first' : 'Submit'}</Text>
+            )}
           </TouchableOpacity>
         </View>
         <View style={modalStyles.body}>
+          {tagRequired && (
+            verifiedTagUid ? (
+              <View style={[modalStyles.scanBanner, { borderColor: Colors.success, backgroundColor: 'rgba(61,139,65,0.12)' }]}>
+                <View style={[modalStyles.scanIconWrap, { backgroundColor: Colors.success }]}>
+                  <Ionicons name="checkmark" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[modalStyles.scanBannerTitle, { color: Colors.success }]}>Tag verified</Text>
+                  <Text style={modalStyles.scanBannerSubtitle}>You can submit this check</Text>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={triggerScan} activeOpacity={0.85}
+                style={[modalStyles.scanBanner, { borderColor: Colors.warning, backgroundColor: 'rgba(201,106,0,0.1)' }]}>
+                <View style={[modalStyles.scanIconWrap, { backgroundColor: Colors.warning }]}>
+                  <Ionicons name="scan-outline" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[modalStyles.scanBannerTitle, { color: Colors.warning }]}>Scan NFC tag required</Text>
+                  <Text style={modalStyles.scanBannerSubtitle}>Tap here, then hold phone to the tag</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.warning} />
+              </TouchableOpacity>
+            )
+          )}
           <Text style={modalStyles.label}>Condition</Text>
           <View style={modalStyles.conditionRow}>
             {CONDITION_OPTIONS.map((opt) => (
@@ -438,6 +516,30 @@ function CheckModal({ visible, machineName, isFleetMachine, onClose, onSubmit }:
             </View>
           )}
         </View>
+        {scanning && (
+          <View style={[StyleSheet.absoluteFillObject, {
+            backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg,
+          }]}>
+            <View style={{ backgroundColor: '#fff', padding: Spacing.lg, borderRadius: BorderRadius.lg, width: '100%', maxWidth: 400, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginTop: Spacing.md, textAlign: 'center' }}>
+                Scan the NFC tag
+              </Text>
+              <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 }}>
+                Hold your phone against the tag on {machineName}.
+              </Text>
+              <TouchableOpacity
+                onPress={async () => {
+                  try { await NfcManager?.cancelTechnologyRequest() } catch {}
+                  setScanning(false)
+                }}
+                style={{ marginTop: Spacing.md, padding: Spacing.sm }}
+              >
+                <Text style={{ color: Colors.textSecondary }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
       {Platform.OS === 'ios' && (
         <InputAccessoryView nativeID="checkDoneBar">
@@ -799,7 +901,7 @@ export default function EquipmentScreen() {
   }
 
   const handleSubmitCheck = useCallback(
-    async (condition: string, notes: string, hoursReading: string | undefined, photos: { uri: string; filename: string }[]) => {
+    async (condition: string, notes: string, hoursReading: string | undefined, photos: { uri: string; filename: string }[], tagUid: string | undefined) => {
       if (!checkingMachine || !projectId) return
       try {
         await api.equipment.submitDailyCheck({
@@ -809,6 +911,7 @@ export default function EquipmentScreen() {
           condition,
           notes: notes || undefined,
           hours_reading: hoursReading,
+          tag_uid: tagUid,
           photos,
         })
         show('Check recorded', 'success')
@@ -1016,6 +1119,7 @@ export default function EquipmentScreen() {
       {checkingMachine && (
         <CheckModal visible={!!checkingMachine} machineName={checkingMachine.name}
           isFleetMachine={checkingMachine.source === 'fleet'}
+          activeTagUid={checkingMachine.active_tag_uid}
           onClose={() => setCheckingMachine(null)} onSubmit={handleSubmitCheck} />
       )}
 
@@ -1234,6 +1338,8 @@ const checkStyles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   checkBtnText: { ...Typography.caption, color: Colors.dark, fontWeight: '700' },
   alertBanner: {
@@ -1347,4 +1453,16 @@ const modalStyles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   photoBtnText: { ...Typography.body, color: Colors.primary, fontWeight: '600' },
+  scanBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md, borderWidth: 2,
+    marginBottom: Spacing.md,
+  },
+  scanIconWrap: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  scanBannerTitle: { ...Typography.body, fontWeight: '700' },
+  scanBannerSubtitle: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
 })

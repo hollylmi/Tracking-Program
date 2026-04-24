@@ -222,14 +222,26 @@ function CheckModal({ visible, machine, onClose, onSubmit, initialCondition, ini
         <ScrollView contentContainerStyle={m.body} keyboardShouldPersistTaps="handled">
           {tagRequired && (
             verifiedTagUid ? (
-              <View style={[m.scanBanner, { borderColor: Colors.success, backgroundColor: 'rgba(61,139,65,0.1)' }]}>
-                <Ionicons name="checkmark-circle" size={18} color={Colors.success} />
-                <Text style={{ color: Colors.success, fontWeight: '700', fontSize: 13 }}>Tag verified</Text>
+              <View style={[m.scanBanner, { borderColor: Colors.success, backgroundColor: 'rgba(61,139,65,0.12)' }]}>
+                <View style={[m.scanIconWrap, { backgroundColor: Colors.success }]}>
+                  <Ionicons name="checkmark" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[m.scanBannerTitle, { color: Colors.success }]}>Tag verified</Text>
+                  <Text style={m.scanBannerSubtitle}>You can submit this check</Text>
+                </View>
               </View>
             ) : (
-              <TouchableOpacity onPress={triggerScan} style={[m.scanBanner, { borderColor: Colors.warning, backgroundColor: 'rgba(201,106,0,0.08)' }]}>
-                <Ionicons name="scan-outline" size={18} color={Colors.warning} />
-                <Text style={{ color: Colors.warning, fontWeight: '700', fontSize: 13 }}>Scan tag to begin</Text>
+              <TouchableOpacity onPress={triggerScan} activeOpacity={0.85}
+                style={[m.scanBanner, { borderColor: Colors.warning, backgroundColor: 'rgba(201,106,0,0.1)' }]}>
+                <View style={[m.scanIconWrap, { backgroundColor: Colors.warning }]}>
+                  <Ionicons name="scan-outline" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[m.scanBannerTitle, { color: Colors.warning }]}>Scan NFC tag required</Text>
+                  <Text style={m.scanBannerSubtitle}>Tap here, then hold phone to the tag</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.warning} />
               </TouchableOpacity>
             )
           )}
@@ -488,4 +500,16 @@ const m = StyleSheet.create({
   photoThumb: { width: 80, height: 80, borderRadius: BorderRadius.sm },
   photoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm, borderWidth: 1, borderColor: Colors.primary, borderStyle: 'dashed' },
   photoBtnText: { ...Typography.body, color: Colors.primary, fontWeight: '600' },
+  scanBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md, borderWidth: 2,
+    marginBottom: Spacing.md,
+  },
+  scanIconWrap: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  scanBannerTitle: { ...Typography.body, fontWeight: '700' },
+  scanBannerSubtitle: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
 })

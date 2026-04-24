@@ -136,15 +136,24 @@ def index():
                     'done': done,
                 })
 
-        # Scheduled equipment checks assigned to this user
+        # Scheduled equipment checks assigned to this user.
+        # Include currently-due checks AND checks completed today (so the todo
+        # stays visible — crossed out — until end of day, like transfer todos).
+        from models import ScheduledCheckCompletion
+        completed_today_ids = {
+            c.scheduled_check_id for c in ScheduledCheckCompletion.query.filter_by(
+                completed_date=today, completed_by_user_id=current_user.id).all()
+        }
         my_scheduled = ScheduledEquipmentCheck.query.filter(
             ScheduledEquipmentCheck.assigned_user_id == current_user.id,
             ScheduledEquipmentCheck.active == True,
-            ScheduledEquipmentCheck.next_due_date <= today,
+            db.or_(
+                ScheduledEquipmentCheck.next_due_date <= today,
+                ScheduledEquipmentCheck.id.in_(completed_today_ids) if completed_today_ids else db.false(),
+            ),
         ).all()
         for sc in my_scheduled:
-            # Check if already completed today
-            already_done = any(c.completed_date == today for c in sc.completions)
+            already_done = sc.id in completed_today_ids or any(c.completed_date == today for c in sc.completions)
             todos.append({
                 'project': sc.project,
                 'task_type': 'scheduled_check',

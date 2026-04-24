@@ -264,6 +264,7 @@ export interface DailyCheckMachine {
   plant_id: string | null
   type: string | null
   source: 'fleet' | 'hired'
+  active_tag_uid: string | null
   alerts: MachineAlert[]
   pending_transfer: MachineTransferBrief | null
   check: {
