@@ -1509,20 +1509,69 @@ COMPLIANCE_KIND_LABELS = {
     'annual_cert': 'Annual Certification',
 }
 
+# Interval units. Time-based units produce a computable next_due_date; the
+# usage-based ones (hours/km/miles) are informational — display-only — and
+# leave next_due_date null.
+COMPLIANCE_INTERVAL_UNITS = ('days', 'weeks', 'months', 'years', 'hours', 'km', 'miles')
+COMPLIANCE_INTERVAL_UNIT_LABELS = {
+    'days': 'days',
+    'weeks': 'weeks',
+    'months': 'months',
+    'years': 'years',
+    'hours': 'hours',
+    'km': 'km',
+    'miles': 'miles',
+}
+COMPLIANCE_TIME_UNITS = ('days', 'weeks', 'months', 'years')
+
+
+def _advance_date(start, value, unit):
+    """Return start + (value × unit) for time-based units; None for usage units."""
+    if not start or not value or value <= 0:
+        return None
+    if unit == 'days':
+        return start + timedelta(days=value)
+    if unit == 'weeks':
+        return start + timedelta(weeks=value)
+    if unit == 'months':
+        # Approximate months as calendar months (keeps day-of-month when possible).
+        year_delta, month = divmod(start.month - 1 + value, 12)
+        new_year = start.year + year_delta
+        new_month = month + 1
+        # Clamp day to last day of target month.
+        import calendar as _cal
+        max_day = _cal.monthrange(new_year, new_month)[1]
+        return start.replace(year=new_year, month=new_month, day=min(start.day, max_day))
+    if unit == 'years':
+        try:
+            return start.replace(year=start.year + value)
+        except ValueError:
+            # Feb 29 → Feb 28 on non-leap years
+            return start.replace(year=start.year + value, day=28)
+    return None  # hours / km / miles → informational only
+
 
 class MachineTypeCompliance(db.Model):
     """Which compliance kinds apply to a given machine_type, with default intervals.
-    One row per distinct machine_type string."""
+    One row per distinct machine_type string.
+
+    Note: column names use `_interval_days` for historical reasons — the value
+    is actually the interval *quantity* and `_interval_unit` tells you the unit
+    (days, weeks, months, years, hours, km, miles)."""
     id = db.Column(db.Integer, primary_key=True)
     machine_type = db.Column(db.String(100), nullable=False, unique=True)
     service_enabled = db.Column(db.Boolean, default=False, nullable=False)
     service_interval_days = db.Column(db.Integer, nullable=True)
+    service_interval_unit = db.Column(db.String(20), nullable=True, default='days')
     calibration_enabled = db.Column(db.Boolean, default=False, nullable=False)
     calibration_interval_days = db.Column(db.Integer, nullable=True)
+    calibration_interval_unit = db.Column(db.String(20), nullable=True, default='days')
     test_tag_enabled = db.Column(db.Boolean, default=False, nullable=False)
     test_tag_interval_days = db.Column(db.Integer, nullable=True)
+    test_tag_interval_unit = db.Column(db.String(20), nullable=True, default='days')
     annual_cert_enabled = db.Column(db.Boolean, default=False, nullable=False)
     annual_cert_interval_days = db.Column(db.Integer, nullable=True)
+    annual_cert_interval_unit = db.Column(db.String(20), nullable=True, default='days')
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def is_enabled(self, kind):
@@ -1531,6 +1580,9 @@ class MachineTypeCompliance(db.Model):
     def interval_for(self, kind):
         return getattr(self, f'{kind}_interval_days', None)
 
+    def unit_for(self, kind):
+        return getattr(self, f'{kind}_interval_unit', None) or 'days'
+
     def __repr__(self):
         return f'<MachineTypeCompliance {self.machine_type}>'
 
@@ -1538,11 +1590,13 @@ class MachineTypeCompliance(db.Model):
 class MachineCompliance(db.Model):
     """Per-machine obligation for one of the four compliance kinds.
     Auto-synced from MachineTypeCompliance when a machine is created or its
-    type changes. Interval inherits the type default but can be overridden."""
+    type changes. Interval value + unit inherit the type default but can be
+    overridden per machine."""
     id = db.Column(db.Integer, primary_key=True)
     machine_id = db.Column(db.Integer, db.ForeignKey('machine.id'), nullable=False, index=True)
     kind = db.Column(db.String(20), nullable=False)  # one of COMPLIANCE_KINDS
-    interval_days = db.Column(db.Integer, nullable=True)
+    interval_days = db.Column(db.Integer, nullable=True)  # actually interval *quantity* — see interval_unit
+    interval_unit = db.Column(db.String(20), nullable=True, default='days')
     last_done_date = db.Column(db.Date, nullable=True)
     next_due_date = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1553,11 +1607,27 @@ class MachineCompliance(db.Model):
         db.UniqueConstraint('machine_id', 'kind', name='uq_machine_compliance_kind'),
     )
 
+    @property
+    def unit(self):
+        return self.interval_unit or 'days'
+
+    @property
+    def is_time_based(self):
+        return self.unit in COMPLIANCE_TIME_UNITS
+
     def recompute_next_due(self):
-        if self.last_done_date and self.interval_days:
-            self.next_due_date = self.last_done_date + timedelta(days=self.interval_days)
+        if self.last_done_date and self.interval_days and self.is_time_based:
+            self.next_due_date = _advance_date(self.last_done_date, self.interval_days, self.unit)
         else:
+            # Usage-based units (hours/km/miles) have no computable next_due date;
+            # missing baseline or zero-ish interval also clears it.
             self.next_due_date = None
+
+    def interval_label(self):
+        """Human-readable 'every N <unit>' string for display."""
+        if not self.interval_days:
+            return None
+        return f'every {self.interval_days} {self.unit}'
 
     @property
     def label(self):

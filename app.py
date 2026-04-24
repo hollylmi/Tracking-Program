@@ -355,6 +355,12 @@ with app.app_context():
         "ALTER TABLE project ADD COLUMN day_rate FLOAT",
         "ALTER TABLE daily_entry ADD COLUMN include_accommodation BOOLEAN DEFAULT FALSE",
         "ALTER TABLE daily_entry ADD COLUMN charge_day_rate BOOLEAN DEFAULT FALSE",
+        # ── 2026-04-24: Compliance interval unit (days/weeks/months/years/hours/km/miles) ──
+        "ALTER TABLE machine_type_compliance ADD COLUMN service_interval_unit VARCHAR(20) DEFAULT 'days'",
+        "ALTER TABLE machine_type_compliance ADD COLUMN calibration_interval_unit VARCHAR(20) DEFAULT 'days'",
+        "ALTER TABLE machine_type_compliance ADD COLUMN test_tag_interval_unit VARCHAR(20) DEFAULT 'days'",
+        "ALTER TABLE machine_type_compliance ADD COLUMN annual_cert_interval_unit VARCHAR(20) DEFAULT 'days'",
+        "ALTER TABLE machine_compliance ADD COLUMN interval_unit VARCHAR(20) DEFAULT 'days'",
     ]:
         try:
             db.session.execute(db.text(stmt))

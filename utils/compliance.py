@@ -21,16 +21,19 @@ def sync_machine_compliance(machine):
     for kind in COMPLIANCE_KINDS:
         enabled = bool(rule and rule.is_enabled(kind))
         default_interval = rule.interval_for(kind) if rule else None
+        default_unit = rule.unit_for(kind) if rule else 'days'
         row = existing.get(kind)
         if enabled and not row:
             row = MachineCompliance(
                 machine_id=machine.id,
                 kind=kind,
                 interval_days=default_interval,
+                interval_unit=default_unit,
             )
             db.session.add(row)
         elif enabled and row and row.interval_days is None and default_interval is not None:
             row.interval_days = default_interval
+            row.interval_unit = default_unit
             row.recompute_next_due()
 
 

@@ -50,22 +50,30 @@
                 {% for kind in kinds %}
                   {% set enabled = rule and rule.is_enabled(kind) %}
                   {% set interval = rule.interval_for(kind) if rule else None %}
+                  {% set unit = rule.unit_for(kind) if rule else 'days' %}
+                  {% set cid = loop.index0 ~ '-' ~ mt|replace(' ', '_')|replace('/', '_') %}
                   <td class="text-center">
                     <div class="form-check form-switch d-inline-flex align-items-center justify-content-center m-0">
                       <input class="form-check-input" type="checkbox" role="switch"
                              name="{{ mt }}__{{ kind }}__enabled" value="1"
-                             id="sw-{{ loop.index0 }}-{{ mt|replace(' ', '_') }}"
+                             id="sw-{{ cid }}"
                              {% if enabled %}checked{% endif %}
-                             onchange="document.getElementById('iv-{{ loop.index0 }}-{{ mt|replace(' ', '_') }}').disabled = !this.checked;">
+                             onchange="document.getElementById('iv-{{ cid }}').disabled = !this.checked; document.getElementById('un-{{ cid }}').disabled = !this.checked;">
                     </div>
-                    <div class="input-group input-group-sm mt-1" style="max-width: 140px; margin: 0 auto;">
+                    <div class="input-group input-group-sm mt-1" style="max-width: 180px; margin: 0 auto;">
                       <input type="number" min="1" class="form-control text-end"
-                             id="iv-{{ loop.index0 }}-{{ mt|replace(' ', '_') }}"
+                             id="iv-{{ cid }}"
                              name="{{ mt }}__{{ kind }}__interval"
                              value="{{ interval or '' }}"
-                             placeholder="days"
+                             placeholder="every…"
                              {% if not enabled %}disabled{% endif %}>
-                      <span class="input-group-text">days</span>
+                      <select class="form-select" id="un-{{ cid }}"
+                              name="{{ mt }}__{{ kind }}__unit"
+                              {% if not enabled %}disabled{% endif %}>
+                        {% for u in units %}
+                          <option value="{{ u }}" {% if unit == u %}selected{% endif %}>{{ u }}</option>
+                        {% endfor %}
+                      </select>
                     </div>
                   </td>
                 {% endfor %}

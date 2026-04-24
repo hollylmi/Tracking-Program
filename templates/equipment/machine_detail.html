@@ -489,7 +489,12 @@
                   <div>
                     <h5 class="fw-bold mb-1">{{ compliance_kind_labels.get(c.kind, c.kind) }}</h5>
                     <div class="small text-muted">
-                      Interval: {{ c.interval_days ~ ' days' if c.interval_days else 'Not set' }}
+                      Interval:
+                      {% if c.interval_days %}
+                        every {{ c.interval_days }} {{ c.unit }}
+                      {% else %}
+                        Not set
+                      {% endif %}
                     </div>
                   </div>
                   <span class="badge bg-{{ border_colour }}">
@@ -503,12 +508,25 @@
                   <dt class="col-4 text-muted">Last done</dt>
                   <dd class="col-8">{{ c.last_done_date.strftime('%d/%m/%Y') if c.last_done_date else '—' }}</dd>
                   <dt class="col-4 text-muted">Next due</dt>
-                  <dd class="col-8">{{ c.next_due_date.strftime('%d/%m/%Y') if c.next_due_date else '—' }}</dd>
+                  <dd class="col-8">
+                    {% if c.next_due_date %}
+                      {{ c.next_due_date.strftime('%d/%m/%Y') }}
+                    {% elif c.interval_days and not c.is_time_based %}
+                      <em class="text-muted">Tracked by {{ c.unit }} — no date</em>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </dd>
                 </dl>
                 {% if current_user.role in ['admin', 'supervisor'] %}
-                  <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#logCompliance{{ c.id }}">
-                    <i class="bi bi-plus-lg me-1"></i>Log {{ compliance_kind_labels.get(c.kind, c.kind) }}
-                  </button>
+                  <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#baselineCompliance{{ c.id }}">
+                      <i class="bi bi-pencil-square me-1"></i>Set baseline
+                    </button>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#logCompliance{{ c.id }}">
+                      <i class="bi bi-plus-lg me-1"></i>Log completion
+                    </button>
+                  </div>
                 {% endif %}
                 {% if history %}
                   <hr class="my-3">
@@ -555,9 +573,66 @@
 
 </div>
 
-{# Log-compliance modals — one per compliance item #}
+{# Baseline + Log modals — one of each per compliance item #}
 {% if current_user.role in ['admin', 'supervisor'] %}
   {% for c in compliance_items %}
+    {# ── Set baseline: just update last_done_date + interval + unit, no record ── #}
+    <div class="modal fade" id="baselineCompliance{{ c.id }}" tabindex="-1">
+      <div class="modal-dialog">
+        <form method="POST" action="{{ url_for('equipment.machine_compliance_baseline', machine_id=machine.id) }}">
+          <input type="hidden" name="compliance_id" value="{{ c.id }}">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Set baseline — {{ compliance_kind_labels.get(c.kind, c.kind) }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="small text-muted mb-3">
+                Use this to seed a machine without creating a history record —
+                just fill in the last date and how often it's due.
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Last done</label>
+                  <input type="date" name="last_done_date" class="form-control"
+                         value="{{ c.last_done_date.isoformat() if c.last_done_date else '' }}">
+                  {% if c.last_done_date %}
+                    <div class="form-check mt-1">
+                      <input class="form-check-input" type="checkbox" name="clear_last_done" value="1" id="clear{{ c.id }}">
+                      <label class="form-check-label small text-muted" for="clear{{ c.id }}">Clear (no baseline)</label>
+                    </div>
+                  {% endif %}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Every</label>
+                  <input type="number" min="1" name="interval_days" class="form-control"
+                         value="{{ c.interval_days or '' }}" placeholder="e.g. 6">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Unit</label>
+                  <select name="interval_unit" class="form-select">
+                    {% for u in compliance_units %}
+                      <option value="{{ u }}" {% if c.unit == u %}selected{% endif %}>{{ u }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div class="small text-muted mt-3">
+                Usage-based units (hours / km / miles) are tracked as informational
+                only — no due-date alert will fire, since it depends on how much
+                the machine gets used.
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save Baseline</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {# ── Log completion: creates a ComplianceRecord + docs ── #}
     <div class="modal fade" id="logCompliance{{ c.id }}" tabindex="-1">
       <div class="modal-dialog modal-lg">
         <form method="POST" action="{{ url_for('equipment.machine_compliance_log', machine_id=machine.id) }}" enctype="multipart/form-data">
@@ -581,9 +656,17 @@
                     <option value="fail">Fail</option>
                   </select>
                 </div>
-                <div class="col-md-4">
-                  <label class="form-label">Interval <small class="text-muted">(days)</small></label>
+                <div class="col-md-2">
+                  <label class="form-label">Every</label>
                   <input type="number" min="1" name="interval_days" class="form-control" value="{{ c.interval_days or '' }}">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Unit</label>
+                  <select name="interval_unit" class="form-select">
+                    {% for u in compliance_units %}
+                      <option value="{{ u }}" {% if c.unit == u %}selected{% endif %}>{{ u }}</option>
+                    {% endfor %}
+                  </select>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Performed By</label>

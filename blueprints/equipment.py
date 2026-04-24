@@ -19,7 +19,8 @@ from models import (db, Machine, MachineGroup, Project, HiredMachine, MachineBre
                     ScheduledCheckCompletion, TransferBatch, NFCTag, MachineScanEvent,
                     MachineTypeCompliance, MachineCompliance, ComplianceRecord,
                     ComplianceReportGroup, ComplianceDocument,
-                    COMPLIANCE_KINDS, COMPLIANCE_KIND_LABELS)
+                    COMPLIANCE_KINDS, COMPLIANCE_KIND_LABELS,
+                    COMPLIANCE_INTERVAL_UNITS)
 from utils.compliance import backfill_all_machines  # side effects: register SQLAlchemy listeners
 import storage
 
@@ -1713,7 +1714,8 @@ def machine_detail(machine_id):
                            nfc_tags=nfc_tags,
                            compliance_items=compliance_items,
                            compliance_history=compliance_history,
-                           compliance_kind_labels=COMPLIANCE_KIND_LABELS)
+                           compliance_kind_labels=COMPLIANCE_KIND_LABELS,
+                           compliance_units=COMPLIANCE_INTERVAL_UNITS)
 
 
 # ---------------------------------------------------------------------------
@@ -2494,9 +2496,13 @@ def type_compliance():
                 for kind in COMPLIANCE_KINDS:
                     enabled = request.form.get(f'{mt}__{kind}__enabled') == '1'
                     interval_raw = (request.form.get(f'{mt}__{kind}__interval') or '').strip()
+                    unit_raw = (request.form.get(f'{mt}__{kind}__unit') or 'days').strip()
+                    if unit_raw not in COMPLIANCE_INTERVAL_UNITS:
+                        unit_raw = 'days'
                     setattr(rule, f'{kind}_enabled', enabled)
                     setattr(rule, f'{kind}_interval_days',
                             int(interval_raw) if interval_raw.isdigit() else None)
+                    setattr(rule, f'{kind}_interval_unit', unit_raw)
             db.session.commit()
             # Propagate to every machine so newly-enabled kinds get rows and
             # existing machines with no override inherit new default intervals.
@@ -2515,7 +2521,45 @@ def type_compliance():
         rules=rules,
         kinds=COMPLIANCE_KINDS,
         kind_labels=COMPLIANCE_KIND_LABELS,
+        units=COMPLIANCE_INTERVAL_UNITS,
     )
+
+
+@equipment_bp.route('/equipment/machine/<int:machine_id>/compliance/baseline', methods=['POST'])
+@require_role('admin', 'supervisor')
+def machine_compliance_baseline(machine_id):
+    """Set last-done date + interval value + interval unit on a compliance item
+    without creating a ComplianceRecord. Handy for seeding existing equipment."""
+    machine = Machine.query.get_or_404(machine_id)
+    compliance_id = request.form.get('compliance_id', type=int)
+    mc = MachineCompliance.query.get_or_404(compliance_id)
+    if mc.machine_id != machine.id:
+        abort(400)
+
+    last_done_raw = (request.form.get('last_done_date') or '').strip()
+    interval_raw = (request.form.get('interval_days') or '').strip()
+    unit_raw = (request.form.get('interval_unit') or 'days').strip()
+    if unit_raw not in COMPLIANCE_INTERVAL_UNITS:
+        unit_raw = 'days'
+
+    if last_done_raw:
+        try:
+            mc.last_done_date = datetime.strptime(last_done_raw, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    elif request.form.get('clear_last_done') == '1':
+        mc.last_done_date = None
+
+    if interval_raw:
+        try:
+            mc.interval_days = int(interval_raw)
+        except ValueError:
+            pass
+    mc.interval_unit = unit_raw
+    mc.recompute_next_due()
+    db.session.commit()
+    flash(f'{mc.label} baseline updated.', 'success')
+    return redirect(url_for('equipment.machine_detail', machine_id=machine.id) + '#tab-compliance')
 
 
 @equipment_bp.route('/equipment/machine/<int:machine_id>/compliance/log', methods=['POST'])
@@ -2537,10 +2581,13 @@ def machine_compliance_log(machine_id):
     result = (request.form.get('result') or '').strip() or None
     notes = (request.form.get('notes') or '').strip() or None
 
-    # Optional: allow updating the interval inline (keeps machine detail simple).
+    # Optional: allow updating the interval / unit inline.
     interval_raw = (request.form.get('interval_days') or '').strip()
     if interval_raw.isdigit():
         mc.interval_days = int(interval_raw)
+    unit_raw = (request.form.get('interval_unit') or '').strip()
+    if unit_raw in COMPLIANCE_INTERVAL_UNITS:
+        mc.interval_unit = unit_raw
 
     record = ComplianceRecord(
         machine_compliance_id=mc.id,
