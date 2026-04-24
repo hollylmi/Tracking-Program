@@ -614,6 +614,18 @@ export default function OverviewScreen() {
           />
         }
       >
+        {/* Pre-Start button — only when a project is active */}
+        {activeProject?.id ? (
+          <TouchableOpacity
+            style={s.preStartBtn}
+            onPress={() => router.push(`/pre-start/${activeProject.id}`)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="scan-outline" size={20} color="#fff" style={{ marginRight: Spacing.sm }} />
+            <Text style={s.preStartText}>START PRE-START</Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* New Daily Entry button */}
         <TouchableOpacity
           style={s.newEntryBtn}
@@ -688,6 +700,24 @@ const s = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.md,
     paddingBottom: Spacing.xxl,
+  },
+
+  // Pre-Start button
+  preStartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.dark,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  preStartText: {
+    ...Typography.bodySmall,
+    color: '#fff',
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
 
   // New entry button

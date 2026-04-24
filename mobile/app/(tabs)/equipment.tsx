@@ -241,7 +241,7 @@ const CONDITION_OPTIONS: { value: string; label: string; color: string; bg: stri
 
 // ── Daily check machine card ─────────────────────────────────────────────────
 
-function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyCheckMachine; onCheck: () => void; onViewCheck?: () => void }) {
+function MachineCheckCard({ machine, onViewCheck }: { machine: DailyCheckMachine; onViewCheck?: () => void }) {
   const checked = !!machine.check
   const condOpt = CONDITION_OPTIONS.find((c) => c.value === machine.check?.condition)
   const hasAlerts = machine.alerts && machine.alerts.length > 0
@@ -249,7 +249,6 @@ function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyChe
 
   const handlePress = () => {
     if (checked && onViewCheck) onViewCheck()
-    else if (!checked) onCheck()
   }
 
   return (
@@ -278,10 +277,9 @@ function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyChe
               <Ionicons name="chevron-forward" size={14} color={Colors.textLight} />
             </View>
           ) : (
-            <TouchableOpacity style={checkStyles.checkBtn} onPress={onCheck} activeOpacity={0.8}>
-              <Ionicons name="scan-outline" size={12} color={Colors.dark} style={{ marginRight: 4 }} />
-              <Text style={checkStyles.checkBtnText}>{machine.active_tag_uid ? 'Scan to Check' : 'Check'}</Text>
-            </TouchableOpacity>
+            <View style={checkStyles.pendingPill}>
+              <Text style={checkStyles.pendingText}>Not yet</Text>
+            </View>
           )}
         </View>
       </View>
@@ -315,242 +313,6 @@ function MachineCheckCard({ machine, onCheck, onViewCheck }: { machine: DailyChe
       ) : null}
     </Card>
     </TouchableOpacity>
-  )
-}
-
-// ── Check modal ──────────────────────────────────────────────────────────────
-
-function CheckModal({ visible, machineName, isFleetMachine, activeTagUid, onClose, onSubmit }: {
-  visible: boolean; machineName: string; isFleetMachine: boolean; activeTagUid: string | null; onClose: () => void
-  onSubmit: (condition: string, notes: string, hoursReading: string | undefined, photos: { uri: string; filename: string }[], tagUid: string | undefined) => Promise<void>
-}) {
-  const [condition, setCondition] = useState('good')
-  const [notes, setNotes] = useState('')
-  const [hoursReading, setHoursReading] = useState('')
-  const [photos, setPhotos] = useState<{ uri: string; filename: string }[]>([])
-  const [submitting, setSubmitting] = useState(false)
-  const [verifiedTagUid, setVerifiedTagUid] = useState<string | null>(null)
-  const [scanning, setScanning] = useState(false)
-
-  const tagRequired = !!activeTagUid
-  const MAX_PHOTOS = 10
-
-  useEffect(() => {
-    if (!visible) {
-      setVerifiedTagUid(null)
-      setCondition('good'); setNotes(''); setHoursReading(''); setPhotos([])
-    }
-  }, [visible])
-
-  const triggerScan = async () => {
-    if (!NfcManager) {
-      Alert.alert('NFC Not Available', 'This device does not support NFC.')
-      return
-    }
-    if (scanning) return
-    setVerifiedTagUid(null)
-    try { await NfcManager.cancelTechnologyRequest() } catch {}
-    setScanning(true)
-    try {
-      await NfcManager.requestTechnology(NfcTech.Ndef)
-      const tag = await NfcManager.getTag()
-      const uid: string | undefined = tag?.id
-      try { await NfcManager.cancelTechnologyRequest() } catch {}
-      setScanning(false)
-      if (!uid) {
-        Alert.alert('Scan Failed', 'Could not read the NFC tag.')
-        return
-      }
-      if (activeTagUid && uid !== activeTagUid) {
-        Alert.alert('Wrong Machine', `That tag does not match "${machineName}".`)
-        return
-      }
-      setVerifiedTagUid(uid)
-    } catch (e: any) {
-      try { await NfcManager.cancelTechnologyRequest() } catch {}
-      setScanning(false)
-      if (e?.message !== 'cancelled') {
-        Alert.alert('Scan Failed', 'Could not read the NFC tag. Try again.')
-      }
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (tagRequired && !verifiedTagUid) {
-      Alert.alert('Scan Required', 'Scan the NFC tag on this machine first.')
-      return
-    }
-    setSubmitting(true)
-    try {
-      await onSubmit(condition, notes, hoursReading || undefined, photos, verifiedTagUid || undefined)
-      setCondition('good'); setNotes(''); setHoursReading(''); setPhotos([])
-      setVerifiedTagUid(null)
-    } finally { setSubmitting(false) }
-  }
-
-  const addCompressed = async (uri: string) => {
-    const compressed = await compressImage(uri)
-    setPhotos(prev => [...prev, { uri: compressed, filename: `dc_${Date.now()}_${prev.length + 1}.jpg` }].slice(0, MAX_PHOTOS))
-  }
-
-  const takePhoto = async () => {
-    if (photos.length >= MAX_PHOTOS) { Alert.alert('Limit reached', `Maximum ${MAX_PHOTOS} photos.`); return }
-    const { status } = await ImagePicker.requestCameraPermissionsAsync()
-    if (status !== 'granted') { Alert.alert('Permission required', 'Camera access is needed.'); return }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 })
-    if (!result.canceled && result.assets.length > 0) {
-      await addCompressed(result.assets[0].uri)
-    }
-  }
-
-  const pickFromGallery = async () => {
-    if (photos.length >= MAX_PHOTOS) { Alert.alert('Limit reached', `Maximum ${MAX_PHOTOS} photos.`); return }
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') { Alert.alert('Permission required', 'Photo library access is needed.'); return }
-    const remaining = MAX_PHOTOS - photos.length
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-      allowsMultipleSelection: true,
-      selectionLimit: remaining,
-    })
-    if (!result.canceled && result.assets.length > 0) {
-      for (const asset of result.assets.slice(0, remaining)) {
-        await addCompressed(asset.uri)
-      }
-    }
-  }
-
-  const removePhoto = (i: number) => setPhotos(prev => prev.filter((_, idx) => idx !== i))
-
-  const submitDisabled = submitting || (tagRequired && !verifiedTagUid)
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={modalStyles.root} edges={['top', 'bottom']}>
-        <View style={modalStyles.header}>
-          <TouchableOpacity onPress={onClose}><Text style={modalStyles.cancel}>Cancel</Text></TouchableOpacity>
-          <Text style={modalStyles.title} numberOfLines={1}>{machineName}</Text>
-          <TouchableOpacity onPress={handleSubmit} disabled={submitDisabled} style={{ opacity: submitDisabled ? 0.4 : 1 }}>
-            {submitting ? <ActivityIndicator size="small" color={Colors.primary} /> : (
-              <Text style={modalStyles.save}>{tagRequired && !verifiedTagUid ? 'Scan first' : 'Submit'}</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-        <View style={modalStyles.body}>
-          {tagRequired && (
-            verifiedTagUid ? (
-              <View style={[modalStyles.scanBanner, { borderColor: Colors.success, backgroundColor: 'rgba(61,139,65,0.12)' }]}>
-                <View style={[modalStyles.scanIconWrap, { backgroundColor: Colors.success }]}>
-                  <Ionicons name="checkmark" size={22} color="#fff" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[modalStyles.scanBannerTitle, { color: Colors.success }]}>Tag verified</Text>
-                  <Text style={modalStyles.scanBannerSubtitle}>You can submit this check</Text>
-                </View>
-              </View>
-            ) : (
-              <TouchableOpacity onPress={triggerScan} activeOpacity={0.85}
-                style={[modalStyles.scanBanner, { borderColor: Colors.warning, backgroundColor: 'rgba(201,106,0,0.1)' }]}>
-                <View style={[modalStyles.scanIconWrap, { backgroundColor: Colors.warning }]}>
-                  <Ionicons name="scan-outline" size={22} color="#fff" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[modalStyles.scanBannerTitle, { color: Colors.warning }]}>Scan NFC tag required</Text>
-                  <Text style={modalStyles.scanBannerSubtitle}>Tap here, then hold phone to the tag</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={Colors.warning} />
-              </TouchableOpacity>
-            )
-          )}
-          <Text style={modalStyles.label}>Condition</Text>
-          <View style={modalStyles.conditionRow}>
-            {CONDITION_OPTIONS.map((opt) => (
-              <TouchableOpacity key={opt.value}
-                style={[modalStyles.conditionBtn, condition === opt.value && { backgroundColor: opt.bg, borderColor: opt.color }]}
-                onPress={() => setCondition(opt.value)} activeOpacity={0.8}>
-                <Text style={[modalStyles.conditionBtnText, condition === opt.value && { color: opt.color, fontWeight: '700' }]}>{opt.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          {isFleetMachine && (
-            <>
-              <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Machine Hours</Text>
-              <TextInput style={[modalStyles.input, { minHeight: 0 }]} value={hoursReading} onChangeText={setHoursReading}
-                placeholder="Current hours reading" placeholderTextColor={Colors.textLight}
-                keyboardType="decimal-pad"
-                returnKeyType="done" onSubmitEditing={Keyboard.dismiss} blurOnSubmit
-                inputAccessoryViewID={Platform.OS === 'ios' ? 'checkDoneBar' : undefined} />
-            </>
-          )}
-          <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Notes</Text>
-          <TextInput style={modalStyles.input} value={notes} onChangeText={setNotes} placeholder="Optional notes"
-            placeholderTextColor={Colors.textLight} multiline numberOfLines={3} textAlignVertical="top"
-            inputAccessoryViewID={Platform.OS === 'ios' ? 'checkDoneBar' : undefined} />
-          <Text style={[modalStyles.label, { marginTop: Spacing.md }]}>Photos ({photos.length}/{MAX_PHOTOS})</Text>
-          {photos.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: Spacing.sm }}>
-              {photos.map((p, i) => (
-                <View key={i} style={{ position: 'relative' }}>
-                  <Image source={{ uri: p.uri }} style={modalStyles.photoThumb} />
-                  <TouchableOpacity
-                    onPress={() => removePhoto(i)}
-                    style={{ position: 'absolute', top: -6, right: -6, backgroundColor: '#fff', borderRadius: 12 }}
-                  >
-                    <Ionicons name="close-circle" size={22} color={Colors.error} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-          {photos.length < MAX_PHOTOS && (
-            <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-              <TouchableOpacity style={[modalStyles.photoBtn, { flex: 1 }]} onPress={takePhoto} activeOpacity={0.8}>
-                <Ionicons name="camera-outline" size={20} color={Colors.primary} />
-                <Text style={modalStyles.photoBtnText}>Camera</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[modalStyles.photoBtn, { flex: 1 }]} onPress={pickFromGallery} activeOpacity={0.8}>
-                <Ionicons name="images-outline" size={20} color={Colors.primary} />
-                <Text style={modalStyles.photoBtnText}>Gallery</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-        {scanning && (
-          <View style={[StyleSheet.absoluteFillObject, {
-            backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg,
-          }]}>
-            <View style={{ backgroundColor: '#fff', padding: Spacing.lg, borderRadius: BorderRadius.lg, width: '100%', maxWidth: 400, alignItems: 'center' }}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-              <Text style={{ ...Typography.h4, color: Colors.textPrimary, marginTop: Spacing.md, textAlign: 'center' }}>
-                Scan the NFC tag
-              </Text>
-              <Text style={{ ...Typography.bodySmall, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 }}>
-                Hold your phone against the tag on {machineName}.
-              </Text>
-              <TouchableOpacity
-                onPress={async () => {
-                  try { await NfcManager?.cancelTechnologyRequest() } catch {}
-                  setScanning(false)
-                }}
-                style={{ marginTop: Spacing.md, padding: Spacing.sm }}
-              >
-                <Text style={{ color: Colors.textSecondary }}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      </SafeAreaView>
-      {Platform.OS === 'ios' && (
-        <InputAccessoryView nativeID="checkDoneBar">
-          <View style={{ backgroundColor: '#f1f3f5', padding: 8, flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <TouchableOpacity onPress={Keyboard.dismiss} style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
-              <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 15 }}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </InputAccessoryView>
-      )}
-    </Modal>
   )
 }
 
@@ -702,7 +464,6 @@ export default function EquipmentScreen() {
   const { show } = useToastStore()
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>('fleet')
-  const [checkingMachine, setCheckingMachine] = useState<DailyCheckMachine | null>(null)
   const [viewingCheck, setViewingCheck] = useState<DailyCheckMachine | null>(null)
   const activeProject = useProjectStore((s) => s.activeProject)
   const projectId = activeProject?.id
@@ -900,36 +661,6 @@ export default function EquipmentScreen() {
     setRefreshing(false)
   }
 
-  const handleSubmitCheck = useCallback(
-    async (condition: string, notes: string, hoursReading: string | undefined, photos: { uri: string; filename: string }[], tagUid: string | undefined) => {
-      if (!checkingMachine || !projectId) return
-      try {
-        await api.equipment.submitDailyCheck({
-          machine_id: checkingMachine.machine_id ?? undefined,
-          hired_machine_id: checkingMachine.hired_machine_id ?? undefined,
-          project_id: projectId,
-          condition,
-          notes: notes || undefined,
-          hours_reading: hoursReading,
-          tag_uid: tagUid,
-          photos,
-        })
-        show('Check recorded', 'success')
-        setCheckingMachine(null)
-        queryClient.invalidateQueries({ queryKey: ['daily-checks'] })
-        if (condition === 'broken_down') {
-          router.push({
-            pathname: '/breakdown/new',
-            params: { machine_id: String(checkingMachine.machine_id ?? ''), machine_name: checkingMachine.name },
-          })
-        }
-      } catch {
-        show('Failed to submit check', 'error')
-      }
-    },
-    [checkingMachine, projectId, queryClient, router, show]
-  )
-
   const subtitle = activeTab === 'fleet'
     ? (openCount > 0 ? `${openCount} open breakdown${openCount > 1 ? 's' : ''}` : undefined)
     : activeTab === 'hired'
@@ -941,12 +672,27 @@ export default function EquipmentScreen() {
       <ScreenHeader title="Equipment" subtitle={subtitle} />
       <TabSelector active={activeTab} onChange={setActiveTab} />
 
-      {/* Checks progress bar */}
-      {activeTab === 'checks' && checksTotal > 0 && (
+      {/* Checks progress bar + Pre-Start CTA */}
+      {activeTab === 'checks' && (
         <View style={checkStyles.progressWrap}>
-          <View style={checkStyles.progressTrack}>
-            <View style={[checkStyles.progressFill, { width: `${checksPct}%`, backgroundColor: allChecksDone ? Colors.success : Colors.primary }]} />
-          </View>
+          {checksTotal > 0 && (
+            <View style={checkStyles.progressTrack}>
+              <View style={[checkStyles.progressFill, { width: `${checksPct}%`, backgroundColor: allChecksDone ? Colors.success : Colors.primary }]} />
+            </View>
+          )}
+          {projectId ? (
+            <TouchableOpacity
+              style={checkStyles.preStartCta}
+              onPress={() => router.push(`/pre-start/${projectId}`)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="scan-outline" size={18} color="#fff" style={{ marginRight: Spacing.sm }} />
+              <Text style={checkStyles.preStartCtaText}>
+                {allChecksDone ? 'Update pre-start' : 'Start pre-start'}
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
           {allChecksDone && (
             <View style={checkStyles.doneBanner}>
               <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
@@ -1005,7 +751,7 @@ export default function EquipmentScreen() {
           <FlatList
             data={sortedChecks}
             keyExtractor={(item) => item.machine_id ? `m-${item.machine_id}` : `h-${item.hired_machine_id}`}
-            renderItem={({ item }) => <MachineCheckCard machine={item} onCheck={() => setCheckingMachine(item)} onViewCheck={() => setViewingCheck(item)} />}
+            renderItem={({ item }) => <MachineCheckCard machine={item} onViewCheck={() => setViewingCheck(item)} />}
             contentContainerStyle={styles.list}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />}
             showsVerticalScrollIndicator={false}
@@ -1113,14 +859,6 @@ export default function EquipmentScreen() {
             <EmptyState icon="📋" title="No scheduled checks" subtitle="Scheduled equipment checks will appear here" />
           )}
         </ScrollView>
-      )}
-
-      {/* Check Modal — new check */}
-      {checkingMachine && (
-        <CheckModal visible={!!checkingMachine} machineName={checkingMachine.name}
-          isFleetMachine={checkingMachine.source === 'fleet'}
-          activeTagUid={checkingMachine.active_tag_uid}
-          onClose={() => setCheckingMachine(null)} onSubmit={handleSubmitCheck} />
       )}
 
       {/* Check Detail Modal — view/edit/delete completed check */}
@@ -1342,6 +1080,33 @@ const checkStyles = StyleSheet.create({
     alignItems: 'center',
   },
   checkBtnText: { ...Typography.caption, color: Colors.dark, fontWeight: '700' },
+  pendingPill: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 2,
+  },
+  pendingText: { ...Typography.caption, color: Colors.textLight, fontWeight: '600' },
+  preStartCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.dark,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.sm,
+  },
+  preStartCtaText: {
+    ...Typography.bodySmall,
+    color: '#fff',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    flex: 1,
+    textAlign: 'center',
+  },
   alertBanner: {
     paddingHorizontal: Spacing.md + 4,
     paddingVertical: 5,
