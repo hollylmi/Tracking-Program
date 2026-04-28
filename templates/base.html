@@ -20,14 +20,7 @@
 
     <!-- Logo + Brand -->
     <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.index') }}">
-      <!-- Plytrack logo mark: P + two diagonal strokes -->
-      <svg width="34" height="30" viewBox="0 0 34 30" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <!-- Bold P -->
-        <text x="0" y="26" font-family="Montserrat, sans-serif" font-weight="800" font-size="28" fill="#FFB7C5">P</text>
-        <!-- Two diagonal pen/pencil strokes -->
-        <line x1="19" y1="26" x2="27" y2="6" stroke="#FFB7C5" stroke-width="3" stroke-linecap="round"/>
-        <line x1="24" y1="26" x2="32" y2="6" stroke="#FFB7C5" stroke-width="3" stroke-linecap="round"/>
-      </svg>
+      <img src="{{ url_for('static', filename='logo-mark.svg') }}" alt="" height="32" style="display:block">
       <span>Plytrack</span>
     </a>
 
