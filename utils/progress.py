@@ -414,12 +414,14 @@ def _best_role_for_employee(emp):
 
 
 def _build_variation_billing(entry):
-    """Build billing lines from per-variation employee/machine selections."""
-    from models import Employee, Machine
+    """Build billing lines for variations.
+    People come from per-variation selections (or fall back to the entry crew);
+    equipment comes from the entry's on-site rate-card items (site_cost_lines)
+    so the same equipment used during delays bills for variation hours too."""
+    from models import Employee
 
     var_lines = []
     all_emp_ids = set()
-    all_mach_ids = set()
 
     for vl in (entry.variation_lines or []):
         if not vl.hours or vl.hours <= 0:
@@ -431,15 +433,12 @@ def _build_variation_billing(entry):
         })
         for eid in vl.billed_employee_ids:
             all_emp_ids.add(eid)
-        for mid in vl.billed_machine_ids:
-            all_mach_ids.add(mid)
 
     total_var_hours = sum(v['hours'] for v in var_lines)
 
     # If no specific billing selections, fall back to entry's full crew
-    if not all_emp_ids and not all_mach_ids:
+    if not all_emp_ids:
         all_emp_ids = {e.id for e in entry.employees}
-        all_mach_ids = {m.id for m in entry.machines}
 
     # Build employee cost lines — pick highest-rate role per emp, group by (role, rate)
     emp_lines = []
@@ -460,39 +459,25 @@ def _build_variation_billing(entry):
                 'hours': total_var_hours, 'cost': cost,
             })
 
-    # Build machine cost lines — MachineGroups charge a single fleet rate
-    # regardless of how many machines from the group are present. Ungrouped
-    # individual machines with matching type+rate are merged into a qty line.
+    # Equipment comes from the entry's on-site rate-card items, grouped by
+    # (item, rate). Same equipment that bills for delay hours also bills for
+    # variation hours.
     machine_lines = []
-    if all_mach_ids:
-        seen_groups = {}     # group_id -> {'name', 'rate'}
-        indiv_counts = {}    # (label, rate) -> qty
-        for m in Machine.query.filter(Machine.id.in_(all_mach_ids)).all():
-            if m.group and m.group.delay_rate:
-                if m.group.id not in seen_groups:
-                    seen_groups[m.group.id] = {'name': m.group.name, 'rate': m.group.delay_rate}
-            elif m.delay_rate:
-                label = m.machine_type or m.name
-                key = (label, m.delay_rate)
-                indiv_counts[key] = indiv_counts.get(key, 0) + 1
-        for info in sorted(seen_groups.values(), key=lambda i: (-i['rate'], i['name'])):
-            cost = round(total_var_hours * info['rate'], 2)
-            machine_lines.append({
-                'name': info['name'],
-                'rate': info['rate'],
-                'hours': total_var_hours, 'cost': cost,
-                'is_group': True,
-            })
-        for (label, rate), qty in sorted(indiv_counts.items(), key=lambda x: (-x[1] * x[0][1], x[0][0])):
-            qty_label = f" x{qty}" if qty > 1 else ""
-            line_rate = rate * qty
-            cost = round(total_var_hours * line_rate, 2)
-            machine_lines.append({
-                'name': f"{label}{qty_label}",
-                'rate': line_rate,
-                'hours': total_var_hours, 'cost': cost,
-                'is_group': False,
-            })
+    equip_groups = {}
+    for cl in (entry.site_cost_lines or []):
+        key = (cl.item_name, cl.rate)
+        equip_groups[key] = equip_groups.get(key, 0) + (cl.quantity or 1)
+    for (item_name, rate), qty in sorted(equip_groups.items(), key=lambda x: (-x[1] * x[0][1], x[0][0])):
+        qty_int = int(qty) if qty == int(qty) else qty
+        qty_label = f" x{qty_int}" if qty > 1 else ""
+        line_rate = rate * qty
+        cost = round(total_var_hours * line_rate, 2)
+        machine_lines.append({
+            'name': f"{item_name}{qty_label}",
+            'rate': line_rate,
+            'hours': total_var_hours, 'cost': cost,
+            'is_group': False,
+        })
 
     return var_lines, emp_lines, machine_lines
 
