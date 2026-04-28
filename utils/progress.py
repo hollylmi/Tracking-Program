@@ -460,28 +460,26 @@ def _build_variation_billing(entry):
                 'hours': total_var_hours, 'cost': cost,
             })
 
-    # Build machine cost lines — merge same MachineGroup or same individual type/rate
+    # Build machine cost lines — MachineGroups charge a single fleet rate
+    # regardless of how many machines from the group are present. Ungrouped
+    # individual machines with matching type+rate are merged into a qty line.
     machine_lines = []
     if all_mach_ids:
-        group_counts = {}    # group_id -> {'name', 'rate', 'qty'}
+        seen_groups = {}     # group_id -> {'name', 'rate'}
         indiv_counts = {}    # (label, rate) -> qty
         for m in Machine.query.filter(Machine.id.in_(all_mach_ids)).all():
             if m.group and m.group.delay_rate:
-                gid = m.group.id
-                if gid not in group_counts:
-                    group_counts[gid] = {'name': m.group.name, 'rate': m.group.delay_rate, 'qty': 0}
-                group_counts[gid]['qty'] += 1
+                if m.group.id not in seen_groups:
+                    seen_groups[m.group.id] = {'name': m.group.name, 'rate': m.group.delay_rate}
             elif m.delay_rate:
                 label = m.machine_type or m.name
                 key = (label, m.delay_rate)
                 indiv_counts[key] = indiv_counts.get(key, 0) + 1
-        for info in sorted(group_counts.values(), key=lambda i: (-i['rate'] * i['qty'], i['name'])):
-            qty_label = f" x{info['qty']}" if info['qty'] > 1 else ""
-            line_rate = info['rate'] * info['qty']
-            cost = round(total_var_hours * line_rate, 2)
+        for info in sorted(seen_groups.values(), key=lambda i: (-i['rate'], i['name'])):
+            cost = round(total_var_hours * info['rate'], 2)
             machine_lines.append({
-                'name': f"{info['name']}{qty_label}",
-                'rate': line_rate,
+                'name': info['name'],
+                'rate': info['rate'],
                 'hours': total_var_hours, 'cost': cost,
                 'is_group': True,
             })
