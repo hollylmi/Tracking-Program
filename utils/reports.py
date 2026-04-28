@@ -176,13 +176,13 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
     pdf.cell(tw, 3, f'{date_from.strftime("%d/%m/%Y")} to {date_to.strftime("%d/%m/%Y")}  |  Generated {date.today().strftime("%d/%m/%Y")}', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_text_color(0, 0, 0)
     pdf.set_y(max(pdf.get_y(), header_y + 15))
-    pdf.set_draw_color(180, 180, 180)
-    pdf.set_line_width(0.4)
+    pdf.set_draw_color(135, 200, 235)
+    pdf.set_line_width(0.6)
     pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
     pdf.ln(4)
 
     # Summary bar
-    pdf.set_fill_color(245, 245, 245)
+    pdf.set_fill_color(240, 244, 255)
     pdf.set_font('Helvetica', 'B', 9)
     total_events = len(rows)
     total_hours = summary.get('total_hours_billable', 0) + summary.get('total_hours_non_billable', 0)
@@ -194,7 +194,7 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
     def render_rows(rows_list, title):
         if not rows_list:
             return
-        pdf.set_fill_color(235, 235, 235)
+        pdf.set_fill_color(225, 235, 250)
         pdf.set_font('Helvetica', 'B', 11)
         pdf.cell(0, 7, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
         pdf.ln(1)
@@ -205,7 +205,7 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
                 entry = row['entry']
                 row_type = row.get('type', 'delay')
 
-                upd.set_fill_color(230, 230, 230)
+                upd.set_fill_color(220, 232, 248)
                 upd.set_font('Helvetica', 'B', 10)
 
                 if row_type == 'variation':
@@ -294,7 +294,7 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
     render_rows(rows, 'DELAY COSTS')
 
     pdf.ln(3)
-    pdf.set_fill_color(60, 60, 60)
+    pdf.set_fill_color(60, 95, 150)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 10, f'  TOTAL DELAY COSTS:  ${summary["total_cost"]:,.2f}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
