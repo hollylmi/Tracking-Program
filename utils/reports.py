@@ -243,8 +243,14 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
 
                 upd.ln(1)
 
-                # Cost table (employees + equipment) with subsection headers
-                if row['emp_lines'] or row['machine_lines'] or row.get('accom_lines'):
+                # Cost table (delay + variation breakdown) with subsection headers
+                has_delay_costs = bool(row['emp_lines'] or row['machine_lines'] or row.get('accom_lines'))
+                has_var_costs = bool(row.get('var_emp_lines') or row.get('var_machine_lines'))
+                # When this row is the variation-only fallback (no weather delay), its
+                # emp_lines/machine_lines ARE the variation costs — label them as such.
+                is_var_only_row = row_type == 'variation'
+
+                if has_delay_costs or has_var_costs:
                     upd.set_font('Helvetica', 'B', 8)
                     upd.set_fill_color(220, 220, 220)
                     upd.set_text_color(60, 60, 60)
@@ -262,30 +268,51 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
                         upd.set_text_color(0, 0, 0)
                         upd.set_font('Helvetica', '', 8)
 
-                    if row['emp_lines']:
-                        section_header('PEOPLE')
-                        for line in row['emp_lines']:
-                            upd.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
-                            upd.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                            upd.cell(col_w[2], 5, str(line['hours']), border=1)
-                            upd.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
-                            upd.ln()
-                    if row['machine_lines']:
-                        section_header('EQUIPMENT')
-                        for line in row['machine_lines']:
-                            upd.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
-                            upd.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                            upd.cell(col_w[2], 5, str(line['hours']), border=1)
-                            upd.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
-                            upd.ln()
-                    if row.get('accom_lines'):
-                        section_header('ACCOMMODATION / DAY RATE')
-                        for line in row['accom_lines']:
-                            upd.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
-                            upd.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                            upd.cell(col_w[2], 5, str(line.get('count') or line['hours']), border=1)
-                            upd.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
-                            upd.ln()
+                    def render_line(line, hours_col=None):
+                        upd.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
+                        upd.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
+                        upd.cell(col_w[2], 5, str(hours_col if hours_col is not None else line['hours']), border=1)
+                        upd.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
+                        upd.ln()
+
+                    # Prefix sections with DELAY/VARIATION when the row mixes both,
+                    # so the client can see exactly which charge came from where.
+                    delay_prefix = 'DELAY - ' if has_var_costs and not is_var_only_row else ''
+
+                    if not is_var_only_row:
+                        if row['emp_lines']:
+                            section_header(delay_prefix + 'PEOPLE')
+                            for line in row['emp_lines']:
+                                render_line(line)
+                        if row['machine_lines']:
+                            section_header(delay_prefix + 'EQUIPMENT')
+                            for line in row['machine_lines']:
+                                render_line(line)
+                        if row.get('accom_lines'):
+                            section_header('ACCOMMODATION / DAY RATE')
+                            for line in row['accom_lines']:
+                                render_line(line, hours_col=line.get('count') or line['hours'])
+
+                    if is_var_only_row:
+                        # Variation-only row: emp_lines/machine_lines ARE the variation costs.
+                        if row['emp_lines']:
+                            section_header('VARIATION - PEOPLE')
+                            for line in row['emp_lines']:
+                                render_line(line)
+                        if row['machine_lines']:
+                            section_header('VARIATION - EQUIPMENT')
+                            for line in row['machine_lines']:
+                                render_line(line)
+                    else:
+                        # Delay row that also has variation work — show both sets.
+                        if row.get('var_emp_lines'):
+                            section_header('VARIATION - PEOPLE')
+                            for line in row['var_emp_lines']:
+                                render_line(line)
+                        if row.get('var_machine_lines'):
+                            section_header('VARIATION - EQUIPMENT')
+                            for line in row['var_machine_lines']:
+                                render_line(line)
 
                 upd.set_font('Helvetica', 'B', 9)
                 upd.cell(0, 6, f'  Event Total: ${row["entry_cost"]:,.2f}', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
