@@ -242,34 +242,50 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
 
             pdf.ln(1)
 
-            # Cost table (employees + equipment)
+            # Cost table (employees + equipment) with subsection headers
             if row['emp_lines'] or row['machine_lines'] or row.get('accom_lines'):
+                # Column header
                 pdf.set_font('Helvetica', 'B', 8)
                 pdf.set_fill_color(210, 218, 255)
+                pdf.set_text_color(20, 30, 80)
                 for header, w in zip(['Role / Equipment', 'Rate ($/hr)', 'Hours', 'Cost ($)'], col_w):
                     pdf.cell(w, 6, header, border=1, fill=True)
                 pdf.ln()
+                pdf.set_text_color(0, 0, 0)
 
-                pdf.set_font('Helvetica', '', 8)
-                for line in row['emp_lines']:
-                    pdf.cell(col_w[0], 5, safe('  ' + line['name']), border=1)
-                    pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                    pdf.cell(col_w[2], 5, str(line['hours']), border=1)
-                    pdf.cell(col_w[3], 5, f'${line["cost"]:.2f}', border=1)
+                def section_header(title):
+                    pdf.set_font('Helvetica', 'B', 8)
+                    pdf.set_fill_color(240, 243, 250)
+                    pdf.set_text_color(80, 90, 120)
+                    pdf.cell(sum(col_w), 5, safe('  ' + title), border=1, fill=True)
                     pdf.ln()
-                for line in row['machine_lines']:
-                    icon = '[GRP] ' if line.get('is_group') else ''
-                    pdf.cell(col_w[0], 5, safe('  ' + icon + line['name']), border=1)
-                    pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                    pdf.cell(col_w[2], 5, str(line['hours']), border=1)
-                    pdf.cell(col_w[3], 5, f'${line["cost"]:.2f}', border=1)
-                    pdf.ln()
-                for line in row.get('accom_lines', []):
-                    pdf.cell(col_w[0], 5, safe('  ' + line['name']), border=1)
-                    pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                    pdf.cell(col_w[2], 5, str(line.get('count', line['hours'])), border=1)
-                    pdf.cell(col_w[3], 5, f'${line["cost"]:.2f}', border=1)
-                    pdf.ln()
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font('Helvetica', '', 8)
+
+                if row['emp_lines']:
+                    section_header('PEOPLE')
+                    for line in row['emp_lines']:
+                        pdf.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
+                        pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
+                        pdf.cell(col_w[2], 5, str(line['hours']), border=1)
+                        pdf.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
+                        pdf.ln()
+                if row['machine_lines']:
+                    section_header('EQUIPMENT')
+                    for line in row['machine_lines']:
+                        pdf.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
+                        pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
+                        pdf.cell(col_w[2], 5, str(line['hours']), border=1)
+                        pdf.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
+                        pdf.ln()
+                if row.get('accom_lines'):
+                    section_header('ACCOMMODATION / DAY RATE')
+                    for line in row['accom_lines']:
+                        pdf.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
+                        pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
+                        pdf.cell(col_w[2], 5, str(line.get('count') or line['hours']), border=1)
+                        pdf.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
+                        pdf.ln()
 
             pdf.set_font('Helvetica', 'B', 9)
             pdf.set_text_color(30, 80, 180)

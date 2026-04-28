@@ -396,6 +396,23 @@ def compute_delay_summary(project_id):
     return result
 
 
+def _best_role_for_employee(emp):
+    """Return (label, rate) using the employee's highest-paying assigned role.
+    Falls back to emp.delay_rate / emp.role if no role-based rate is set.
+    Returns (None, None) if no chargeable rate exists.
+    """
+    best_label = None
+    best_rate = None
+    for r in (emp.roles or []):
+        if r.delay_rate and (best_rate is None or r.delay_rate > best_rate):
+            best_rate = r.delay_rate
+            best_label = r.name
+    if best_rate is None and emp.delay_rate:
+        best_rate = emp.delay_rate
+        best_label = emp.role or emp.name
+    return best_label, best_rate
+
+
 def _build_variation_billing(entry):
     """Build billing lines from per-variation employee/machine selections."""
     from models import Employee, Machine
@@ -424,17 +441,17 @@ def _build_variation_billing(entry):
         all_emp_ids = {e.id for e in entry.employees}
         all_mach_ids = {m.id for m in entry.machines}
 
-    # Build employee cost lines
+    # Build employee cost lines — pick highest-rate role per emp, group by (role, rate)
     emp_lines = []
     if all_emp_ids:
         role_counts = {}
         for emp in Employee.query.filter(Employee.id.in_(all_emp_ids)).all():
-            if emp.delay_rate:
-                label = emp.role or emp.name
-                rate = emp.delay_rate
-                key = (label, rate)
-                role_counts[key] = role_counts.get(key, 0) + 1
-        for (label, rate), count in sorted(role_counts.items()):
+            label, rate = _best_role_for_employee(emp)
+            if rate is None:
+                continue
+            key = (label, rate)
+            role_counts[key] = role_counts.get(key, 0) + 1
+        for (label, rate), count in sorted(role_counts.items(), key=lambda x: (-x[0][1], x[0][0])):
             cost = round(total_var_hours * rate * count, 2)
             people_str = f"{count} {'person' if count == 1 else 'people'}"
             emp_lines.append({
@@ -443,29 +460,41 @@ def _build_variation_billing(entry):
                 'hours': total_var_hours, 'cost': cost,
             })
 
-    # Build machine cost lines (grouped by MachineGroup)
+    # Build machine cost lines — merge same MachineGroup or same individual type/rate
     machine_lines = []
     if all_mach_ids:
-        seen_groups = {}
+        group_counts = {}    # group_id -> {'name', 'rate', 'qty'}
+        indiv_counts = {}    # (label, rate) -> qty
         for m in Machine.query.filter(Machine.id.in_(all_mach_ids)).all():
             if m.group and m.group.delay_rate:
-                if m.group.id not in seen_groups:
-                    cost = round(total_var_hours * m.group.delay_rate, 2)
-                    machine_lines.append({
-                        'name': m.group.name,
-                        'rate': m.group.delay_rate,
-                        'hours': total_var_hours, 'cost': cost,
-                        'is_group': True,
-                    })
-                    seen_groups[m.group.id] = True
+                gid = m.group.id
+                if gid not in group_counts:
+                    group_counts[gid] = {'name': m.group.name, 'rate': m.group.delay_rate, 'qty': 0}
+                group_counts[gid]['qty'] += 1
             elif m.delay_rate:
-                cost = round(total_var_hours * m.delay_rate, 2)
-                machine_lines.append({
-                    'name': f"{m.name}{' (' + m.plant_id + ')' if m.plant_id else ''}",
-                    'rate': m.delay_rate,
-                    'hours': total_var_hours, 'cost': cost,
-                    'is_group': False,
-                })
+                label = m.machine_type or m.name
+                key = (label, m.delay_rate)
+                indiv_counts[key] = indiv_counts.get(key, 0) + 1
+        for info in sorted(group_counts.values(), key=lambda i: (-i['rate'] * i['qty'], i['name'])):
+            qty_label = f" x{info['qty']}" if info['qty'] > 1 else ""
+            line_rate = info['rate'] * info['qty']
+            cost = round(total_var_hours * line_rate, 2)
+            machine_lines.append({
+                'name': f"{info['name']}{qty_label}",
+                'rate': line_rate,
+                'hours': total_var_hours, 'cost': cost,
+                'is_group': True,
+            })
+        for (label, rate), qty in sorted(indiv_counts.items(), key=lambda x: (-x[1] * x[0][1], x[0][0])):
+            qty_label = f" x{qty}" if qty > 1 else ""
+            line_rate = rate * qty
+            cost = round(total_var_hours * line_rate, 2)
+            machine_lines.append({
+                'name': f"{label}{qty_label}",
+                'rate': line_rate,
+                'hours': total_var_hours, 'cost': cost,
+                'is_group': False,
+            })
 
     return var_lines, emp_lines, machine_lines
 
@@ -510,21 +539,15 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
 
         role_counts = {}
         for emp in entry.employees:
-            if emp.delay_rate:
-                rate = emp.delay_rate
-                # Find the role whose delay_rate matches the charged rate
-                label = None
-                for r in (emp.roles or []):
-                    if r.delay_rate and abs(r.delay_rate - rate) < 0.01:
-                        label = r.name
-                        break
-                if not label:
-                    label = emp.role if emp.role else emp.name
-                key = (label, rate)
-                role_counts[key] = role_counts.get(key, 0) + 1
+            label, rate = _best_role_for_employee(emp)
+            if rate is None:
+                continue
+            key = (label, rate)
+            role_counts[key] = role_counts.get(key, 0) + 1
 
         emp_lines = []
-        for (label, rate), count in sorted(role_counts.items()):
+        # Sort by rate desc, then label — highest charge appears first
+        for (label, rate), count in sorted(role_counts.items(), key=lambda x: (-x[0][1], x[0][0])):
             cost = round(entry.delay_hours * rate * count, 2)
             people_str = f"{count} {'person' if count == 1 else 'people'}"
             emp_lines.append({
@@ -533,15 +556,20 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
                 'hours': entry.delay_hours, 'cost': cost,
             })
 
-        # Equipment costs — from site rate card items selected on the entry
-        machine_lines = []
+        # Equipment costs — from site rate card items, grouped by (item, rate)
+        equip_groups = {}
         for cl in (entry.site_cost_lines or []):
-            hourly = cl.rate * (cl.quantity or 1)
-            cost = round(entry.delay_hours * hourly, 2)
-            qty_label = f" x{int(cl.quantity)}" if cl.quantity and cl.quantity > 1 else ""
+            key = (cl.item_name, cl.rate)
+            equip_groups[key] = equip_groups.get(key, 0) + (cl.quantity or 1)
+        machine_lines = []
+        for (item_name, rate), qty in sorted(equip_groups.items(), key=lambda x: (-x[1] * x[0][1], x[0][0])):
+            qty_int = int(qty) if qty == int(qty) else qty
+            qty_label = f" x{qty_int}" if qty > 1 else ""
+            line_rate = rate * qty
+            cost = round(entry.delay_hours * line_rate, 2)
             machine_lines.append({
-                'name': f"{cl.item_name}{qty_label}",
-                'rate': hourly,
+                'name': f"{item_name}{qty_label}",
+                'rate': line_rate,
                 'hours': entry.delay_hours, 'cost': cost,
                 'is_group': False,
             })
