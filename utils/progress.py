@@ -572,24 +572,27 @@ def build_delay_report(project_id, date_from, date_to, billable_filter='all'):
                 })
 
         # Day rate override — replaces all other delay costs.
-        # Full day rate when delay >= project's day_rate_hours (default 8); pro-rata otherwise.
+        # Hourly rate = day_rate / day_rate_hours (defaults to 8 hrs/day).
+        # Bill the delay hours capped at the full-day length so the breakdown
+        # always reads as: hours × hourly rate = cost.
         is_billable = entry.delay_billable if entry.delay_billable is not None else True
         if getattr(entry, 'charge_day_rate', False) and entry.project and entry.project.day_rate:
             day_rate_val = entry.project.day_rate
             full_day_hours = entry.project.day_rate_hours or 8
+            hourly_rate = day_rate_val / full_day_hours if full_day_hours else 0
             delay_hrs = entry.delay_hours or 0
+            billed_hrs = min(delay_hrs, full_day_hours)
+            charge = hourly_rate * billed_hrs
             if delay_hrs >= full_day_hours:
-                charge = day_rate_val
-                label = "Day Rate (flat)"
+                label = f"Day Rate (${day_rate_val:,.2f}/day / {full_day_hours:g} hrs)"
             else:
-                charge = (day_rate_val / full_day_hours) * delay_hrs
-                label = f"Day Rate (pro-rata: {delay_hrs:g}/{full_day_hours:g} hrs)"
+                label = f"Day Rate pro-rata (${day_rate_val:,.2f}/day / {full_day_hours:g} hrs)"
             emp_lines = []
             machine_lines = []
             accom_lines = [{
                 'name': label,
-                'rate': day_rate_val, 'count': 1,
-                'hours': delay_hrs, 'cost': round(charge, 2),
+                'rate': round(hourly_rate, 2),
+                'hours': billed_hrs, 'cost': round(charge, 2),
             }]
 
         delay_cost = (sum(r['cost'] for r in emp_lines)
