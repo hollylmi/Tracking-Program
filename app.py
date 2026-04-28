@@ -361,6 +361,8 @@ with app.app_context():
         "ALTER TABLE machine_type_compliance ADD COLUMN test_tag_interval_unit VARCHAR(20) DEFAULT 'days'",
         "ALTER TABLE machine_type_compliance ADD COLUMN annual_cert_interval_unit VARCHAR(20) DEFAULT 'days'",
         "ALTER TABLE machine_compliance ADD COLUMN interval_unit VARCHAR(20) DEFAULT 'days'",
+        # ── 2026-04-28: Per-project pro-rata hours for day-rate billing ──
+        "ALTER TABLE project ADD COLUMN day_rate_hours FLOAT",
     ]:
         try:
             db.session.execute(db.text(stmt))
