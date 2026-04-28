@@ -176,13 +176,13 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
     pdf.cell(tw, 3, f'{date_from.strftime("%d/%m/%Y")} to {date_to.strftime("%d/%m/%Y")}  |  Generated {date.today().strftime("%d/%m/%Y")}', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_text_color(0, 0, 0)
     pdf.set_y(max(pdf.get_y(), header_y + 15))
-    pdf.set_draw_color(135, 200, 235)
-    pdf.set_line_width(0.6)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.set_line_width(0.4)
     pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
     pdf.ln(4)
 
     # Summary bar
-    pdf.set_fill_color(240, 244, 255)
+    pdf.set_fill_color(245, 245, 245)
     pdf.set_font('Helvetica', 'B', 9)
     total_events = len(rows)
     total_hours = summary.get('total_hours_billable', 0) + summary.get('total_hours_non_billable', 0)
@@ -191,112 +191,110 @@ def generate_delay_pdf(rows, summary, date_from, date_to, project_name, settings
     pdf.cell(page_w / 3, 6, f'  Total: ${summary["total_cost"]:,.2f}', fill=True, align='R')
     pdf.ln(6)
 
-    def render_rows(rows_list, title, fill_color):
+    def render_rows(rows_list, title):
         if not rows_list:
             return
-        pdf.set_fill_color(*fill_color)
+        pdf.set_fill_color(235, 235, 235)
         pdf.set_font('Helvetica', 'B', 11)
         pdf.cell(0, 7, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
         pdf.ln(1)
 
         col_w = [70, 30, 30, 50]
         for row in rows_list:
-            entry = row['entry']
-            row_type = row.get('type', 'delay')
+            with pdf.unbreakable() as upd:
+                entry = row['entry']
+                row_type = row.get('type', 'delay')
 
-            pdf.set_fill_color(230, 235, 255)
-            pdf.set_font('Helvetica', 'B', 10)
+                upd.set_fill_color(230, 230, 230)
+                upd.set_font('Helvetica', 'B', 10)
 
-            if row_type == 'variation':
-                var_hrs = sum(v['hours'] for v in row.get('var_lines', []))
-                label = safe(f'{entry.entry_date.strftime("%d/%m/%Y")} ({entry.day_name})  -  '
-                             f'{entry.project.name}  -  {var_hrs} hrs client variation')
-            else:
-                label = safe(f'{entry.entry_date.strftime("%d/%m/%Y")} ({entry.day_name})  -  '
-                             f'{entry.project.name}  -  {entry.delay_hours} hrs delay')
-            pdf.cell(0, 7, label, new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+                if row_type == 'variation':
+                    var_hrs = sum(v['hours'] for v in row.get('var_lines', []))
+                    label = safe(f'{entry.entry_date.strftime("%d/%m/%Y")} ({entry.day_name})  -  '
+                                 f'{entry.project.name}  -  {var_hrs} hrs client variation')
+                else:
+                    label = safe(f'{entry.entry_date.strftime("%d/%m/%Y")} ({entry.day_name})  -  '
+                                 f'{entry.project.name}  -  {entry.delay_hours} hrs delay')
+                upd.cell(0, 7, label, new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
 
-            if row_type != 'variation':
-                pdf.set_font('Helvetica', 'I', 9)
-                pdf.cell(0, 5, safe(f'Reason: {entry.delay_reason or "Not specified"}'), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-                if entry.delay_description:
-                    pdf.multi_cell(0, 5, safe(entry.delay_description))
+                if row_type != 'variation':
+                    upd.set_font('Helvetica', 'I', 9)
+                    upd.cell(0, 5, safe(f'Reason: {entry.delay_reason or "Not specified"}'), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    if entry.delay_description:
+                        upd.multi_cell(0, 5, safe(entry.delay_description))
 
-            # Variations subsection
-            if row.get('var_lines'):
-                pdf.ln(1)
-                pdf.set_font('Helvetica', 'B', 9)
-                pdf.set_fill_color(255, 245, 220)
-                pdf.cell(0, 6, '  CLIENT VARIATIONS', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
-                pdf.set_font('Helvetica', '', 8)
-                var_col = [30, 100, 50]
-                pdf.set_fill_color(250, 240, 210)
-                for header, w in zip(['Variation #', 'Description', 'Hours'], var_col):
-                    pdf.cell(w, 5, header, border=1, fill=True)
-                pdf.ln()
-                for vl in row['var_lines']:
-                    pdf.cell(var_col[0], 5, safe(str(vl['variation_number'])), border=1)
-                    pdf.cell(var_col[1], 5, safe(vl['description'][:60]), border=1)
-                    pdf.cell(var_col[2], 5, f'{vl["hours"]}h', border=1)
-                    pdf.ln()
+                # Variations subsection
+                if row.get('var_lines'):
+                    upd.ln(1)
+                    upd.set_font('Helvetica', 'B', 9)
+                    upd.set_fill_color(240, 240, 240)
+                    upd.cell(0, 6, '  CLIENT VARIATIONS', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+                    upd.set_font('Helvetica', '', 8)
+                    var_col = [30, 100, 50]
+                    upd.set_fill_color(248, 248, 248)
+                    for header, w in zip(['Variation #', 'Description', 'Hours'], var_col):
+                        upd.cell(w, 5, header, border=1, fill=True)
+                    upd.ln()
+                    for vl in row['var_lines']:
+                        upd.cell(var_col[0], 5, safe(str(vl['variation_number'])), border=1)
+                        upd.cell(var_col[1], 5, safe(vl['description'][:60]), border=1)
+                        upd.cell(var_col[2], 5, f'{vl["hours"]}h', border=1)
+                        upd.ln()
 
-            pdf.ln(1)
+                upd.ln(1)
 
-            # Cost table (employees + equipment) with subsection headers
-            if row['emp_lines'] or row['machine_lines'] or row.get('accom_lines'):
-                # Column header
-                pdf.set_font('Helvetica', 'B', 8)
-                pdf.set_fill_color(210, 218, 255)
-                pdf.set_text_color(20, 30, 80)
-                for header, w in zip(['Role / Equipment', 'Rate ($/hr)', 'Hours', 'Cost ($)'], col_w):
-                    pdf.cell(w, 6, header, border=1, fill=True)
-                pdf.ln()
-                pdf.set_text_color(0, 0, 0)
+                # Cost table (employees + equipment) with subsection headers
+                if row['emp_lines'] or row['machine_lines'] or row.get('accom_lines'):
+                    upd.set_font('Helvetica', 'B', 8)
+                    upd.set_fill_color(220, 220, 220)
+                    upd.set_text_color(60, 60, 60)
+                    for header, w in zip(['Role / Equipment', 'Rate ($/hr)', 'Hours', 'Cost ($)'], col_w):
+                        upd.cell(w, 6, header, border=1, fill=True)
+                    upd.ln()
+                    upd.set_text_color(0, 0, 0)
 
-                def section_header(title):
-                    pdf.set_font('Helvetica', 'B', 8)
-                    pdf.set_fill_color(240, 243, 250)
-                    pdf.set_text_color(80, 90, 120)
-                    pdf.cell(sum(col_w), 5, safe('  ' + title), border=1, fill=True)
-                    pdf.ln()
-                    pdf.set_text_color(0, 0, 0)
-                    pdf.set_font('Helvetica', '', 8)
+                    def section_header(title):
+                        upd.set_font('Helvetica', 'B', 8)
+                        upd.set_fill_color(245, 245, 245)
+                        upd.set_text_color(90, 90, 90)
+                        upd.cell(sum(col_w), 5, safe('  ' + title), border=1, fill=True)
+                        upd.ln()
+                        upd.set_text_color(0, 0, 0)
+                        upd.set_font('Helvetica', '', 8)
 
-                if row['emp_lines']:
-                    section_header('PEOPLE')
-                    for line in row['emp_lines']:
-                        pdf.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
-                        pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                        pdf.cell(col_w[2], 5, str(line['hours']), border=1)
-                        pdf.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
-                        pdf.ln()
-                if row['machine_lines']:
-                    section_header('EQUIPMENT')
-                    for line in row['machine_lines']:
-                        pdf.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
-                        pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                        pdf.cell(col_w[2], 5, str(line['hours']), border=1)
-                        pdf.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
-                        pdf.ln()
-                if row.get('accom_lines'):
-                    section_header('ACCOMMODATION / DAY RATE')
-                    for line in row['accom_lines']:
-                        pdf.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
-                        pdf.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
-                        pdf.cell(col_w[2], 5, str(line.get('count') or line['hours']), border=1)
-                        pdf.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
-                        pdf.ln()
+                    if row['emp_lines']:
+                        section_header('PEOPLE')
+                        for line in row['emp_lines']:
+                            upd.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
+                            upd.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
+                            upd.cell(col_w[2], 5, str(line['hours']), border=1)
+                            upd.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
+                            upd.ln()
+                    if row['machine_lines']:
+                        section_header('EQUIPMENT')
+                        for line in row['machine_lines']:
+                            upd.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
+                            upd.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
+                            upd.cell(col_w[2], 5, str(line['hours']), border=1)
+                            upd.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
+                            upd.ln()
+                    if row.get('accom_lines'):
+                        section_header('ACCOMMODATION / DAY RATE')
+                        for line in row['accom_lines']:
+                            upd.cell(col_w[0], 5, safe('    ' + line['name']), border=1)
+                            upd.cell(col_w[1], 5, f'${line["rate"]:.2f}', border=1)
+                            upd.cell(col_w[2], 5, str(line.get('count') or line['hours']), border=1)
+                            upd.cell(col_w[3], 5, f'${line["cost"]:,.2f}', border=1)
+                            upd.ln()
 
-            pdf.set_font('Helvetica', 'B', 9)
-            pdf.set_text_color(30, 80, 180)
-            pdf.cell(0, 6, f'  Event Total: ${row["entry_cost"]:.2f}', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.set_text_color(0, 0, 0)
-            pdf.ln(3)
+                upd.set_font('Helvetica', 'B', 9)
+                upd.cell(0, 6, f'  Event Total: ${row["entry_cost"]:,.2f}', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                upd.ln(3)
 
-    render_rows(rows, 'DELAY COSTS', (245, 248, 255))
+    render_rows(rows, 'DELAY COSTS')
 
     pdf.ln(3)
-    pdf.set_fill_color(30, 80, 180)
+    pdf.set_fill_color(60, 60, 60)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 10, f'  TOTAL DELAY COSTS:  ${summary["total_cost"]:,.2f}', new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
