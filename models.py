@@ -75,6 +75,7 @@ class Project(db.Model):
     mobilisation_date = db.Column(db.Date, nullable=True)  # When set, project becomes operational on this date
     accommodation_cost_per_person = db.Column(db.Float, nullable=True)  # $/person/day for delay accom costs
     day_rate = db.Column(db.Float, nullable=True)                       # flat $/day override for delay billing
+    day_rate_hours = db.Column(db.Float, nullable=True)                 # hours per day used to pro-rata day_rate (default 8 if unset)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property

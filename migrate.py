@@ -56,6 +56,7 @@ else:
     changes += add_column('project', 'quoted_days', 'INTEGER')
     changes += add_column('project', 'state', 'VARCHAR(10)')
     changes += add_column('project', 'is_cfmeu', 'BOOLEAN', default=0)
+    changes += add_column('project', 'day_rate_hours', 'REAL')
 
     # ── daily_entry ───────────────────────────────────────────────────────────
     changes += add_column('daily_entry', 'location', 'TEXT')

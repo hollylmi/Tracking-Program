@@ -652,6 +652,8 @@ def admin_projects():
                 p.accommodation_cost_per_person = float(accom) if accom else None
                 dr = request.form.get('day_rate', '').strip()
                 p.day_rate = float(dr) if dr else None
+                drh = request.form.get('day_rate_hours', '').strip()
+                p.day_rate_hours = float(drh) if drh else None
                 db.session.add(p)
                 db.session.commit()
                 flash(f'Project "{name}" added.', 'success')
@@ -679,6 +681,8 @@ def admin_projects():
             project.accommodation_cost_per_person = float(accom) if accom else None
             dr = request.form.get('day_rate', '').strip()
             project.day_rate = float(dr) if dr else None
+            drh = request.form.get('day_rate_hours', '').strip()
+            project.day_rate_hours = float(drh) if drh else None
             db.session.commit()
             flash('Project updated.', 'success')
         elif action == 'toggle':
